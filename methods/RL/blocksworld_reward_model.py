@@ -1,0 +1,489 @@
+import re
+import json
+
+class BlocksWorldModel:
+    def __init__(self, init_state: str, goal: str, plan: str):
+        self.init_state = init_state
+        self.goal = goal
+        self.plan = plan
+        # Parse the goal once and keep it for later comparison.
+        self.goal_dict = self.parse_goal(goal)
+
+    # --- Normalization & Denormalization ---
+    @staticmethod
+    def normalize_input_string(s: str) -> str:
+        """
+        Replace occurrences of 'block <number>' with just '<number>'.
+        For example: "the block 2 is clear" becomes "the 2 is clear".
+        Colored blocks (like "gold block") remain unchanged.
+        """
+        return re.sub(r'\bblock (\d+)\b', r'\1 block', s, flags=re.IGNORECASE)
+
+    @staticmethod
+    def normalize_block_name(name: str) -> str:
+        """
+        Normalize a block name by stripping whitespace, converting to lowercase,
+        and removing a trailing " block" if present.
+        For example, "C block" or "c block" becomes "c".
+        """
+        name = name.strip().lower()
+        if name.endswith(" block"):
+            name = name[:-6].strip()
+        return name
+
+    @staticmethod
+    def denormalize_block_name(name: str) -> str:
+        """
+        Convert an internal block name back to the proper output format.
+        If the name is numeric, return "block <num>"; otherwise, return "<name> block".
+        (Note: Colored names will appear in lowercase.)
+        """
+        if name.isdigit():
+            return f"block {name}"
+        else:
+            return f"{name} block"
+
+    # --- Parsing Functions ---
+    @classmethod
+    def parse_initial_state(cls, state_str: str):
+        """
+        Parses the initial state string into:
+          - state: a dictionary mapping each normalized block to its location
+                   ("table", another block, or "hand")
+          - hand: None if empty, or the block currently held
+          - blocks_order: a list of block names (normalized) in order of appearance.
+        """
+        state_str = cls.normalize_input_string(state_str)
+        normalized = state_str.replace(" and ", ", ")
+        facts = [fact.strip() for fact in normalized.split(",")]
+        
+        state = {}  # maps block -> location ("table", another block, or "hand")
+        hand = None
+        blocks_order = []
+
+        def add_block(b: str) -> str:
+            bn = cls.normalize_block_name(b)
+            if bn not in blocks_order:
+                blocks_order.append(bn)
+            return bn
+
+        for fact in facts:
+            # Hand facts.
+            if re.fullmatch(r"the hand is empty", fact, re.IGNORECASE):
+                hand = None
+            elif m := re.match(r"the hand is holding the (.+?)(?: block)?$", fact, re.IGNORECASE):
+                block = cls.normalize_block_name(m.group(1))
+                hand = block
+                state[block] = "hand"
+                add_block(block)
+            # Clear facts.
+            elif m := re.match(r"the (.+?)(?: block)? is clear$", fact, re.IGNORECASE):
+                block = cls.normalize_block_name(m.group(1))
+                state.setdefault(block, None)
+                add_block(block)
+            # "On top of" relations.
+            elif m := re.match(r"the (.+?)(?: block)? is on top of the (.+?)(?: block)?$", fact, re.IGNORECASE):
+                block = cls.normalize_block_name(m.group(1))
+                support = cls.normalize_block_name(m.group(2))
+                state[block] = support
+                add_block(block)
+                add_block(support)
+            # "On the table" relations.
+            elif m := re.match(r"the (.+?)(?: block)? is on the table$", fact, re.IGNORECASE):
+                block = cls.normalize_block_name(m.group(1))
+                state[block] = "table"
+                add_block(block)
+            # Unrecognized facts are ignored.
+        return state, hand, blocks_order
+
+    @classmethod
+    def parse_action(cls, action_str: str):
+        """
+        Parses an action string into a tuple describing the action.
+        Supported actions:
+          - "unstack the <block> from on top of the <support>"
+          - "pick up the <block>"
+          - "stack the <block> on top of the <support>"
+          - "put down the <block>"
+        The action string is normalized before parsing.
+        """
+        action_str = cls.normalize_input_string(action_str)
+        action_str = action_str.lower().strip()
+        print(action_str)
+        patterns = [
+            (
+                r"^unstack the (.+?)(?: block)? from on top of the (.+?)(?: block)?$",
+                lambda m: ("unstack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
+            ),
+            (
+                r"^pick up the (.+?)(?: block)?$",
+                lambda m: ("pickup", cls.normalize_block_name(m.group(1)))
+            ),
+            (
+                r"^stack the (.+?)(?: block)? on top of the (.+?)(?: block)?$",
+                lambda m: ("stack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
+            ),
+            (
+                r"^put down the (.+?)(?: block)?$",
+                lambda m: ("putdown", cls.normalize_block_name(m.group(1)))
+            ),
+        ]
+        for pattern, action_fn in patterns:
+            m = re.match(pattern, action_str)
+            if m:
+                return action_fn(m)
+        raise ValueError("Action not recognized or unsupported.")
+
+    @classmethod
+    def parse_goal(cls, goal_str: str):
+        """
+        Parses the goal string into a dictionary mapping each normalized block
+        to its expected location.
+        Supports "is on top of" and "is on the table" relations.
+        """
+        goal_str = cls.normalize_input_string(goal_str)
+        goal_str = goal_str.replace(" and ", ", ")
+        facts = [fact.strip() for fact in goal_str.split(",")]
+        goal_dict = {}
+        for fact in facts:
+            m = re.match(r"the (.+?)(?: block)? is on top of the (.+?)(?: block)?$", fact, re.IGNORECASE)
+            if m:
+                block = cls.normalize_block_name(m.group(1))
+                support = cls.normalize_block_name(m.group(2))
+                goal_dict[block] = support
+            else:
+                m = re.match(r"the (.+?)(?: block)? is on the table$", fact, re.IGNORECASE)
+                if m:
+                    block = cls.normalize_block_name(m.group(1))
+                    goal_dict[block] = "table"
+        return goal_dict
+
+    # --- Simulation Functions ---
+    @staticmethod
+    def is_clear(block: str, state: dict, hand: str) -> bool:
+        """
+        A block is clear if no other block is resting on top of it.
+        (A block held by the hand is not considered clear.)
+        """
+        if state.get(block) == "hand":
+            return False
+        for b, loc in state.items():
+            if loc == block:
+                return False
+        return True
+
+    @classmethod
+    def simulate_action(cls, state: dict, hand: str, blocks_order: list, action_tuple: tuple):
+        """
+        Applies the given action to the state.
+        Supported actions: "unstack", "pickup", "stack", "putdown".
+        Returns the updated state and hand.
+        """
+        action = action_tuple[0]
+        if action == "unstack":
+            block, support = action_tuple[1], action_tuple[2]
+            if state.get(block) != support:
+                raise Exception(f"Precondition failed: {cls.denormalize_block_name(block)} is not on {cls.denormalize_block_name(support)}.")
+            if not cls.is_clear(block, state, hand):
+                raise Exception(f"Precondition failed: {cls.denormalize_block_name(block)} is not clear.")
+            if hand is not None:
+                raise Exception("Precondition failed: hand is not empty.")
+            state[block] = "hand"
+            hand = block
+        elif action == "pickup":
+            block = action_tuple[1]
+            if state.get(block) != "table":
+                raise Exception(f"Precondition failed: {cls.denormalize_block_name(block)} is not on the table.")
+            if not cls.is_clear(block, state, hand):
+                raise Exception(f"Precondition failed: {cls.denormalize_block_name(block)} is not clear.")
+            if hand is not None:
+                raise Exception("Precondition failed: hand is not empty.")
+            state[block] = "hand"
+            hand = block
+        elif action == "stack":
+            block, support = action_tuple[1], action_tuple[2]
+            if hand != block:
+                raise Exception(f"Precondition failed: hand is not holding {cls.denormalize_block_name(block)}.")
+            if not cls.is_clear(support, state, hand):
+                raise Exception(f"Precondition failed: {cls.denormalize_block_name(support)} is not clear.")
+            state[block] = support
+            hand = None
+        elif action == "putdown":
+            block = action_tuple[1]
+            if hand != block:
+                raise Exception(f"Precondition failed: hand is not holding {cls.denormalize_block_name(block)}.")
+            state[block] = "table"
+            hand = None
+        else:
+            raise Exception("Action not supported.")
+        return state, hand
+
+    @classmethod
+    def generate_state_string(cls, state: dict, hand: str, blocks_order: list) -> str:
+        """
+        Generates a state description string in the same format as the input.
+        The output includes clear facts, the hand status, and location facts.
+        """
+        facts = []
+        for block in blocks_order:
+            if state.get(block) != "hand" and cls.is_clear(block, state, hand):
+                facts.append(f"the {cls.denormalize_block_name(block)} is clear")
+        if hand is None:
+            facts.append("the hand is empty")
+        else:
+            facts.append(f"the hand is holding the {cls.denormalize_block_name(hand)}")
+        for block in blocks_order:
+            loc = state.get(block)
+            if loc is None or loc == "hand":
+                continue
+            elif loc == "table":
+                facts.append(f"the {cls.denormalize_block_name(block)} is on the table")
+            else:
+                facts.append(f"the {cls.denormalize_block_name(block)} is on top of the {cls.denormalize_block_name(loc)}")
+        if not facts:
+            return ""
+        if len(facts) == 1:
+            return facts[0]
+        return ", ".join(facts[:-1]) + " and " + facts[-1]
+
+    # --- Single-Step Simulation ---
+    @classmethod
+    def simulate_step(cls, state_str: str, action_str: str) -> str:
+        """
+        Simulates a single action (step) given an initial state string and an action string.
+        Returns the new state as a description string.
+        """
+        state, hand, blocks_order = cls.parse_initial_state(state_str)
+        action_tuple = cls.parse_action(action_str)
+        new_state, new_hand = cls.simulate_action(state, hand, blocks_order, action_tuple)
+        return cls.generate_state_string(new_state, new_hand, blocks_order)
+
+    # --- Plan Simulation & Goal Testing ---
+    def simulate_plan(self):
+        """
+        Simulates the sequence of actions in the plan starting from the initial state.
+        Returns the final internal state, hand, blocks_order, and a description string.
+        """
+        state, hand, blocks_order = self.parse_initial_state(self.init_state)
+        lines = [line.strip() for line in self.plan.strip().split("\n")
+                 if line.strip() and "[plan end]" not in line.lower()]
+        for action_line in lines:
+            action_tuple = self.parse_action(action_line)
+            state, hand = self.simulate_action(state, hand, blocks_order, action_tuple)
+        final_state_str = self.generate_state_string(state, hand, blocks_order)
+        return state, hand, blocks_order, final_state_str
+
+    def check_goal(self, state: dict):
+        """
+        Checks if the provided state meets the goal conditions.
+        Returns a tuple: (goal_reached (bool), missing_conditions (list of strings)).
+        """
+        goal_reached = True
+        missing_conditions = []
+        for block, expected_loc in self.goal_dict.items():
+            if block not in state or state[block] != expected_loc:
+                goal_reached = False
+                missing_conditions.append(
+                    f"{self.denormalize_block_name(block)} should be on {self.denormalize_block_name(expected_loc)}"
+                )
+        return goal_reached, missing_conditions
+
+    def test(self):
+        """
+        Runs the plan starting from the initial state, then checks if the final state meets the goal.
+        Returns a tuple: (final_state_str, goal_reached, missing_conditions).
+        """
+        state, hand, blocks_order, final_state_str = self.simulate_plan()
+        goal_reached, missing_conditions = self.check_goal(state)
+        return final_state_str, goal_reached, missing_conditions
+
+    # --- Reward-based Simulation for RL ---
+    def simulate_plan_with_reward(self):
+        """
+        Simulates the plan step by step. If any action is physically unachievable,
+        returns a reward of 0. If all actions are valid but the goal is not reached,
+        returns a reward of 0.1. If the final state meets the goal, returns a reward of 1.
+        """
+        print('---- Simulating Plan Rewards ----')
+        if len(self.plan.strip().split("\n")) == 0:
+            print('Empty plan.')
+            return 0.0
+        try:
+            state, hand, blocks_order = self.parse_initial_state(self.init_state)
+            lines = [line.replace('<', '').replace('>', '').strip() for line in self.plan.strip().split("\n")
+                     if line.strip() and "[plan end]" not in line.lower()]
+            print(lines)
+            for action_line in lines:
+                action_tuple = self.parse_action(action_line)
+                state, hand = self.simulate_action(state, hand, blocks_order, action_tuple)
+        except ValueError as ve:
+            print(f'Invalid Action - {ve}')
+            return 0.0
+        except Exception as e:
+            print(f'Physically Impossible Action - {e}')
+            return 0.1
+        # If actions were valid, check the goal.
+        goal_reached, _ = self.check_goal(state)
+        return 1.0 if goal_reached else 0.3
+
+    @classmethod
+    def test_from_json(cls, json_file: str):
+        """
+        Loads a JSON file containing a list of problems.
+        Each problem must have keys "init", "goal", and "plan".
+        The method loops over the problems, tests the plan, prints results for each,
+        and prints the overall accuracy (i.e. how many times the goal was reached).
+        """
+        with open(json_file, "r") as f:
+            problems = json.load(f)
+        total = len(problems)
+        correct = 0
+        for i, prob in enumerate(problems, start=1):
+            init_str = prob.get("init", "")
+            goal_str = prob.get("goal", "")
+            plan_str = prob.get("plan", "")
+            instance = cls(init_str, goal_str, plan_str)
+            final_state_str, reached, missing = instance.test()
+            if reached:
+                correct += 1
+            print(f"--- Problem {i} ---")
+            print("Initial State:", init_str)
+            print("Plan:\n", plan_str)
+            print("Goal:", goal_str)
+            print("Final State:", final_state_str)
+            print("Goal Reached?", reached)
+            if not reached:
+                print("Missing Conditions:", missing)
+            # Also print the reward as computed by our RL reward model.
+            reward = instance.simulate_plan_with_reward()
+            print("Reward:", reward)
+            print("\n" + "="*50 + "\n")
+        accuracy = (correct / total * 100) if total > 0 else 0
+        print(f"Accuracy: {accuracy:.2f}% ({correct} out of {total} problems reached the goal)")
+
+# ---------------------------
+# Example Usage
+# ---------------------------
+if __name__ == '__main__':
+    # Example 1: Plan Simulation and Goal Testing.
+    init1 = ("the red block is clear, the blue block is clear, the orange block is clear, the hand is empty, "
+             "the blue block is on top of the yellow block, the yellow block is on the table, "
+             "the red block is on the table and the orange block is on the table")
+    goal1 = "the red block is on top of the blue block and the blue block is on top of the orange block"
+    plan1 = """
+unstack the blue block from on top of the yellow block
+stack the blue block on top of the orange block
+pick up the red block
+stack the red block on top of the blue block
+[PLAN END]
+"""
+    instance1 = BlocksWorldModel(init1, goal1, plan1)
+    final_state_str1, reached1, missing1 = instance1.test()
+    print("Example 1:")
+    print("Final State:", final_state_str1)
+    print("Goal Reached?", reached1)
+    if not reached1:
+        print("Missing Conditions:", missing1)
+    print("\n" + "="*50 + "\n")
+    
+    # Example 2: Plan Simulation and Goal Testing.
+    init2 = ("the C block is clear, the B block is clear, the hand is empty, "
+             "the C block is on top of the A block, the A block is on top of the D block, "
+             "the D block is on the table and the B block is on the table")
+    goal2 = "the A block is on top of the B block"
+    plan2 = """
+unstack the C block from on top of the A block
+put down the C block
+unstack the A block from on top of the D block
+stack the A block on top of the B block
+[PLAN END]
+"""
+    instance2 = BlocksWorldModel(init2, goal2, plan2)
+    final_state_str2, reached2, missing2 = instance2.test()
+    print("Example 2:")
+    print("Final State:", final_state_str2)
+    print("Goal Reached?", reached2)
+    if not reached2:
+        print("Missing Conditions:", missing2)
+    print("\n" + "="*50 + "\n")
+    
+    # Example 3: Single-Step Simulation.
+    init_state_example = "the red block is clear, the hand is empty, the red block is on the table"
+    action_example = "pick up the red block"
+    new_state = BlocksWorldModel.simulate_step(init_state_example, action_example)
+    print("Example 3: Single-Step Simulation")
+    print("Initial State:", init_state_example)
+    print("Action:", action_example)
+    print("New State:", new_state)
+    print("\n" + "="*50 + "\n")
+    
+    # Example 4: Step-by-Step Simulation of an entire plan and goal checking.
+    print("Example 4: Step-by-Step Simulation and Goal Check")
+    current_state = init1
+    plan_lines = [line.strip() for line in plan1.strip().split("\n") if line.strip() and "[plan end]" not in line.lower()]
+    for action in plan_lines:
+        current_state = BlocksWorldModel.simulate_step(current_state, action)
+        print(f"After action '{action}':\n  {current_state}\n")
+    # Now parse the final state string into a state dictionary.
+    final_state_dict, _, _ = BlocksWorldModel.parse_initial_state(current_state)
+    # Parse the goal into a dictionary.
+    goal_dict = BlocksWorldModel.parse_goal(goal1)
+    # Compare final state against goal.
+    goal_reached = True
+    missing_conditions = []
+    for block, expected in goal_dict.items():
+        if block not in final_state_dict or final_state_dict[block] != expected:
+            goal_reached = False
+            missing_conditions.append(f"{BlocksWorldModel.denormalize_block_name(block)} should be on {BlocksWorldModel.denormalize_block_name(expected)}")
+    print("Final State:", current_state)
+    print("Goal:", goal1)
+    print("Goal Reached?", goal_reached)
+    if not goal_reached:
+        print("Missing Conditions:", missing_conditions)
+
+    json_path = '/mnt/data/shared/shparashar/Sys2Bench/data/blocksworld/train_set-6.json'
+    BlocksWorldModel.test_from_json(json_path)
+    
+    # Example usage of simulate_plan_with_reward (RL style reward).
+    init_example = ("the red block is clear, the blue block is clear, the orange block is clear, the hand is empty, "
+                    "the blue block is on top of the yellow block, the yellow block is on the table, "
+                    "the red block is on the table and the orange block is on the table")
+    goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
+    plan_example = """
+unstack the blue block from on top of the yellow block
+stack the blue block on top of the orange block
+pick up the red block
+stack the red block on top of the blue block
+[PLAN END]
+"""
+    instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
+    reward = instance_example.simulate_plan_with_reward()
+    print("RL Reward for the example plan:", reward)
+    
+    
+    # Wrong plan test.
+    init_example = "the blue block is clear, the yellow block is clear, the hand is empty, the blue block is on top of the orange block, the yellow block is on top of the red block, the red block is on the table and the orange block is on the table"
+    goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
+    plan_example = """
+unstack the blue block from on top of the orange block
+stack the blue block on top of the orange block
+unstack the blue block from on top of the orange block
+stack the blue block on top of the red block    
+    """
+    instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
+    reward = instance_example.simulate_plan_with_reward()
+    print("RL Reward for the example plan:", reward)
+    
+    plan ="""
+pick up the block 1 
+stack the block 1 on top of the block 2 
+pick up the block 2 
+stack the block 2 on top of the block 3 
+pick up the block 3   
+    """
+    init_example = "the block 3 is clear, the block 1 is clear, the block 2 is clear, the hand is empty, the block 3 is on the table, the block 1 is on the table and the block 2 is on the table"
+    goal_example = "the block 3 is on top of the block 2 and the block 1 is on top of the block 3"
+    instance_example = BlocksWorldModel(init_example, goal_example, plan)
+    print('herer')
+    reward = instance_example.simulate_plan_with_reward()
+    print("RL Reward for the example plan:", reward)

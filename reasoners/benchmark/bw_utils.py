@@ -51,7 +51,12 @@ def instance_to_text_blocksworld(problem, get_plan, data, plan_code="", shuffle=
             objs = [OBJS[obj] for obj in objs]
             PLAN += data['actions'][act_name].format(*objs) + "\n"
         PLAN += "[PLAN END]\n"
-
+    # print("init")
+    # print(INIT)
+    # print("goal")
+    # print(GOAL)
+    # print("plan")
+    # print(PLAN)
     return INIT, GOAL, PLAN
 
 def parse_problem(problem, data, shuffle):
@@ -86,10 +91,8 @@ def parse_problem(problem, data, shuffle):
 
     # ----------- INIT STATE TO TEXT ----------- #
     INIT = parse(init_atoms, OBJS)
-
     # ----------- GOAL TO TEXT ----------- #
     GOAL = parse(goal_preds, OBJS)
-
     return INIT, GOAL
 
 def fill_template(INIT, GOAL, PLAN):

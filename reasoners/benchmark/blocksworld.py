@@ -8,7 +8,7 @@ import sys
 import random
 from reasoners import Evaluator
 import copy
-
+from reasoners.benchmark.bw_augmentor import generate_augmentations
 import reasoners.benchmark.bw_utils as bw_utils
 
 def rap_bw_extractor(algo_output):
@@ -184,3 +184,52 @@ class BWEvaluator(Evaluator):
         bw_utils.text_to_plan_blocksworld(output, answer["instance_file"], self.config_file, self.domain_file, self.lm_plan_file)
         correct = bw_utils.validate_plan(self.domain_file, answer["instance_file"], self.lm_plan_file)[0]
         return correct
+    
+if __name__ == "__main__":
+    config_file: str = "data/blocksworld/bw_config.yaml"
+    steps = 6
+    domain_file: str = "data/blocksworld/generated_domain.pddl"
+    data_path=f'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
+    prompt_path='prompts/blocksworld/pool_prompt_v1.json'
+    
+    with open(prompt_path) as f:
+        prompt = json.load(f)
+    
+    def sc_output_extractor(algo_output):
+        from collections import Counter
+        answers = [x for x in algo_output if x is not None]
+        counter = Counter(answers)
+        if counter == {}:
+            return None
+        return counter.most_common(1)[0][0]
+    
+    evaluator = BWEvaluator(config_file=config_file, 
+                            domain_file=domain_file, 
+                            data_path=data_path, 
+                            init_prompt=prompt, 
+                            disable_log=False, 
+                            output_extractor=sc_output_extractor, 
+                            sample_prompt_type="rap")
+    dataset =evaluator.full_dataset
+    print("Dataset length: ", len(dataset))
+    train_set = []
+    for i in range(len(dataset)):
+        init = dataset[i]['init']
+        goal = dataset[i]['goal']
+        plan = dataset[i]['plan']
+        instance_file = dataset[i]['instance_file'] 
+        aug_data = generate_augmentations(init, goal, plan, num_augmentations=5)
+        for key in aug_data.keys():
+            for aug in aug_data[key]:
+                training_instance = {}
+                training_instance['init'] = aug['init']
+                training_instance['goal'] = aug['goal']
+                training_instance['plan'] = aug['plan']
+                training_instance['instance_file'] = instance_file
+                training_instance['augmentation_type'] = key
+                training_instance['mapping'] = aug['mapping']
+                train_set.append(training_instance)
+    print('Dataset Length', len(train_set))
+    with open(f'data/blocksworld/train_set-{steps}.json', 'w') as f:
+        json.dump(train_set, f, indent=4)
+    
