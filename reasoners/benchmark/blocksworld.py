@@ -115,17 +115,6 @@ class BWEvaluator(Evaluator):
                 # print("EXAMPLES: ",examples,flush=True)
                 icl = get_icl(self.init_prompt, examples)
                 prompt["icl_list"].append(icl)
-        elif sample_prompt_type == "tasb":
-            if shuffle_prompt:
-                examples = random.sample(self.init_prompt["take_a_step_back_pool"], num_shot)
-            else:
-                examples = self.init_prompt["take_a_step_back_pool"][:num_shot]
-            icl = get_take_a_step_back_icl(self.init_prompt, examples)
-            prompt = copy.deepcopy(self.init_prompt)
-            prompt["icl"] = icl
-            prompt["icl_list"] = [icl]
-            for i in range(5):
-                prompt["icl_list"].append(get_take_a_step_back_icl(self.init_prompt, examples))
         elif sample_prompt_type == "o1":
             prompt = {}
             prompt['o1'] = self.init_prompt["intro"]
@@ -187,7 +176,7 @@ class BWEvaluator(Evaluator):
     
 if __name__ == "__main__":
     config_file: str = "data/blocksworld/bw_config.yaml"
-    steps = 6
+    steps = 2
     domain_file: str = "data/blocksworld/generated_domain.pddl"
     data_path=f'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
     prompt_path='prompts/blocksworld/pool_prompt_v1.json'
@@ -218,7 +207,7 @@ if __name__ == "__main__":
         goal = dataset[i]['goal']
         plan = dataset[i]['plan']
         instance_file = dataset[i]['instance_file'] 
-        aug_data = generate_augmentations(init, goal, plan, num_augmentations=5)
+        aug_data = generate_augmentations(init, goal, plan, num_augmentations=15)
         for key in aug_data.keys():
             for aug in aug_data[key]:
                 training_instance = {}
@@ -230,6 +219,6 @@ if __name__ == "__main__":
                 training_instance['mapping'] = aug['mapping']
                 train_set.append(training_instance)
     print('Dataset Length', len(train_set))
-    with open(f'data/blocksworld/train_set-{steps}.json', 'w') as f:
+    with open(f'data/blocksworld/train_set-{steps}-more.json', 'w') as f:
         json.dump(train_set, f, indent=4)
     

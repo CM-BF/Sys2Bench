@@ -1,4 +1,4 @@
-from typing import Union, Optional
+from typing import Union, Optional, Callable
 import warnings
 import copy
 # cd85c6b6ad8aac53a9e9b3115fe101a4a4ca4dc66dfe7a28a5610b2da7464e21
@@ -39,7 +39,7 @@ def prompt_prefix(additional_prompt, prompt):
     return prompt
 
 class HFModel(LanguageModel):
-    def __init__(self, model_pth, tokenizer_pth, device='cuda:0', max_batch_size=1, max_new_tokens=None, max_length=2048, quantized=None, peft_pth=None, load_awq_pth=None,device_map=None, **kwargs):
+    def __init__(self, model_pth, tokenizer_pth, device='cuda:0', max_batch_size=1, max_new_tokens=None, max_length=2048, quantized=None, peft_pth=None, load_awq_pth=None,device_map=None, attn_implementation='flash_attention_2', torch_dtype="bfloat16",**kwargs):
         super().__init__()
         """
         Initializes a new instance of the `HFModel` class.
@@ -139,9 +139,12 @@ class HFModel(LanguageModel):
             self.model = dispatch_model(self.model, device_map=device_map)
 
         else:
+            print('Default Loading.............................')
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_pth,
+                attn_implementation=attn_implementation,
                 device_map="auto",
+                torch_dtype=torch.bfloat16,
                 trust_remote_code=True
             )
         if peft_pth is not None:
@@ -310,10 +313,6 @@ class HFModel(LanguageModel):
             for start in range(0, len(inputs), self.max_batch_size):
                 end = min(start + self.max_batch_size, len(inputs))
                 encoded_inputs = self.tokenizer(inputs[start:end], return_tensors='pt', padding=True).to(self.device)
-                # print()
-                # print(" INPUTS", inputs[start:end])
-                # print()
-                # start_time = time.time()
                 with torch.inference_mode():
                     generation_output = self.model.generate(
                         **encoded_inputs,

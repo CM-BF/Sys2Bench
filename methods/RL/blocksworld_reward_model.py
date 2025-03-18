@@ -112,19 +112,19 @@ class BlocksWorldModel:
         print(action_str)
         patterns = [
             (
-                r"^unstack the (.+?)(?: block)? from on top of the (.+?)(?: block)?$",
+                r"^unstack the (.+?) block from on top of the (.+?) block$",
                 lambda m: ("unstack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
             ),
             (
-                r"^pick up the (.+?)(?: block)?$",
+                r"^pick up the (.+?) block$",
                 lambda m: ("pickup", cls.normalize_block_name(m.group(1)))
             ),
             (
-                r"^stack the (.+?)(?: block)? on top of the (.+?)(?: block)?$",
+                r"^stack the (.+?) block on top of the (.+?) block$",
                 lambda m: ("stack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
             ),
             (
-                r"^put down the (.+?)(?: block)?$",
+                r"^put down the (.+?) block$",
                 lambda m: ("putdown", cls.normalize_block_name(m.group(1)))
             ),
         ]
@@ -298,7 +298,10 @@ class BlocksWorldModel:
         return final_state_str, goal_reached, missing_conditions
 
     # --- Reward-based Simulation for RL ---
-    def simulate_plan_with_reward(self):
+    def get_number_of_steps(self, plan):
+        return sum(1 for line in plan.strip().splitlines() if line.strip() and "[plan end]" not in line.lower())
+    
+    def simulate_plan_with_reward(self, true_plan: str):
         """
         Simulates the plan step by step. If any action is physically unachievable,
         returns a reward of 0. If all actions are valid but the goal is not reached,
@@ -308,6 +311,15 @@ class BlocksWorldModel:
         if len(self.plan.strip().split("\n")) == 0:
             print('Empty plan.')
             return 0.0
+        num_steps_extracted_plan = self.get_number_of_steps(self.plan)
+        num_steps_true_plan = self.get_number_of_steps(true_plan)
+            
+            # Since number of steps cannot be less than the true plan, the BW reward is 0.0.
+        print(f"Number of steps extracted: {num_steps_extracted_plan}, true: {num_steps_true_plan}")
+        if num_steps_extracted_plan < num_steps_true_plan:
+            print(f"ERROR ---Number of steps mismatch!----")
+            return 0.0
+        
         try:
             state, hand, blocks_order = self.parse_initial_state(self.init_state)
             lines = [line.replace('<', '').replace('>', '').strip() for line in self.plan.strip().split("\n")
@@ -324,7 +336,18 @@ class BlocksWorldModel:
             return 0.1
         # If actions were valid, check the goal.
         goal_reached, _ = self.check_goal(state)
-        return 1.0 if goal_reached else 0.3
+        if goal_reached and num_steps_extracted_plan == num_steps_true_plan:
+            print('Goal Reached! Optimal Plan!')
+            return 2.0 # Goal reached with the right number of steps
+        elif goal_reached and num_steps_extracted_plan > num_steps_true_plan:
+            print(f'Goal Reached! Suboptimal Plan! True Plan: {num_steps_true_plan}, Extracted Plan: {num_steps_extracted_plan}')
+            return 1.0 # Goal reached with more steps
+        elif not goal_reached and num_steps_extracted_plan == num_steps_true_plan:
+            print(f'Goal Not Reached. Correct Number of Steps. True Plan: {num_steps_true_plan}, Extracted Plan: {num_steps_extracted_plan}')
+            return 0.5 # Goal not reached with the right number of steps
+        elif not goal_reached and num_steps_extracted_plan > num_steps_true_plan:
+            print(f'Goal Not Reached. Incorrect Number of Steps. True Plan: {num_steps_true_plan}, Extracted Plan: {num_steps_extracted_plan}')
+            return 0.3 # Goal not reached with more steps
 
     @classmethod
     def test_from_json(cls, json_file: str):

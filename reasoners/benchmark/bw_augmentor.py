@@ -1,6 +1,17 @@
 import random
 import re
 
+def ordinal(n):
+    """
+    Convert an integer n to its ordinal representation as a string.
+    For example, 1 -> '1st', 2 -> '2nd', 3 -> '3rd', 4 -> '4th', etc.
+    """
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
 def generate_mapping(original_names, candidate_list):
     """
     Generate a one-to-one mapping from original_names to a randomly selected set
@@ -64,13 +75,16 @@ def generate_augmentations(init_text, goal_text, plan_text, num_augmentations=3,
     # Combine texts for extracting all block names.
     combined_text = init_text + " " + goal_text + " " + plan_text
     original_names = extract_original_names(combined_text)
-    
+    print(len(original_names))
     # Define candidate lists for various augmentation types.
     aug_candidates = {
         "colors": ["magenta", "cyan", "violet", "turquoise", "indigo", "gold",
                    "silver", "emerald", "ruby", "sapphire"],
-        "numbers": [str(i) for i in range(1, len(original_names) + 1)],
-        "alphabets": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")[:len(original_names)],
+        "numbers": [f"{ordinal(i)}" for i in range(1, len(original_names) + 1)],
+        "greek": ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", 
+                  "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", 
+                  "tau", "upsilon", "phi", "chi", "psi", "omega"],
+        "alphabets": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
         "shuffled": original_names.copy()
     }
     
@@ -91,14 +105,10 @@ def generate_augmentations(init_text, goal_text, plan_text, num_augmentations=3,
                 attempts += 1
             if attempts == max_attempts:
                 print(f"Warning: Could not generate a unique mapping for {aug_type} after {max_attempts} attempts.")
+                continue
             aug_init = apply_mapping(init_text, mapping)
             aug_goal = apply_mapping(goal_text, mapping)
             aug_plan = apply_mapping(plan_text, mapping)
-            
-            if aug_type == "numbers":
-                aug_init = adjust_number_format(aug_init)
-                aug_goal = adjust_number_format(aug_goal)
-                aug_plan = adjust_number_format(aug_plan)
                 
             augmentation_data = {
                 "mapping": mapping,
