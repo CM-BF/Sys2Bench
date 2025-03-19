@@ -1,0 +1,59 @@
+# conf/config.yaml
+defaults:
+  - _self_
+  - model: qwen
+#  - override hydra/job_logging: colorlog
+#  - override hydra/hydra_logging: colorlog
+
+experiment:
+  use_icl_examples: false
+  data_files:
+    - data/blocksworld/train_set-2-more_with_trace.json
+  icl_examples_file: data/blocksworld/train_set-2-more_with_trace.json
+  dataset_size: 3000
+  dataset_seed: 1234
+  test_size: 0.1
+
+output:
+  root_path: ${oc.env:ROOT_PATH}
+  model_name: blocksworld-rm
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.1
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+  task_type: "CAUSAL_LM"
+
+training:
+  learning_rate: 1e-6
+  lr_scheduler_type: "cosine"
+  logging_steps: 10
+  max_steps: 300
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  bf16: true
+  max_prompt_length: 1600
+  max_completion_length: 512
+  num_generations: 8
+  beta: 0.001
+  use_vllm: true
+  vllm_gpu_memory_utilization: 1
+  report_to:
+    - tensorboard
+  push_to_hub: true
+  save_strategy: "steps"
+  save_steps: 10
+  hf_token: ${oc.env:HF_TOKEN}
+
+hydra:
+  run:
+    dir: ${output.root_path}/outputs/${model.name}_${now:%Y%m%d%H%M%S}
+  sweep:
+    dir: ${output.root_path}/multirun/${now:%Y%m%d}
+    subdir: ${hydra.job.override_dirname}
+  job:
+    chdir: false

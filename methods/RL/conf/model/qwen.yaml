@@ -1,0 +1,5 @@
+# conf/model/qwen.yaml
+name: "Qwen/Qwen2.5-3B-Instruct"
+trust_remote_code: true
+torch_dtype: "bfloat16"
+attn_implementation: "flash_attention_2"
