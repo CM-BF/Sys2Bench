@@ -29,7 +29,7 @@ def generate_icl(examples, provide_think_icl=False, num_icl = 2, idx=None):
     if idx is not None:
         filtered_examples = [ex for i, ex in enumerate(examples) if i != idx]
     else:
-        filtered_examples = sampled_examples
+        filtered_examples = examples
     
     sampled_examples = random.sample(filtered_examples, num_icl)
     if num_icl == 1:
