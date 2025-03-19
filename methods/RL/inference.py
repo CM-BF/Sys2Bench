@@ -47,7 +47,7 @@ class RLReasoner():
         return outputs    
 
 def main(model_checkpoint=300,
-         model_dir='qwen-bw-r1-aha-moment/deep_seek-r1-2step/checkpoint-{num}',
+         model_dir='qwen-bw-r1-aha-moment/deep_seek-r1-2step-low/checkpoint-{num}',
          steps=2,
          config_file: str = "data/blocksworld/bw_config.yaml", 
          domain_file: str = "data/blocksworld/generated_domain.pddl", 
