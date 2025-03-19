@@ -5,6 +5,9 @@ defaults:
 #  - override hydra/job_logging: colorlog
 #  - override hydra/hydra_logging: colorlog
 
+# Mode: either "train" or "inference"
+mode: "train"
+
 experiment:
   use_icl_examples: false
   data_files:
@@ -41,13 +44,46 @@ training:
   num_generations: 8
   beta: 0.001
   use_vllm: true
-  vllm_gpu_memory_utilization: 1
+  vllm_gpu_memory_utilization: 0.2
   report_to:
     - tensorboard
   push_to_hub: true
   save_strategy: "steps"
   save_steps: 10
   hf_token: ${oc.env:HF_TOKEN}
+
+# Inference configuration
+inference:
+  # Checkpoint number to use (will be formatted into path)
+  checkpoint: 300
+  # Number of planning steps for problem
+  steps: 2
+  # Temperature for sampling
+  temperature: 0.7
+  # Number of samples
+  sc_num: 1
+  # Whether to use in-context learning examples
+  use_icl: false
+  # Number of ICL examples to use
+  icl_num: 2
+  # Path to prompt templates
+  prompt_path: 'prompts/blocksworld/pool_prompt_v1.json'
+  # Path to test data
+  data_path: 'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
+  # Config files
+  config_file: "data/blocksworld/bw_config.yaml"
+  domain_file: "data/blocksworld/generated_domain.pddl"
+  # Number of shots for evaluation
+  num_shot: 4
+  # Resume from a specific example
+  resume: 0
+  # Maximum tokens to generate
+  max_new_tokens: 512
+
+# Optional GPU memory management
+occupy_gpu_memory: false
+occupy_gpu_memory_gb: 50
+gpu_device: "cuda:0"
 
 hydra:
   run:
