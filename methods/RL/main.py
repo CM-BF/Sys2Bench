@@ -12,7 +12,7 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 import torch
 from omegaconf import DictConfig, OmegaConf
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 from huggingface_hub import login
 from transformers import AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
@@ -543,15 +543,24 @@ class CountdownTrainer(BaseTrainer):
 
     def _prepare_dataset(self):
         """Prepare dataset for training"""
-        dataset = load_dataset('parquet', data_files=self.cfg.task.data_files)
-        dataset = dataset['train'].shuffle(seed=self.cfg.experiment.dataset_seed)
+        if self.cfg.task.force_redownload:
+            all_data = [load_dataset(data_path, download_mode='FORCE_REDOWNLOAD') for data_path in self.cfg.task.data_files]
+        else:
+            all_data = [load_dataset(data_path) for data_path in self.cfg.task.data_files]
+        train_data = [data['train'] for data in all_data]
+        test_data = [data['test'] for data in all_data]
+        train_dataset = concatenate_datasets(train_data)
+        test_dataset = concatenate_datasets(test_data)
+        train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
         # Limit dataset size if specified
-        if self.cfg.experiment.dataset_size > 0:
-            dataset = dataset.select(range(self.cfg.experiment.dataset_size))
+        if self.cfg.task.train_size > 0:
+            train_dataset = train_dataset.select(range(self.cfg.task.train_size))
+            test_dataset = test_dataset.select(range(self.cfg.task.test_size))
 
-        print(f"Dataset prepared with {len(dataset)} samples")
-        return dataset
+        print(f"Dataset prepared with {len(train_dataset)} training samples and {len(test_dataset)} test samples")
+        return train_dataset, test_dataset
 
     def _generate_prompt(self, tokenizer, example):
         """Generate prompt for the countdown model"""
@@ -647,15 +656,14 @@ Assistant: Let me solve this step by step.
         )
 
         # Prepare dataset
-        dataset = self._prepare_dataset()
-        dataset = dataset.map(
-            lambda example: self._generate_prompt(tokenizer, example)
-        )
+        train_dataset, test_dataset = self._prepare_dataset()
+        train_dataset = train_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+        test_dataset = test_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
 
         # Split dataset
-        train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-        train_dataset = train_test_split["train"]
-        test_dataset = train_test_split["test"]
+        # train_test_split = dataset.train_test_split(test_size=self.cfg.task.test_size)
+        # train_dataset = train_test_split["train"]
+        # test_dataset = train_test_split["test"]
 
         # Setup Model config
         model_config = self._get_model_config()
