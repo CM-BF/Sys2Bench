@@ -1,8 +1,12 @@
 # conf/task/countdown.yaml
 name: "countdown"
 data_files:
-  - data/countdown/countdown_n4mt100_range1to100/train.parquet
-test_file: data/countdown/countdown_n4mt100_range1to100/test.parquet
+  - citrinegui/countdown_n4t100_1-100
+#  - citrinegui/countdown_n6t100_1-100
+test_file: citrinegui/countdown_n4t100_1-100
+force_redownload: false
+train_size: 327680
+test_size: 1024
 
 num_operands: 6
 max_target: 1000

@@ -18,5 +18,5 @@ training:
     - wandb
   push_to_hub: true
   save_strategy: "steps"
-  save_steps: 10
+  save_steps: 50
   hf_token: ${oc.env:HF_TOKEN}
