@@ -2,24 +2,20 @@
 defaults:
   - _self_
   - model: qwen
-#  - override hydra/job_logging: colorlog
-#  - override hydra/hydra_logging: colorlog
+  - task: blocksworld  # or countdown
+  - algorithm: grpo    # or ppo
 
 # Mode: either "train" or "inference"
 mode: "train"
 
 experiment:
-  use_icl_examples: false
-  data_files:
-    - data/blocksworld/train_set-2-more_with_trace.json
-  icl_examples_file: data/blocksworld/train_set-2-more_with_trace.json
-  dataset_size: 3000
+  dataset_size: 0
   dataset_seed: 1234
   test_size: 0.1
 
 output:
   root_path: ${oc.env:ROOT_PATH}
-  model_name: blocksworld-rm
+  model_name: ${task.name}_${algorithm.name}  # This will dynamically set the model name based on task and algorithm
 
 lora:
   r: 32
@@ -30,56 +26,6 @@ lora:
     - "v_proj"
   task_type: "CAUSAL_LM"
 
-training:
-  learning_rate: 1e-6
-  lr_scheduler_type: "cosine"
-  logging_steps: 10
-  max_steps: 300
-  per_device_train_batch_size: 1
-  gradient_accumulation_steps: 4
-  gradient_checkpointing: true
-  bf16: true
-  max_prompt_length: 1600
-  max_completion_length: 512
-  num_generations: 8
-  beta: 0.001
-  use_vllm: true
-  vllm_gpu_memory_utilization: 0.2
-  report_to:
-    - tensorboard
-  push_to_hub: true
-  save_strategy: "steps"
-  save_steps: 10
-  hf_token: ${oc.env:HF_TOKEN}
-
-# Inference configuration
-inference:
-  # Checkpoint number to use (will be formatted into path)
-  checkpoint: 300
-  # Number of planning steps for problem
-  steps: 2
-  # Temperature for sampling
-  temperature: 0.7
-  # Number of samples
-  sc_num: 1
-  # Whether to use in-context learning examples
-  use_icl: false
-  # Number of ICL examples to use
-  icl_num: 2
-  # Path to prompt templates
-  prompt_path: 'prompts/blocksworld/pool_prompt_v1.json'
-  # Path to test data
-  data_path: 'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
-  # Config files
-  config_file: "data/blocksworld/bw_config.yaml"
-  domain_file: "data/blocksworld/generated_domain.pddl"
-  # Number of shots for evaluation
-  num_shot: 4
-  # Resume from a specific example
-  resume: 0
-  # Maximum tokens to generate
-  max_new_tokens: 512
-
 # Optional GPU memory management
 occupy_gpu_memory: false
 occupy_gpu_memory_gb: 50
@@ -87,7 +33,7 @@ gpu_device: "cuda:0"
 
 hydra:
   run:
-    dir: ${output.root_path}/outputs/${model.name}_${now:%Y%m%d%H%M%S}
+    dir: ${output.root_path}/outputs/${model.name}_${task.name}_${algorithm.name}_${now:%Y%m%d%H%M%S}
   sweep:
     dir: ${output.root_path}/multirun/${now:%Y%m%d}
     subdir: ${hydra.job.override_dirname}

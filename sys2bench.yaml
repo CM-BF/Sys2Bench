@@ -1,4 +1,4 @@
-name: sys2bench
+name: sys2bench2
 channels:
   - nvidia
   - conda-forge

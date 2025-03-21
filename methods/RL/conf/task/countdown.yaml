@@ -1,0 +1,22 @@
+# conf/task/countdown.yaml
+name: "countdown"
+data_files:
+  - data/countdown/countdown_n4mt100_range1to100/train.parquet
+test_file: data/countdown/countdown_n4mt100_range1to100/test.parquet
+
+num_operands: 6
+max_target: 1000
+min_number: 1
+max_number: 100
+template_type: "qwen-instruct"
+
+training:
+  max_prompt_length: 1000
+  max_completion_length: 256
+
+inference:
+  checkpoint: 300
+  temperature: 0.7
+  sc_num: 1
+  resume: 0
+  max_new_tokens: 256
