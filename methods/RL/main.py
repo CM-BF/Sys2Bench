@@ -46,11 +46,18 @@ class BaseTrainer:
         print(f"Output directory: {self.output_dir}")
 
         # Setup HuggingFace authentication
-        hf_token = self.cfg.algorithm.training.hf_token
-        if hf_token:
+        # Setup HuggingFace authentication
+        hf_token = self.cfg.experiment.hf_token
+        # Check if already logged in using huggingface_hub API
+        from huggingface_hub import HfApi
+        try:
+            # Try to get user info which will fail if not logged in
+            api = HfApi()
+            user_info = api.whoami()
+            print(f"Already logged in to Hugging Face as {user_info['name']}")
+        except Exception as e:
+            print("Logging in to Hugging Face")
             login(token=hf_token, add_to_git_credential=True)
-        else:
-            print("Warning: No HuggingFace token provided. Some operations may fail.")
 
     def train(self):
         """Train a model"""
@@ -77,17 +84,17 @@ class BaseTrainer:
 
         return model_config
 
-    def _get_checkpoint_path(self, checkpoint):
+    def _get_checkpoint_path(self, checkpoint, model_name=None):
         """Generate the path to the checkpoint based on configuration"""
         # Get the base output directory for models from config
         base_output_dir = self.cfg.output.root_path
 
         # Use the model name from output config
-        model_name = self.cfg.output.model_name
+        model_name = self.cfg.output.run_name if model_name is None else model_name
 
         # If the checkpoint is a number, use the checkpoint-{num} format
         if isinstance(checkpoint, int):
-            checkpoint_path = os.path.join(base_output_dir, "outputs", f"{self.cfg.model.name}", model_name,
+            checkpoint_path = os.path.join(base_output_dir, "outputs", model_name,
                                            f"checkpoint-{checkpoint}")
         else:
             # Otherwise use the provided checkpoint path directly
@@ -99,68 +106,74 @@ class BaseTrainer:
 
         return checkpoint_path
 
+    def _get_common_training_args(self):
+        """Get common training arguments for both GRPO and PPO"""
+        training_cfg = self.cfg.algorithm.training
+        output_dir = self.output_dir
+
+        common_args = {
+            "output_dir": str(output_dir),
+            "learning_rate": training_cfg.learning_rate,
+            "lr_scheduler_type": training_cfg.lr_scheduler_type,
+            "logging_steps": training_cfg.logging_steps,
+            "max_steps": training_cfg.max_steps,
+            "per_device_train_batch_size": training_cfg.per_device_train_batch_size,
+            "gradient_accumulation_steps": training_cfg.gradient_accumulation_steps,
+            "gradient_checkpointing": training_cfg.gradient_checkpointing,
+            "bf16": training_cfg.bf16,
+            # Reporting
+            "report_to": list(training_cfg.report_to),
+            "run_name": self.cfg.output.run_name,
+            "push_to_hub": training_cfg.push_to_hub,
+            "hub_model_id": self.cfg.output.run_name,
+            "save_strategy": training_cfg.save_strategy,
+            "save_steps": training_cfg.save_steps,
+        }
+
+        return common_args, output_dir
+
     def _setup_grpo_training(self):
         """Setup training configuration for GRPO"""
         training_cfg = self.cfg.algorithm.training
-        output_dir = self.output_dir / self.cfg.output.model_name
+        common_args, _ = self._get_common_training_args()
 
-        training_args = GRPOConfig(
-            output_dir=str(output_dir),
-            learning_rate=training_cfg.learning_rate,
-            lr_scheduler_type=training_cfg.lr_scheduler_type,
-            logging_steps=training_cfg.logging_steps,
-            max_steps=training_cfg.max_steps,
-            per_device_train_batch_size=training_cfg.per_device_train_batch_size,
-            gradient_accumulation_steps=training_cfg.gradient_accumulation_steps,
-            gradient_checkpointing=training_cfg.gradient_checkpointing,
-            bf16=training_cfg.bf16,
+        # Add GRPO specific parameters
+        grpo_args = {
             # GRPO specific parameters
-            max_prompt_length=self.cfg.task.training.max_prompt_length,
-            max_completion_length=self.cfg.task.training.max_completion_length,
-            num_generations=training_cfg.num_generations,
-            beta=training_cfg.beta,
+            "max_prompt_length": self.cfg.task.training.max_prompt_length,
+            "max_completion_length": self.cfg.task.training.max_completion_length,
+            "num_generations": training_cfg.num_generations,
+            "beta": training_cfg.beta,
             # Vllm
-            use_vllm=training_cfg.use_vllm,
-            vllm_gpu_memory_utilization=training_cfg.vllm_gpu_memory_utilization,
-            # Reporting
-            report_to=list(training_cfg.report_to),
-            push_to_hub=training_cfg.push_to_hub,
-            save_strategy=training_cfg.save_strategy,
-            save_steps=training_cfg.save_steps,
-        )
+            "use_vllm": training_cfg.use_vllm,
+            "vllm_gpu_memory_utilization": training_cfg.vllm_gpu_memory_utilization,
+        }
+
+        # Combine common and GRPO specific args
+        training_args = GRPOConfig(**common_args, **grpo_args)
 
         return training_args
 
     def _setup_ppo_training(self):
         """Setup training configuration for PPO"""
         training_cfg = self.cfg.algorithm.training
-        output_dir = self.output_dir / self.cfg.output.model_name
+        common_args, _ = self._get_common_training_args()
 
-        training_args = PPOConfig(
-            output_dir=str(output_dir),
-            learning_rate=training_cfg.learning_rate,
-            lr_scheduler_type=training_cfg.lr_scheduler_type,
-            logging_steps=training_cfg.logging_steps,
-            max_steps=training_cfg.max_steps,
-            per_device_train_batch_size=training_cfg.per_device_train_batch_size,
-            gradient_accumulation_steps=training_cfg.gradient_accumulation_steps,
-            gradient_checkpointing=training_cfg.gradient_checkpointing,
-            bf16=training_cfg.bf16,
+        # Add PPO specific parameters
+        ppo_args = {
             # PPO specific parameters
-            num_ppo_epochs=training_cfg.num_ppo_epochs,
-            kl_coef=training_cfg.kl_coef,
-            cliprange=training_cfg.cliprange,
-            vf_coef=training_cfg.vf_coef,
-            cliprange_value=training_cfg.cliprange_value,
-            gamma=training_cfg.gamma,
-            lam=training_cfg.lam,
-            whiten_rewards=training_cfg.whiten_rewards,
-            # Reporting
-            report_to=list(training_cfg.report_to),
-            push_to_hub=training_cfg.push_to_hub,
-            save_strategy=training_cfg.save_strategy,
-            save_steps=training_cfg.save_steps,
-        )
+            "num_ppo_epochs": training_cfg.num_ppo_epochs,
+            "kl_coef": training_cfg.kl_coef,
+            "cliprange": training_cfg.cliprange,
+            "vf_coef": training_cfg.vf_coef,
+            "cliprange_value": training_cfg.cliprange_value,
+            "gamma": training_cfg.gamma,
+            "lam": training_cfg.lam,
+            "whiten_rewards": training_cfg.whiten_rewards,
+        }
+
+        # Combine common and PPO specific args
+        training_args = PPOConfig(**common_args, **ppo_args)
 
         return training_args
 
@@ -187,7 +200,7 @@ class BlocksWorldTrainer(BaseTrainer):
         else:
             icl_example = generate_icl(icl_examples_set, provide_think_icl=True, num_icl=1, idx=example_index)
 
-        r1_prefix = [
+        messages = [
             {
                 "role": "system",
                 "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
@@ -203,7 +216,7 @@ class BlocksWorldTrainer(BaseTrainer):
         ]
 
         return {
-            "prompt": tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True),
+            "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
             "plan": plan,
             "init": init,
             "goal": goal
@@ -303,7 +316,7 @@ class BlocksWorldTrainer(BaseTrainer):
         # Extract config values
         model_name = self.cfg.model.name
         use_icl_examples = self.cfg.task.use_icl_examples
-        output_model_name = self.cfg.output.model_name
+        output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
 
         # Prepare ICL examples if needed
@@ -550,7 +563,8 @@ class CountdownTrainer(BaseTrainer):
         train_data = [data['train'] for data in all_data]
         test_data = [data['test'] for data in all_data]
         train_dataset = concatenate_datasets(train_data)
-        test_dataset = concatenate_datasets(test_data)
+        test_dataset = test_data[-1]
+        # test_dataset = concatenate_datasets(test_data)
         train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
@@ -562,25 +576,46 @@ class CountdownTrainer(BaseTrainer):
         print(f"Dataset prepared with {len(train_dataset)} training samples and {len(test_dataset)} test samples")
         return train_dataset, test_dataset
 
+    def _construct_reasoning_trace(self, reasoning_steps):
+        """Construct reasoning trace from reasoning steps"""
+        reasoning_trace = []
+        n_r = len(reasoning_steps) - 1
+        for i, step in enumerate(reasoning_steps):
+            if 0 < i < n_r:
+                reasoning_trace.append(f"Step {i}: {step}")
+        reasoning_trace.append(f"Final Result: {reasoning_steps[-1]}")
+        return reasoning_trace
+
     def _generate_prompt(self, tokenizer, example):
         """Generate prompt for the countdown model"""
         # Extract target and numbers from the example
         data = example.get("reward_model", {}).get("ground_truth", {})
         target = data.get("target")
         numbers = data.get("numbers")
+        # expression = data.get("expression") # e.g., (((76 - 80) - 28) + 43), (((65 * 12) + 60) / 28)
+        reasoning_steps = example.get("reasoning_steps")
+        reasoning_trace = self._construct_reasoning_trace(reasoning_steps)
 
-        if self.cfg.task.template_type == "qwen-instruct":
-            prompt = f"""<|im_start|>system\nYou are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.<|im_end|>\n<|im_start|>user\nUsing the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n<|im_start|>assistant\nLet me solve this step by step.\n<think>"""
-        else:
-            prompt = f"""A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.
-User: Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>.
-Assistant: Let me solve this step by step.
-<think>"""
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+            },
+            {
+                "role": "user",
+                "content": f"Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>."
+            },
+            {
+                "role": "assistant",
+                "content": "Let me solve this step by step.\n<think>"
+            }
+        ]
 
         return {
-            "prompt": prompt,
+            "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
             "target": target,
-            "numbers": numbers
+            "numbers": numbers,
+            "reasoning_trace": reasoning_trace,
         }
 
     def _validate_countdown_response_format(self, response: str):
@@ -646,7 +681,7 @@ Assistant: Let me solve this step by step.
         """Train a model using the specified algorithm with configurations from Hydra"""
         # Extract config values
         model_name = self.cfg.model.name
-        output_model_name = self.cfg.output.model_name
+        output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
 
         # Load tokenizer
@@ -869,9 +904,9 @@ def main(cfg: DictConfig):
 
     # Select the appropriate trainer based on the task
     task = cfg.task.name
-    if task == "blocksworld":
+    if "blocksworld" in task:
         trainer = BlocksWorldTrainer(cfg)
-    elif task == "countdown":
+    elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
     else:
         raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld' or 'countdown'")

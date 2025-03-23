@@ -6,7 +6,7 @@ training:
   lr_scheduler_type: "cosine"
   logging_steps: 10
   max_steps: 300
-  per_device_train_batch_size: 1
+  per_device_train_batch_size: 2
   gradient_accumulation_steps: 4
   gradient_checkpointing: true
   bf16: true
@@ -19,4 +19,4 @@ training:
   push_to_hub: true
   save_strategy: "steps"
   save_steps: 50
-  hf_token: ${oc.env:HF_TOKEN}
+  eval_strategy: "steps"
