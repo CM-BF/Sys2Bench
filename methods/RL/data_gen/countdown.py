@@ -66,6 +66,7 @@ def gen_dataset(
 
             current_value = nums_copy[0]
             expression = str(nums_copy[0])
+            reasoning_steps = [f'{current_value}']
             remaining_nums = nums_copy[1:]
 
             # Process each remaining number
@@ -77,30 +78,36 @@ def gen_dataset(
                 # Try operations until we find one that gives an integer result
                 for op in shuffled_ops:
                     if op == '+':
-                        current_value += num
+                        new_value = current_value + num
                         new_expr = f"({expression} + {num})"
+                        reasoning_steps.append(f"{current_value} + {num} = {new_value}")
                         break
                     elif op == '-':
-                        current_value -= num
+                        new_value = current_value - num
                         new_expr = f"({expression} - {num})"
+                        reasoning_steps.append(f"{current_value} - {num} = {new_value}")
                         break
                     elif op == '*':
-                        current_value *= num
+                        new_value = current_value * num
                         new_expr = f"({expression} * {num})"
+                        reasoning_steps.append(f"{current_value} * {num} = {new_value}")
                         break
                     elif op == '/':
                         # Check for division by zero and integer division
                         if num != 0 and current_value % num == 0:
-                            current_value = current_value // num
+                            new_value = current_value // num
                             new_expr = f"({expression} / {num})"
+                            reasoning_steps.append(f"{current_value} / {num} = {new_value}")
                             break
 
+                current_value = new_value
                 expression = new_expr
 
             # Check if we have a valid solution within range
             if 0 <= current_value <= max_target:
                 target = current_value
                 valid_solution = expression
+                reasoning_steps.append(f"{current_value}")
                 break
 
         # If we couldn't find a valid expression after max attempts, create a simple one
@@ -108,29 +115,13 @@ def gen_dataset(
             sample = {
                 "target": target,
                 "nums": numbers,
-                "expression": valid_solution
+                "expression": valid_solution,
+                "reasoning_steps": reasoning_steps,
             }
             samples.append(sample)
 
     return samples
 
-
-
-
-def make_prefix(dp, template_type):
-    target = dp['target']
-    numbers = dp['nums']
-    # NOTE: also need to change reward_score/countdown.py
-    if template_type == 'base':
-        """This works for any base model"""
-        prefix = f"""A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.
-User: Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>.
-Assistant: Let me solve this step by step.
-<think>"""
-    elif template_type == 'qwen-instruct':
-        """This works for Qwen Instruct Models"""
-        prefix = f"""<|im_start|>system\nYou are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.<|im_end|>\n<|im_start|>user\n Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n<|im_start|>assistant\nLet me solve this step by step.\n<think>"""
-    return prefix
 
 
 if __name__ == '__main__':
@@ -171,7 +162,6 @@ if __name__ == '__main__':
 
     def make_map_fn(split):
         def process_fn(example, idx):
-            question = make_prefix(example, template_type=args.template_type)
             solution = {
                 "target": example['target'],
                 "numbers": example['nums'],
@@ -179,10 +169,6 @@ if __name__ == '__main__':
             }
             data = {
                 "data_source": data_source,
-                "prompt": [{
-                    "role": "user",
-                    "content": question,
-                }],
                 "ability": "math",
                 "reward_model": {
                     "style": "rule",

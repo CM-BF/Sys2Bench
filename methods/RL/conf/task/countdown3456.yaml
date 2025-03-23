@@ -1,0 +1,28 @@
+# conf/task/countdown.yaml
+name: "countdown3456"
+data_files:
+  - citrinegui/countdown_n3t100_1-100
+  - citrinegui/countdown_n4t100_1-100
+  - citrinegui/countdown_n5t100_1-100
+  - citrinegui/countdown_n6t100_1-100
+test_file: citrinegui/countdown_n5t100_1-100
+force_redownload: false
+train_size: 327680
+test_size: 1024
+
+num_operands: 6
+max_target: 1000
+min_number: 1
+max_number: 100
+template_type: "qwen-instruct"
+
+training:
+  max_prompt_length: 1000
+  max_completion_length: 256
+
+inference:
+  checkpoint: 300
+  temperature: 0.7
+  sc_num: 1
+  resume: 0
+  max_new_tokens: 256
