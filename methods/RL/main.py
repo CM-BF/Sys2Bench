@@ -7,6 +7,7 @@ import time
 import json
 from datetime import datetime
 from pathlib import Path
+from tqdm import tqdm
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
@@ -102,7 +103,10 @@ class BaseTrainer:
 
         # Ensure the checkpoint exists
         if not os.path.exists(checkpoint_path):
-            raise ValueError(f"Checkpoint not found at {checkpoint_path}")
+            import warnings
+
+            checkpoint_path = f'{self.cfg.model.family}/{model_name}'
+            warnings.warn(f"Checkpoint not found at {checkpoint_path}. Will attempt to use the model in huggingface: {checkpoint_path}.")
 
         return checkpoint_path
 
@@ -554,17 +558,16 @@ class BlocksWorldTrainer(BaseTrainer):
 class CountdownTrainer(BaseTrainer):
     """Class for training and inference on countdown models"""
 
-    def _prepare_dataset(self):
+    def _prepare_dataset(self, data_files):
         """Prepare dataset for training"""
         if self.cfg.task.force_redownload:
-            all_data = [load_dataset(data_path, download_mode='FORCE_REDOWNLOAD') for data_path in self.cfg.task.data_files]
+            all_data = [load_dataset(data_path, download_mode='FORCE_REDOWNLOAD') for data_path in data_files]
         else:
-            all_data = [load_dataset(data_path) for data_path in self.cfg.task.data_files]
+            all_data = [load_dataset(data_path) for data_path in data_files]
         train_data = [data['train'] for data in all_data]
         test_data = [data['test'] for data in all_data]
         train_dataset = concatenate_datasets(train_data)
-        test_dataset = test_data[-1]
-        # test_dataset = concatenate_datasets(test_data)
+        test_dataset = concatenate_datasets(test_data)
         train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
@@ -691,7 +694,7 @@ class CountdownTrainer(BaseTrainer):
         )
 
         # Prepare dataset
-        train_dataset, test_dataset = self._prepare_dataset()
+        train_dataset, test_dataset = self._prepare_dataset(self.cfg.task.data_files)
         train_dataset = train_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
         test_dataset = test_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
 
@@ -742,14 +745,13 @@ class CountdownTrainer(BaseTrainer):
         """Run inference using the trained model"""
         # Extract config values
         model_checkpoint = self.cfg.task.inference.checkpoint
-        temperature = self.cfg.task.inference.temperature
         sc_num = self.cfg.task.inference.sc_num
 
         # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint)
+        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
 
         # Load test dataset
-        test_dataset = load_dataset('parquet', data_files=self.cfg.task.test_file)["train"]
+        _, test_dataset = self._prepare_dataset([self.cfg.task.test_file])
 
         # Load model and tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
@@ -766,10 +768,11 @@ class CountdownTrainer(BaseTrainer):
 
         # Run inference on test dataset
         correct = 0
+        rewards = 0
         total = 0
         results = []
 
-        for example in test_dataset:
+        for example in tqdm(test_dataset):
             # Generate prompt
             prompt_data = self._generate_prompt(tokenizer, example)
             prompt = prompt_data["prompt"]
@@ -777,7 +780,7 @@ class CountdownTrainer(BaseTrainer):
             # Generate responses
             outputs = []
             for _ in range(sc_num):
-                output = model.generate([prompt], do_sample=True, temperature=temperature).text[0]
+                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False).text[0]
                 outputs.append(output)
 
             # Evaluate responses
@@ -807,25 +810,27 @@ class CountdownTrainer(BaseTrainer):
                     "score": score
                 })
 
+                rewards += score
                 if score > 0.5:  # Assuming score > 0.5 means correct answer
                     correct += 1
                 total += 1
 
         # Calculate accuracy
         accuracy = correct / total if total > 0 else 0
-        print(f'Accuracy: {accuracy}')
+        rewards /= total if total > 0 else 0
+        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
 
         # Save results to output directory
         evaluation_results = {
             "accuracy": accuracy,
+            "rewards": rewards,
             "model_checkpoint": model_checkpoint,
-            "temperature": temperature,
             "sc_num": sc_num,
             "detailed_results": results,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        with open(self.output_dir / "inference_results.json", "w") as f:
+        with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
             json.dump(evaluation_results, f, indent=2)
 
         return accuracy

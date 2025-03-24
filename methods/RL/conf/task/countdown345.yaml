@@ -10,15 +10,9 @@ force_redownload: false
 train_size: 327680
 test_size: 1024
 
-num_operands: 6
-max_target: 1000
-min_number: 1
-max_number: 100
-template_type: "qwen-instruct"
-
 training:
   max_prompt_length: 1000
-  max_completion_length: 256
+  max_completion_length: 512
 
 inference:
   checkpoint: 300
