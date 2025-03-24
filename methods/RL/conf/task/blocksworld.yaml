@@ -12,7 +12,7 @@ training:
 inference:
   checkpoint: 300
   steps: 2
-  temperature: 0.7
+  temperature: 0.0
   sc_num: 1
   use_icl: false
   icl_num: 2

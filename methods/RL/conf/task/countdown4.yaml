@@ -1,9 +1,9 @@
 # conf/task/countdown.yaml
-name: "countdown6"
+name: "countdown4"
 data_files:
-#  - citrinegui/countdown_n4t100_1-100
+  - citrinegui/countdown_n4t100_1-100
 #  - citrinegui/countdown_n5t100_1-100
-  - citrinegui/countdown_n6t100_1-100
+#  - citrinegui/countdown_n6t100_1-100
 test_file: citrinegui/countdown_n5t100_1-100
 force_redownload: false
 train_size: 327680

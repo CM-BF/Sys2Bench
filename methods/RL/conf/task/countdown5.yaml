@@ -15,7 +15,7 @@ training:
 
 inference:
   checkpoint: 300
-  temperature: 0.7
+  temperature: 0.0
   sc_num: 1
   resume: 0
-  max_new_tokens: 256
+  max_new_tokens: 512
