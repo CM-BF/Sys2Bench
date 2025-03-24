@@ -182,6 +182,7 @@ class HFModel(LanguageModel):
             additional_prompt: str = "NONE",
             use_api: bool = False,
             stop: Optional[str] = None,
+            verbose: bool = True,
             **kwargs,
         ) -> GenerateOutput:
 
@@ -275,7 +276,8 @@ class HFModel(LanguageModel):
         log_prob_list = []
         # print(inputs, len(inputs))
         start_time = time.time()
-        print('Parameters: ',top_k, top_p, temperature)
+        if verbose:
+            print('Parameters: ',top_k, top_p, temperature)
         if use_api:
             deepInfra = DeepInfra(
                 api_key=os.environ['DEEPINFRA_TOKEN'],
@@ -337,7 +339,8 @@ class HFModel(LanguageModel):
             log_prob_list = None
         
         # print(decoded_list[])
-        print('Time for generation:', time.time() - start_time)
+        if verbose:
+            print('Time for generation:', time.time() - start_time)
         # quit()
         # print()
         # print("##################################################")
