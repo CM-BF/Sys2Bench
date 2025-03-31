@@ -183,6 +183,7 @@ class HFModel(LanguageModel):
             use_api: bool = False,
             stop: Optional[str] = None,
             verbose: bool = True,
+            skip_special_tokens: bool = True,
             **kwargs,
         ) -> GenerateOutput:
 
@@ -323,7 +324,7 @@ class HFModel(LanguageModel):
                         return_dict_in_generate=True,
                     )
                 
-                decoded = self.tokenizer.batch_decode(generation_output.sequences, skip_special_tokens=True)
+                decoded = self.tokenizer.batch_decode(generation_output.sequences, skip_special_tokens=skip_special_tokens)
                 # print()
                 # print("OUTPUTS: ", decoded)
                 # print()
