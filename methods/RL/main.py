@@ -120,7 +120,7 @@ class BaseTrainer:
             "learning_rate": training_cfg.learning_rate,
             "lr_scheduler_type": training_cfg.lr_scheduler_type,
             "logging_steps": training_cfg.logging_steps,
-            "max_steps": training_cfg.max_steps,
+            "max_steps": training_cfg.max_steps * len(self.cfg.task.data_files) if training_cfg.curriculum else training_cfg.max_steps,
             "per_device_train_batch_size": training_cfg.per_device_train_batch_size,
             "gradient_accumulation_steps": training_cfg.gradient_accumulation_steps,
             "gradient_checkpointing": training_cfg.gradient_checkpointing,
@@ -780,7 +780,7 @@ class CountdownTrainer(BaseTrainer):
             # Generate responses
             outputs = []
             for _ in range(sc_num):
-                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False).text[0]
+                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
                 outputs.append(output)
 
             # Evaluate responses
@@ -830,8 +830,8 @@ class CountdownTrainer(BaseTrainer):
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-            json.dump(evaluation_results, f, indent=2)
+        # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+        #     json.dump(evaluation_results, f, indent=2)
 
         return accuracy
 

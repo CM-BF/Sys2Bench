@@ -16,7 +16,7 @@ experiment:
 
 output:
   root_path: ${oc.env:ROOT_PATH}
-  run_name: ${model.trim}_${task.name}_${algorithm.name}  # This will dynamically set the model name based on task and algorithm
+  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum}  # This will dynamically set the model name based on task and algorithm
 
 lora:
   r: 32
