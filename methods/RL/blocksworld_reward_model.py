@@ -109,22 +109,22 @@ class BlocksWorldModel:
         """
         action_str = cls.normalize_input_string(action_str)
         action_str = action_str.lower().strip()
-        print(action_str)
+        # print(action_str)
         patterns = [
             (
-                r"^unstack the (.+?) block from on top of the (.+?) block$",
+                r"^unstack the (\w+) block from on top of the (\w+) block$",
                 lambda m: ("unstack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
             ),
             (
-                r"^pick up the (.+?) block$",
+                r"^pick up the (\w+) block$",
                 lambda m: ("pickup", cls.normalize_block_name(m.group(1)))
             ),
             (
-                r"^stack the (.+?) block on top of the (.+?) block$",
+                r"^stack the (\w+) block on top of the (\w+) block$",
                 lambda m: ("stack", cls.normalize_block_name(m.group(1)), cls.normalize_block_name(m.group(2)))
             ),
             (
-                r"^put down the (.+?) block$",
+                r"^put down the (\w+) block$",
                 lambda m: ("putdown", cls.normalize_block_name(m.group(1)))
             ),
         ]
@@ -383,6 +383,133 @@ class BlocksWorldModel:
             print("\n" + "="*50 + "\n")
         accuracy = (correct / total * 100) if total > 0 else 0
         print(f"Accuracy: {accuracy:.2f}% ({correct} out of {total} problems reached the goal)")
+    
+    @classmethod
+    def simplify_state_given_reference(cls, reference_state_str: str, final_state_str: str) -> str:
+        """
+        Compares a reference state with a final state (both given as descriptive strings)
+        and returns a simplified description containing only the blocks whose locations
+        have changed. If a block is held, it is reported as "the X block is in hand". For
+        other changes, it returns "the X block is on top of the Y block" or "on the table".
+        
+        The resulting facts are returned in an arbitrary (jumbled) order.
+        """
+        # Use the existing parsing method to obtain state mappings and hand status.
+        ref_state, ref_hand, _ = cls.parse_initial_state(reference_state_str)
+        final_state, final_hand, _ = cls.parse_initial_state(final_state_str)
+        
+        # Collect differences: consider every block appearing in either state.
+        diff = {}
+        all_blocks = set(ref_state.keys()) | set(final_state.keys())
+        for block in all_blocks:
+            if ref_state.get(block) != final_state.get(block):
+                diff[block] = final_state.get(block)
+        
+        # If the hand status has changed, record that change.
+        if final_hand is not None and final_hand != ref_hand:
+            diff[final_hand] = "hand"
+        
+        # Build descriptive facts for each differing block.
+        facts = []
+        for block, loc in diff.items():
+            if loc == "table":
+                facts.append(f"the {cls.denormalize_block_name(block)} is on the table")
+            elif loc == "hand":
+                facts.append(f"the hand is holding the {cls.denormalize_block_name(block)}")
+            else:
+                facts.append(f"the {cls.denormalize_block_name(block)} is on top of the {cls.denormalize_block_name(loc)}")
+        
+        if not facts:
+            return ""
+        elif len(facts) == 1:
+            return facts[0]
+        else:
+            return ", ".join(facts[:-1]) + " and " + facts[-1]
+    
+    @classmethod
+    def get_possible_actions(cls, state_str: str) -> list:
+        """
+        Returns a list of all possible actions for the given state (provided as a descriptive string).
+        
+        When the hand is empty:
+        - For each clear block that is on top of another block, returns:
+            "unstack the X block from on top of the Y block"
+        - For each clear block on the table, returns:
+            "pick up the X block"
+        
+        When the hand is holding a block (say X):
+        - For every clear block (Y) different from X, returns:
+            "stack the X block on top of the Y block"
+        - Also returns:
+            "put down the X block"
+        """
+        # Parse the state using the class's parsing method.
+        state, hand, blocks_order = cls.parse_initial_state(state_str)
+        actions = []
+        
+        if hand is None:
+            # Hand is empty: generate unstack and pickup actions.
+            for block, loc in state.items():
+                # Unstack action: block must be on top of something (i.e. not "table" or "hand") and must be clear.
+                if loc not in ("table", "hand") and cls.is_clear(block, state, hand):
+                    actions.append(f"unstack the {cls.denormalize_block_name(block)} from on top of the {cls.denormalize_block_name(loc)}")
+            for block, loc in state.items():
+                # Pickup action: block must be on the table and clear.
+                if loc == "table" and cls.is_clear(block, state, hand):
+                    actions.append(f"pick up the {cls.denormalize_block_name(block)}")
+        else:
+            # Hand is holding a block: generate stack and putdown actions.
+            held = hand
+            for block, loc in state.items():
+                if block != held and cls.is_clear(block, state, hand):
+                    actions.append(f"stack the {cls.denormalize_block_name(held)} on top of the {cls.denormalize_block_name(block)}")
+            actions.append(f"put down the {cls.denormalize_block_name(held)}")
+        
+        return actions
+    
+    @classmethod
+    def states_equal(cls, state_str1: str, state_str2: str) -> tuple:
+        """
+        Checks if two states are equal by comparing the final state (state_str1) against 
+        the expected state (state_str2). It uses the class's parsing methods to obtain the 
+        state mappings and hand status, and returns a tuple (equal, differences), where:
+        
+        - equal: True if state_str1 meets all the conditions in state_str2, otherwise False.
+        - differences: a list of strings describing any mismatches.
+        
+        For example, if the expected state is:
+        "the red block is on top of the blue block and the blue block is on top of the orange block"
+        
+        but the final state does not match these relations, the function will return False along 
+        with messages like:
+        "the red block should be on top of the blue block"
+        """
+        # Parse both states.
+        state1, hand1, _ = cls.parse_initial_state(state_str1)
+        state2, hand2, _ = cls.parse_initial_state(state_str2)
+        
+        equal = True
+        differences = []
+        
+        # Compare hand status.
+        if hand1 != hand2:
+            equal = False
+            if hand2 is None:
+                differences.append("hand should be empty")
+            else:
+                differences.append(f"the {cls.denormalize_block_name(hand2)} should be in hand")
+        
+        # For each expected block relation in state2, verify state1 matches.
+        for block, expected in state2.items():
+            if block not in state1 or state1[block] != expected:
+                equal = False
+                differences.append(
+                    f"the {cls.denormalize_block_name(block)} should be on {cls.denormalize_block_name(expected)}"
+                )
+        return equal, differences
+    
+    
+
 
 # ---------------------------
 # Example Usage
@@ -400,6 +527,7 @@ pick up the red block
 stack the red block on top of the blue block
 [PLAN END]
 """
+# stack the red block on top of the blue block
     instance1 = BlocksWorldModel(init1, goal1, plan1)
     final_state_str1, reached1, missing1 = instance1.test()
     print("Example 1:")
@@ -458,55 +586,66 @@ stack the A block on top of the B block
         if block not in final_state_dict or final_state_dict[block] != expected:
             goal_reached = False
             missing_conditions.append(f"{BlocksWorldModel.denormalize_block_name(block)} should be on {BlocksWorldModel.denormalize_block_name(expected)}")
+    print('init:', init1)
     print("Final State:", current_state)
     print("Goal:", goal1)
     print("Goal Reached?", goal_reached)
-    if not goal_reached:
-        print("Missing Conditions:", missing_conditions)
-
-    json_path = '/mnt/data/shared/shparashar/Sys2Bench/data/blocksworld/train_set-6.json'
-    BlocksWorldModel.test_from_json(json_path)
     
-    # Example usage of simulate_plan_with_reward (RL style reward).
-    init_example = ("the red block is clear, the blue block is clear, the orange block is clear, the hand is empty, "
-                    "the blue block is on top of the yellow block, the yellow block is on the table, "
-                    "the red block is on the table and the orange block is on the table")
-    goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
-    plan_example = """
-unstack the blue block from on top of the yellow block
-stack the blue block on top of the orange block
-pick up the red block
-stack the red block on top of the blue block
-[PLAN END]
-"""
-    instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
-    reward = instance_example.simulate_plan_with_reward()
-    print("RL Reward for the example plan:", reward)
+        
+    reference_state = ("the red block is clear, the blue block is clear, the orange block is clear, the hand is empty, "
+                       "the blue block is on top of the yellow block, the yellow block is on the table, "
+                       "the red block is on the table and the orange block is on the table")
+    goal_state = ("the yellow block is clear, the red block is clear, the hand is empty, the yellow block is on the table, "
+                  "the blue block is on top of the orange block, the red block is on top of the blue block and the orange block is on the table")
+    
+    simplified_goal = BlocksWorldModel.simplify_state_given_reference(init1, current_state)
+    print("Simplified Goal:", simplified_goal)
+    print(BlocksWorldModel.get_possible_actions(current_state))
+    
+    print(BlocksWorldModel.states_equal(current_state, simplified_goal))
+#     json_path = '/mnt/data/shared/shparashar/Sys2Bench/data/blocksworld/train_set-6.json'
+#     BlocksWorldModel.test_from_json(json_path)
+    
+#     # Example usage of simulate_plan_with_reward (RL style reward).
+#     init_example = ("the red block is clear, the blue block is clear, the orange block is clear, the hand is empty, "
+#                     "the blue block is on top of the yellow block, the yellow block is on the table, "
+#                     "the red block is on the table and the orange block is on the table")
+#     goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
+#     plan_example = """
+# unstack the blue block from on top of the yellow block
+# stack the blue block on top of the orange block
+# pick up the red block
+# stack the red block on top of the blue block
+# [PLAN END]
+# """
+#     instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
+#     reward = instance_example.simulate_plan_with_reward()
+#     print("RL Reward for the example plan:", reward)
     
     
-    # Wrong plan test.
-    init_example = "the blue block is clear, the yellow block is clear, the hand is empty, the blue block is on top of the orange block, the yellow block is on top of the red block, the red block is on the table and the orange block is on the table"
-    goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
-    plan_example = """
-unstack the blue block from on top of the orange block
-stack the blue block on top of the orange block
-unstack the blue block from on top of the orange block
-stack the blue block on top of the red block    
-    """
-    instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
-    reward = instance_example.simulate_plan_with_reward()
-    print("RL Reward for the example plan:", reward)
+#     # Wrong plan test.
+#     init_example = "the blue block is clear, the yellow block is clear, the hand is empty, the blue block is on top of the orange block, the yellow block is on top of the red block, the red block is on the table and the orange block is on the table"
+#     goal_example = "the red block is on top of the blue block and the blue block is on top of the orange block"
+#     plan_example = """
+# unstack the blue block from on top of the orange block
+# stack the blue block on top of the orange block
+# unstack the blue block from on top of the orange block
+# stack the blue block on top of the red block    
+#     """
+#     instance_example = BlocksWorldModel(init_example, goal_example, plan_example)
+#     reward = instance_example.simulate_plan_with_reward()
+#     print("RL Reward for the example plan:", reward)
     
-    plan ="""
-pick up the block 1 
-stack the block 1 on top of the block 2 
-pick up the block 2 
-stack the block 2 on top of the block 3 
-pick up the block 3   
-    """
-    init_example = "the block 3 is clear, the block 1 is clear, the block 2 is clear, the hand is empty, the block 3 is on the table, the block 1 is on the table and the block 2 is on the table"
-    goal_example = "the block 3 is on top of the block 2 and the block 1 is on top of the block 3"
-    instance_example = BlocksWorldModel(init_example, goal_example, plan)
-    print('herer')
-    reward = instance_example.simulate_plan_with_reward()
-    print("RL Reward for the example plan:", reward)
+#     plan ="""
+# pick up the block 1 
+# stack the block 1 on top of the block 2 
+# pick up the block 2 
+# stack the block 2 on top of the block 3 
+# pick up the block 3   
+#     """
+#     init_example = "the block 3 is clear, the block 1 is clear, the block 2 is clear, the hand is empty, the block 3 is on the table, the block 1 is on the table and the block 2 is on the table"
+#     goal_example = "the block 3 is on top of the block 2 and the block 1 is on top of the block 3"
+#     instance_example = BlocksWorldModel(init_example, goal_example, plan)
+#     print('herer')
+#     reward = instance_example.simulate_plan_with_reward()
+#     print("RL Reward for the example plan:", reward)
