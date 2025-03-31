@@ -2,7 +2,13 @@
 
 set -e
 
-unzip ./LLMs_Planning.zip
+if [ ! -d "./LLMs-Planning" ]; then
+    echo "Directory not found. Unzipping LLMs_Planning.zip..."
+    unzip ./LLMs_Planning.zip
+else
+    echo "Directory 'LLMs-Planning' already exists. Skipping unzip."
+fi
+
 PLANNER_DIR="./LLMs-Planning/planner_tools"
 
 # Check for VAL directory
@@ -35,6 +41,7 @@ if [ -f "sys2bench.yaml" ]; then
     conda env create -f sys2bench.yaml --name sys2bench || echo "Environment already exists."
     source $(conda info --base)/etc/profile.d/conda.sh
     conda activate sys2bench
+    # pip install -r pip_requirements.txt
     echo "Conda environment sys2bench activated."
 else
     echo "Error: sys2bench.yaml not found!"
