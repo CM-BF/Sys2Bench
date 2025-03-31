@@ -11,9 +11,12 @@ import time
 import fire
 import json
 from utils import generate_icl
+import torch.distributed as dist
+import sys
 
 data_files = ['data/blocksworld/train_set-2-more_with_trace.json'] # 'data/blocksworld/train_set-4.json', 'data/blocksworld/train_set-6.json'
-
+THINK = "<think>"
+THINK_CLOSE = "</think>"
 def prepare_dataset(data_files=data_files):
     dataset = load_dataset('json', data_files=data_files)
     print(dataset)
@@ -31,11 +34,11 @@ def generate_r1_prompt(tokenizer, init, goal, plan = "", example_index=0, icl_ex
         },
         { 
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <plan> </plan> tags.\n" # , for example: <plan>\npick up the blue block\nstack the blue block on top of the yellow block\nunstack the orange block from on top of the black block\nstack the orange block on top of the red block</plan>
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}.\nShow your work in the {THINK} {THINK_CLOSE} tags. Return the final sequence of actions as the plan in the <plan> </plan> tags.\n" # , for example: <plan>\npick up the blue block\nstack the blue block on top of the yellow block\nunstack the orange block from on top of the black block\nstack the orange block on top of the red block</plan>
         },
         {
                 "role": "assistant",
-                "content": "Let me solve this step by step.\n<think>"
+                "content": f"Let me solve this step by step.\n{THINK}"
         }
     ]
     # print(len(tokenizer.encode(tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True))))
@@ -46,12 +49,12 @@ def validate_response_format(response: str):
     response = response.strip()
     
     # Rule 1: Must start with <think> and end with </plan>
-    if not response.startswith("<think>") or not response.endswith("</plan>"):
-        print('Response does not start with <think> or end with </plan>')
+    if not response.startswith(THINK) or not response.endswith("</plan>"):
+        print(f'Response does not start with {THINK} or end with </plan>')
         return False
 
     # Rule 2: Must contain exactly one of each tag.
-    if response.count("<think>") != 1 or response.count("</think>") != 1:
+    if response.count(THINK) != 1 or response.count(THINK_CLOSE) != 1:
         print('Response does not contain exactly one of each think tag')
         return False
     if response.count("<plan>") != 1 or response.count("</plan>") != 1:
@@ -59,24 +62,24 @@ def validate_response_format(response: str):
         return False
     
     # Find indices for each tag.
-    think_open = response.find("<think>")
-    think_close = response.find("</think>")
+    think_open = response.find(THINK)
+    think_close = response.find(THINK_CLOSE)
     plan_open = response.find("<plan>")
     plan_close = response.find("</plan>")
 
     # Rule 4: The order should be: <think> ... </think> then <plan> ... </plan>
     if think_open != 0:  # Should start with <think>
-        print('Response does not start with <think>')
+        print(f'Response does not start with {THINK}')
         return False
     if think_close == -1 or plan_open == -1 or plan_close == -1:
-        print('Response does not contain <plan> and </plan>, or </think>')
+        print(f'Response does not contain <plan> and </plan>, or {THINK_CLOSE}')
         return False
     if think_close > plan_open:
         print('Response has closing think tag after opening plan tag')
         return False  # The closing think tag must come before the opening plan tag
     
     # Rule 3: Check non-empty content between tags.
-    think_content = response[len("<think>"):think_close].strip()
+    think_content = response[len(THINK):think_close].strip()
     plan_content = response[plan_open + len("<plan>"):plan_close].strip()
 
     if not think_content or not plan_content:
@@ -90,17 +93,8 @@ def reward_fn_wrapper(completions, plan, init, goal, **kwargs):
         reward_format = 0.0
         try:
             print('#########################')
-            completion = "<think>" + completion
+            completion = THINK + completion
             print(completion)
-            # First reward for 'thinking' response format.
-            # response_format_regex = r"(?i)^<think>((?:(?!<think>|<plan>).)*)</think>\s*<plan>((?:(?!<think>|<plan>).)*)</plan>\s*$" # r"<think>([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\s*<plan>([\s\S]*?)<\/plan>$"
-            # reg_match = re.fullmatch(response_format_regex, completion, flags=re.DOTALL) # re.search(response_format_regex, completion, re.DOTALL)
-            # if reg_match is None or len(reg_match.groups()) != 2:
-            #     print('Response Format Error')
-            #     rewards.append(0.0)
-            #     continue
-            # else:
-            #     reward_format = 1.0
             if not validate_response_format(completion):
                 print('Response Format Error')
                 rewards.append(0.0) # Penalty to avoid format errors. Rewards will be only for the plan.
@@ -180,86 +174,95 @@ def occupy_gpu_memory(gb=75, device="cuda:0"):
 
 
 def main(use_icl_examples=False):
-    hf_token = os.environ.get("hf_token")
-    login(token=hf_token, add_to_git_credential=True) # ADD YOUR TOKEN HERE
-    
-    # Model config
-    # model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B-Instruct", torch_dtype="bfloat16")
-    model_config = ModelConfig(
-        model_name_or_path="Qwen/Qwen2.5-3B-Instruct",
-        torch_dtype="bfloat16",
-        attn_implementation="flash_attention_2",
-        # use_peft=True,
-        # load_in_4bit=True,
-        lora_task_type="CAUSAL_LM",
-        lora_r=32,
-        lora_alpha=64,
-        lora_dropout=0.1,
-        lora_target_modules=["q_proj", "v_proj"],
-    )
-    # lora_config = LoraConfig(
-    #     r=32,
-    #     lora_alpha=64,
-    #     target_modules=["q_proj", "v_proj"],
-    #     lora_dropout=0.1,
-    #     task_type="CAUSAL_LM",
-    # )
-    # model = get_peft_model(model, lora_config)
-    # model.print_trainable_parameters()
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B-Instruct")
-    if use_icl_examples:
-        with open('data/blocksworld/train_set-2-more_with_trace.json') as f:
-            icl_examples = json.load(f)
-    else:
-        icl_examples = None
-    # Format the dataset
-    dataset = prepare_dataset()
-    dataset = dataset.map(lambda example, idx: generate_r1_prompt(tokenizer, example["init"], example["goal"], example["plan"], idx, icl_examples), with_indices=True)
-    train_test_split = dataset.train_test_split(test_size=0.1)
-    train_dataset = train_test_split["train"]
-    test_dataset = train_test_split["test"]
-    
-    # Hyperparameters
-    
-    training_args = GRPOConfig(
-        output_dir="qwen-bw-r1-aha-moment/deep_seek-r1-2step-low",
-        learning_rate=1e-6,
-        lr_scheduler_type="cosine",
-        logging_steps=10,
-        max_steps=300,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        gradient_checkpointing=True,
-        # gradient_checkpointing_kwargs={"use_reentrant": False},
-        bf16=True,
-        # GRPO specific parameters
-        max_prompt_length=1600,
-        max_completion_length=512, # max length of the generated output for our solution
-        num_generations=8,
-        beta=0.001,
-        # Vllm
-        use_vllm=True,
-        vllm_gpu_memory_utilization=0.2,
-        # Reporting
-        report_to=["tensorboard"],
-        push_to_hub=True,
-        save_strategy="steps",
-        save_steps=10,   
-    )
-    trainer = GRPOTrainer(
-        model=model_config.model_name_or_path,
-        reward_funcs=[reward_fn_wrapper],
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=test_dataset,
-        peft_config=get_peft_config(model_config),
-    )
-    
-    trainer.train()
-    trainer.save_model(training_args.output_dir)
-    trainer.push_to_hub(dataset_name='bw-test')
-    
-    occupy_gpu_memory(gb=50, device="cuda:0")
+    try:
+        hf_token = os.environ.get("hf_token")
+        # login(token=hf_token, add_to_git_credential=False) # ADD YOUR TOKEN HERE
+
+        # Model config
+        # model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B-Instruct", torch_dtype="bfloat16")
+        model_config = ModelConfig(
+            model_name_or_path="Qwen/Qwen2.5-3B-Instruct",
+            torch_dtype="bfloat16",
+            attn_implementation="flash_attention_2",
+            # use_peft=True,
+            # load_in_4bit=True,
+            lora_task_type="CAUSAL_LM",
+            lora_r=32,
+            lora_alpha=64,
+            lora_dropout=0.1,
+            lora_target_modules=["q_proj", "v_proj"],
+        )
+        # lora_config = LoraConfig(
+        #     r=32,
+        #     lora_alpha=64,
+        #     target_modules=["q_proj", "v_proj"],
+        #     lora_dropout=0.1,
+        #     task_type="CAUSAL_LM",
+        # )
+        # model = get_peft_model(model, lora_config)
+        # model.print_trainable_parameters()
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B-Instruct")
+        if use_icl_examples:
+            with open('data/blocksworld/train_set-2-more_with_trace.json') as f:
+                icl_examples = json.load(f)
+        else:
+            icl_examples = None
+        # Format the dataset
+        dataset = prepare_dataset()
+        dataset = dataset.map(lambda example, idx: generate_r1_prompt(tokenizer, example["init"], example["goal"], example["plan"], idx, icl_examples), with_indices=True)
+        train_test_split = dataset.train_test_split(test_size=0.1)
+        train_dataset = train_test_split["train"]
+        test_dataset = train_test_split["test"]
+
+        # Hyperparameters
+        print('herererere')
+        training_args = GRPOConfig(
+            output_dir="qwen-bw-r1-aha-moment/deep_seek-r1-2step-sing",
+            learning_rate=1e-6,
+            lr_scheduler_type="cosine",
+            logging_steps=10,
+            max_steps=400,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=8,
+            gradient_checkpointing=True,
+            # gradient_checkpointing_kwargs={"use_reentrant": False},
+            bf16=True,
+            # GRPO specific parameters
+            max_prompt_length=1600,
+            max_completion_length=512, # max length of the generated output for our solution
+            num_generations=8,
+            beta=0.001,
+            # temperature=0.5,
+            # Vllm
+            use_vllm=True,
+            vllm_gpu_memory_utilization=0.5,
+            # Reporting
+            report_to=["tensorboard"],
+            push_to_hub=True,
+            save_strategy="steps",
+            save_steps=10,   
+        )
+        trainer = GRPOTrainer(
+            model=model_config.model_name_or_path,
+            reward_funcs=[reward_fn_wrapper],
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=test_dataset,
+            peft_config=get_peft_config(model_config),
+        )
+
+        trainer.train()
+        trainer.save_model(training_args.output_dir)
+        trainer.push_to_hub(dataset_name='bw-test')
+    except KeyboardInterrupt:
+        print("\nKeyboardInterrupt caught. Shutting down distributed processes gracefully...")
+        # Clean up the distributed environment if it was initialized
+        if torch.distributed.is_initialized():
+            print('Shutting Distributed Process')
+            dist.destroy_process_group()
+        sys.exit(0)
+
+# occupy_gpu_memory(gb=50, device="cuda:0")
 
 if __name__ == "__main__":
     fire.Fire(main)

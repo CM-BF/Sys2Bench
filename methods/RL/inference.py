@@ -47,7 +47,7 @@ class RLReasoner():
         return outputs    
 
 def main(model_checkpoint=300,
-         model_dir='qwen-bw-r1-aha-moment/deep_seek-r1-2step-low/checkpoint-{num}',
+         model_dir='qwen-bw-r1-aha-moment/deep_seek-r1-2step-1.5/checkpoint-{num}',
          steps=2,
          config_file: str = "data/blocksworld/bw_config.yaml", 
          domain_file: str = "data/blocksworld/generated_domain.pddl", 
@@ -74,7 +74,7 @@ def main(model_checkpoint=300,
         icl_examples = json.load(f)
     icl=""
     if use_icl:
-        icl = generate_icl(icl_examples, provide_think_icl=True, num_icl = 2)
+        icl = generate_icl(icl_examples, provide_think_icl=False, num_icl = 2)
     print(icl)
     base_model = HFModel(model_pth=model_dir, tokenizer_pth=model_dir, max_new_tokens=512)
     reasoner = RLReasoner(base_model, temperature=temperature, sc_num=sc_num, icl_example=icl)
