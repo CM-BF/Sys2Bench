@@ -46,3 +46,4 @@ planner_tools/
 logs/*
 LLMs-Planning/
 qwen-bw-r1-aha-moment
+qwen3
