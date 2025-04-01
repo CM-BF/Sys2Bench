@@ -176,7 +176,7 @@ class BWEvaluator(Evaluator):
     
 if __name__ == "__main__":
     config_file: str = "data/blocksworld/bw_config.yaml"
-    steps = 2
+    steps = 4
     domain_file: str = "data/blocksworld/generated_domain.pddl"
     data_path=f'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
     prompt_path='prompts/blocksworld/pool_prompt_v1.json'

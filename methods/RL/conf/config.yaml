@@ -9,7 +9,7 @@ defaults:
 mode: "train"
 
 experiment:
-  dataset_size: 0
+  dataset_size: 6000
   dataset_seed: 1234
   test_size: 0.1
   hf_token: ${oc.env:HF_TOKEN,null}

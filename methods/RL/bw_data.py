@@ -196,29 +196,52 @@ def generate_2step_put_down(problem_dict: dict):
     }
     return new_problem
 
+def normalize_4_6step(problem_dict: dict):
+    actions: list = problem_dict['plan'].replace('[PLAN END]', '').strip('\n').split('\n')
+    initial_state = problem_dict.get("init", "")
+    current_state = initial_state
+    for action in actions:
+        print(action)
+        current_state = BlocksWorldModel.simulate_step(current_state, action)
+    
+    simplified_goal = BlocksWorldModel.simplify_state_given_reference(initial_state, current_state)
+    
+    new_problem = {
+        "init": initial_state,
+        "goal": simplified_goal,
+        "plan": problem_dict['plan'],
+        "instance_file": problem_dict.get("instance_file", ""),
+        "augmentation_type": problem_dict.get("augmentation_type", ""),
+        "mapping": problem_dict.get("mapping", {})
+    }
+    return new_problem
+        
+
 if __name__ == '__main__':
-    with open('data/blocksworld/train_set-2-all.json') as f:
+    with open('data/blocksworld/train_set-4-more.json') as f:
         step_2_data = json.load(f)
     
     new_data = copy.deepcopy(step_2_data)
-    
-    # for problem in step_2_data:
-    #     plan_stripped = problem['plan'].strip()
-    #     if plan_stripped.startswith('unstack the'):
-    #         new_problem = generate_2step_put_down(problem)
-    #         new_data.append(new_problem)
-    
-    # print(len(step_2_data), len(new_data))
-    
-    total = []
-    num_actions =3
+    new_data = []
     for problem in step_2_data:
-        new_problems = generate_multiple_problems(problem, num_actions=num_actions, num_instances=1)
-        print(new_problems)
-        total.extend(new_problems)
+        plan_stripped = problem['plan'].strip()
+        fixed_problem = normalize_4_6step(problem)
+        new_data.append(fixed_problem)
+        # if plan_stripped.startswith('unstack the'):
+        #     new_problem = generate_2step_put_down(problem)
+        #     new_data.append(new_problem)
     
-    print(len(total))
+    print(len(step_2_data), len(new_data))
+    total = new_data
+    # total = []
+    # num_actions =3
+    # for problem in step_2_data:
+    #     new_problems = generate_multiple_problems(problem, num_actions=num_actions, num_instances=1)
+    #     print(new_problems)
+    #     total.extend(new_problems)
     
+    # print(len(total))
+    num_actions = 4
     with open(f'data/blocksworld/train_set-{num_actions}-all.json', 'w') as f:
         json.dump(total, f, indent=4)
             

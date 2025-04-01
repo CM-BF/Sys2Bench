@@ -6,7 +6,7 @@ training:
   lr_scheduler_type: "cosine"
   logging_steps: 10
   max_steps: 300
-  curriculum: true
+  curriculum: false
   per_device_train_batch_size: 1  # one card: 2, two cards: 1, four cards: 1
   gradient_accumulation_steps: 4
   gradient_checkpointing: true
@@ -14,7 +14,7 @@ training:
   num_generations: 8
   beta: 0.001
   use_vllm: true
-  vllm_gpu_memory_utilization: 0.2
+  vllm_gpu_memory_utilization: 0.4
   report_to:
     - wandb
   push_to_hub: true
