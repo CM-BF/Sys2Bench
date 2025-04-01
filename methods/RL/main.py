@@ -13,7 +13,7 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 import torch
 from omegaconf import DictConfig, OmegaConf
-from datasets import load_dataset, concatenate_datasets
+from datasets import load_dataset, concatenate_datasets, Dataset
 from huggingface_hub import login
 from transformers import AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
@@ -187,13 +187,33 @@ class BlocksWorldTrainer(BaseTrainer):
 
     def _prepare_dataset(self):
         """Prepare dataset for training"""
-        dataset = load_dataset('json', data_files=self.cfg.task.data_files)
-        dataset = dataset['train'].shuffle(seed=self.cfg.experiment.dataset_seed)
-
-        # Limit dataset size if specified
+        # If a dataset size limit is specified, sample equally from each file
         if self.cfg.experiment.dataset_size > 0:
-            dataset = dataset.select(range(self.cfg.experiment.dataset_size))
+            data_files = self.cfg.task.data_files
+            num_files = len(data_files)
+            samples_per_file = self.cfg.experiment.dataset_size // num_files
 
+            all_samples = []
+            for file in data_files:
+                # Load and shuffle the dataset for this file
+                file_dataset = load_dataset('json', data_files=file)['train']
+                file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+                # Select up to samples_per_file from this file (or all if fewer available)
+                num_samples = min(len(file_dataset), samples_per_file)
+                file_samples = file_dataset.select(range(num_samples))
+                all_samples.extend(file_samples)
+            
+            # Convert the collected samples into a HuggingFace Dataset and shuffle the final list
+            dataset = Dataset.from_list(all_samples)
+            # dataset = Dataset.from_list(all_samples)
+            # dataset = Dataset.from_list(all_samples)
+        else:
+            # Load the entire dataset and shuffle if no size limit is provided
+            dataset = load_dataset('json', data_files=self.cfg.task.data_files)['train']
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        
+        # Final shuffle for randomness
+        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         print(f"Dataset prepared with {len(dataset)} samples")
         return dataset
 
@@ -211,7 +231,7 @@ class BlocksWorldTrainer(BaseTrainer):
             },
             {
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <plan> </plan> tags.\n"
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n"
             },
             {
                 "role": "assistant",
@@ -232,38 +252,38 @@ class BlocksWorldTrainer(BaseTrainer):
         response = response.strip()
 
         # Rule 1: Must start with <think> and end with </plan>
-        if not response.startswith("<think>") or not response.endswith("</plan>"):
-            print('Response does not start with <think> or end with </plan>')
+        if not response.startswith("<think>") or not response.endswith("</answer>"):
+            print('Response does not start with <think> or end with </answer>')
             return False
 
         # Rule 2: Must contain exactly one of each tag.
         if response.count("<think>") != 1 or response.count("</think>") != 1:
             print('Response does not contain exactly one of each think tag')
             return False
-        if response.count("<plan>") != 1 or response.count("</plan>") != 1:
-            print('Response does not contain exactly one of each plan tag')
+        if response.count("<answer>") != 1 or response.count("</answer>") != 1:
+            print('Response does not contain exactly one of each answer tag')
             return False
 
         # Find indices for each tag.
         think_open = response.find("<think>")
         think_close = response.find("</think>")
-        plan_open = response.find("<plan>")
-        plan_close = response.find("</plan>")
+        plan_open = response.find("<answer>")
+        plan_close = response.find("</answer>")
 
-        # Rule 4: The order should be: <think> ... </think> then <plan> ... </plan>
+        # Rule 4: The order should be: <think> ... </think> then <answer> ... </answer>
         if think_open != 0:  # Should start with <think>
             print('Response does not start with <think>')
             return False
         if think_close == -1 or plan_open == -1 or plan_close == -1:
-            print('Response does not contain <plan> and </plan>, or </think>')
+            print('Response does not contain <answer> and </answer>, or </think>')
             return False
         if think_close > plan_open:
-            print('Response has closing think tag after opening plan tag')
+            print('Response has closing think tag after opening answer tag')
             return False  # The closing think tag must come before the opening plan tag
 
         # Rule 3: Check non-empty content between tags.
         think_content = response[len("<think>"):think_close].strip()
-        plan_content = response[plan_open + len("<plan>"):plan_close].strip()
+        plan_content = response[plan_open + len("<answer>"):plan_close].strip()
 
         if not think_content or not plan_content:
             return False
@@ -288,7 +308,7 @@ class BlocksWorldTrainer(BaseTrainer):
                     reward_format = 1.0
 
                 # Extract the plan
-                matches = re.findall(r"<plan>(.*?)</plan>", completion, flags=re.DOTALL | re.IGNORECASE)
+                matches = re.findall(r"<answer>(.*?)</answer>", completion, flags=re.DOTALL | re.IGNORECASE)
                 if matches is None or len(matches) != 1:
                     print("No plan found")
                     rewards.append(0.0)
@@ -564,17 +584,21 @@ class CountdownTrainer(BaseTrainer):
             all_data = [load_dataset(data_path, download_mode='FORCE_REDOWNLOAD') for data_path in data_files]
         else:
             all_data = [load_dataset(data_path) for data_path in data_files]
-        train_data = [data['train'] for data in all_data]
-        test_data = [data['test'] for data in all_data]
+        train_data = [data['train'].shuffle(seed=self.cfg.experiment.dataset_seed) for data in all_data]
+        if self.cfg.task.train_size > 0: # For Blocksworld we can have quite an imbalance.
+            train_data = [data.select(range(self.cfg.task.train_size) // len(data_files)) for data in train_data]
+        test_data = [data['test'].shuffle(seed=self.cfg.experiment.dataset_seed) for data in all_data]
+        if self.cfg.task.test_size > 0:
+            test_data = [data.select(range(self.cfg.task.test_size) // len(data_files)) for data in test_data]
         train_dataset = concatenate_datasets(train_data)
         test_dataset = concatenate_datasets(test_data)
-        train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        # train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        # test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
         # Limit dataset size if specified
-        if self.cfg.task.train_size > 0:
-            train_dataset = train_dataset.select(range(self.cfg.task.train_size))
-            test_dataset = test_dataset.select(range(self.cfg.task.test_size))
+        # if self.cfg.task.train_size > 0:
+        #     train_dataset = train_dataset.select(range(self.cfg.task.train_size))
+        #     test_dataset = test_dataset.select(range(self.cfg.task.test_size))
 
         print(f"Dataset prepared with {len(train_dataset)} training samples and {len(test_dataset)} test samples")
         return train_dataset, test_dataset
@@ -854,7 +878,7 @@ class RLReasoner:
         },
             {
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <plan> </plan> tags.\n"
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <answer> </answer> tags.\n"
             },
             {
                 "role": "assistant",

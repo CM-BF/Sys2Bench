@@ -6,8 +6,6 @@ class BlocksWorldModel:
         self.init_state = init_state
         self.goal = goal
         self.plan = plan
-        # Parse the goal once and keep it for later comparison.
-        self.goal_dict = self.parse_goal(goal)
 
     # --- Normalization & Denormalization ---
     @staticmethod
@@ -264,38 +262,30 @@ class BlocksWorldModel:
         Simulates the sequence of actions in the plan starting from the initial state.
         Returns the final internal state, hand, blocks_order, and a description string.
         """
-        state, hand, blocks_order = self.parse_initial_state(self.init_state)
         lines = [line.strip() for line in self.plan.strip().split("\n")
                  if line.strip() and "[plan end]" not in line.lower()]
+        state = self.init_state
         for action_line in lines:
-            action_tuple = self.parse_action(action_line)
-            state, hand = self.simulate_action(state, hand, blocks_order, action_tuple)
-        final_state_str = self.generate_state_string(state, hand, blocks_order)
-        return state, hand, blocks_order, final_state_str
+            # action_tuple = self.parse_action(action_line)
+            state = self.simulate_step(state, action_line)
+        final_state_str = state
+        return final_state_str
 
-    def check_goal(self, state: dict):
+    def check_goal(self, state: str):
         """
         Checks if the provided state meets the goal conditions.
         Returns a tuple: (goal_reached (bool), missing_conditions (list of strings)).
         """
-        goal_reached = True
-        missing_conditions = []
-        for block, expected_loc in self.goal_dict.items():
-            if block not in state or state[block] != expected_loc:
-                goal_reached = False
-                missing_conditions.append(
-                    f"{self.denormalize_block_name(block)} should be on {self.denormalize_block_name(expected_loc)}"
-                )
-        return goal_reached, missing_conditions
+        return self.states_equal(state, self.goal)
 
     def test(self):
         """
         Runs the plan starting from the initial state, then checks if the final state meets the goal.
         Returns a tuple: (final_state_str, goal_reached, missing_conditions).
         """
-        state, hand, blocks_order, final_state_str = self.simulate_plan()
+        state = self.simulate_plan()
         goal_reached, missing_conditions = self.check_goal(state)
-        return final_state_str, goal_reached, missing_conditions
+        return state, goal_reached, missing_conditions
 
     # --- Reward-based Simulation for RL ---
     def get_number_of_steps(self, plan):
@@ -321,13 +311,12 @@ class BlocksWorldModel:
             return 0.0
         
         try:
-            state, hand, blocks_order = self.parse_initial_state(self.init_state)
             lines = [line.replace('<', '').replace('>', '').strip() for line in self.plan.strip().split("\n")
                      if line.strip() and "[plan end]" not in line.lower()]
             print(lines)
+            curr_state = self.init_state
             for action_line in lines:
-                action_tuple = self.parse_action(action_line)
-                state, hand = self.simulate_action(state, hand, blocks_order, action_tuple)
+                curr_state = self.simulate_step(curr_state, action_line)
         except ValueError as ve:
             print(f'Invalid Action - {ve}')
             return 0.0
@@ -335,7 +324,7 @@ class BlocksWorldModel:
             print(f'Physically Impossible Action - {e}')
             return 0.1
         # If actions were valid, check the goal.
-        goal_reached, _ = self.check_goal(state)
+        goal_reached, _ = self.check_goal(curr_state)
         if goal_reached and num_steps_extracted_plan == num_steps_true_plan:
             print('Goal Reached! Optimal Plan!')
             return 2.0 # Goal reached with the right number of steps
@@ -603,6 +592,13 @@ stack the A block on top of the B block
     print(BlocksWorldModel.get_possible_actions(current_state))
     
     print(BlocksWorldModel.states_equal(current_state, simplified_goal))
+    
+    current_state = 'the 2nd block is clear, the hand is empty, the 3rd block is on top of the 1st block, the 2nd block is on top of the 3rd block and the 1st block is on the table'
+    final_s = 'the hand is holding the 2nd block'
+    plan_lines = 'unstack the 2nd block from on top of the 3rd block'
+    tru_plan = 'unstack the 2nd block from on top of the 3rd block'
+    bw_model = BlocksWorldModel(init_state=current_state, goal=final_s, plan=plan_lines)
+    bw_model.simulate_plan_with_reward(tru_plan)
 #     json_path = '/mnt/data/shared/shparashar/Sys2Bench/data/blocksworld/train_set-6.json'
 #     BlocksWorldModel.test_from_json(json_path)
     
