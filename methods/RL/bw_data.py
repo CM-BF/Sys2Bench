@@ -96,7 +96,7 @@ def generate_new_problem(problem_dict: dict, num_actions: int, starting_state_ov
     new_problem = {
         "init": initial_state,
         "goal": simplified_goal,
-        "plan": "\n".join(plan_actions) + "\n[PLAN END]\n",
+        "plan": "\n".join(plan_actions),
         "instance_file": problem_dict.get("instance_file", ""),
         "augmentation_type": problem_dict.get("augmentation_type", ""),
         "mapping": problem_dict.get("mapping", {})
@@ -218,30 +218,31 @@ def normalize_4_6step(problem_dict: dict):
         
 
 if __name__ == '__main__':
-    with open('data/blocksworld/train_set-4-more.json') as f:
+    with open('data/blocksworld/train_set-6-more.json') as f:
         step_2_data = json.load(f)
     
-    new_data = copy.deepcopy(step_2_data)
+    # new_data = copy.deepcopy(step_2_data)
+    print(len(step_2_data))
     new_data = []
     for problem in step_2_data:
         plan_stripped = problem['plan'].strip()
         fixed_problem = normalize_4_6step(problem)
         new_data.append(fixed_problem)
-        # if plan_stripped.startswith('unstack the'):
-        #     new_problem = generate_2step_put_down(problem)
-        #     new_data.append(new_problem)
+    #     # if plan_stripped.startswith('unstack the'):
+    #     #     new_problem = generate_2step_put_down(problem)
+    #     #     new_data.append(new_problem)
     
     print(len(step_2_data), len(new_data))
     total = new_data
     # total = []
-    # num_actions =3
+    # num_actions =1
     # for problem in step_2_data:
     #     new_problems = generate_multiple_problems(problem, num_actions=num_actions, num_instances=1)
     #     print(new_problems)
     #     total.extend(new_problems)
     
-    # print(len(total))
-    num_actions = 4
+    print(len(total))
+    num_actions = 6
     with open(f'data/blocksworld/train_set-{num_actions}-all.json', 'w') as f:
         json.dump(total, f, indent=4)
             

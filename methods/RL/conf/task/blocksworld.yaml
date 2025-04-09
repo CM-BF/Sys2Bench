@@ -1,5 +1,5 @@
 # conf/task/blocksworld.yaml
-name: "blocksworld"
+name: "blocksworld2"
 data_files:
   - data/blocksworld/train_set-2-all.json
 icl_examples_file: data/blocksworld/train_set-2-more_with_trace.json
