@@ -1,12 +1,12 @@
 # conf/algorithm/grpo.yaml
-name: "grpo"
+name: "sgrpo"
 
 training:
   learning_rate: 1e-6
   lr_scheduler_type: "cosine"
   logging_steps: 10
-  max_steps: 1200
-  curriculum: false
+  max_steps: 300
+  curriculum: true
   curriculum_schedule: "cosine" # fixed in default
   per_device_train_batch_size: 1  
   gradient_accumulation_steps: 4

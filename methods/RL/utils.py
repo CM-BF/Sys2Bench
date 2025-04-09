@@ -16,10 +16,12 @@ def sc_output_extractor(algo_output):
 
 
 def extract_plan(text):
-    pattern = r"<plan>(.*?)</plan>"
+    # This pattern matches either an <answer> or <plan> tag.
+    pattern = r"<(answer|plan)>(.*?)</\1>"
     match = re.search(pattern, text, re.DOTALL)
     if match:
-        return match.group(1).strip()
+        # match.group(2) contains the content inside the tag.
+        return match.group(2).strip()
     else:
         print("No match found in output:", text)
         return ""

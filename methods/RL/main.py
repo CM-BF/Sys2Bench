@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from tqdm import tqdm
-
+from collections import Counter
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import torch
@@ -23,11 +23,116 @@ from blocksworld_reward_model import BlocksWorldModel
 from utils import generate_icl, sc_output_extractor
 from reasoners.benchmark import BWEvaluator
 from reasoners.lm import HFModel
-
+import numpy as np
 # For countdown task
 import random
 from countdown_reward_model import CountdownRewardModel
+import math
 
+def cosine_schedule(t, T, num_tasks):
+    total = num_tasks * (num_tasks + 1) / 2.0
+    early = {i: (num_tasks - i)/ total for i in range(num_tasks)}
+    late = {i: (i + 1) / total for i in range(num_tasks)}
+    alpha = 0.5 * (1 + math.cos(math.pi * t / T))
+    probs = {i: alpha * early[i] + (1 - alpha) * late[i] for i in range(num_tasks)}
+    # Enforce symmetric floor equal to the minimum probability in early/late.
+    p_min = 2 / (num_tasks * (num_tasks + 1))
+    for i in range(num_tasks):
+        probs[i] = max(probs[i], p_min)
+    norm = sum(probs.values())
+    return {i: probs[i] / norm for i in probs}
+
+
+class CosineTaskSampler(torch.utils.data.Sampler):
+    def __init__(self, dataset, num_tasks, total_iterations, batch_size, seed=0):
+        """
+        Args:
+          dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
+          num_tasks: total number of task categories (e.g. 4)
+          total_iterations: total training iterations (T)
+          current_iter_fn: callable that returns current iteration (t)
+        """
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.max_dataset_len = len(self.dataset)
+        self.num_tasks = num_tasks
+        self.total_iterations = total_iterations
+        self.indices_by_task = {i: [] for i in range(num_tasks)}
+        for idx, sample in enumerate(self.dataset):
+            task = sample.get("task", 0)
+            self.indices_by_task[task].append(idx)
+            
+        # for idx in range(4):
+        #     print(f"Task {idx}: {len(self.indices_by_task[idx])}")
+        # quit()
+    
+    def __iter__(self):
+        
+        for i in range(self.total_iterations):
+            probs_dict = cosine_schedule(i, self.total_iterations, self.num_tasks)
+            
+            probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
+            print(f'For iter {i}, probs = {probs}')
+            # Sample a task for each slot in the batch using the probabilities.
+            chosen_tasks = np.random.choice(np.arange(self.num_tasks), size=self.batch_size, p=probs, replace=True)
+            batch_indices = []
+            
+            for task in chosen_tasks:
+                indices = self.indices_by_task[task]
+                
+                if len(indices) == 0:
+                    idx = random.randrange(len(self.dataset))
+                else:
+                    idx = random.choice(indices)
+                batch_indices.append(int(idx))
+            print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
+            yield from batch_indices
+        
+        # indices_by_task = {i: [] for i in range(self.num_tasks)}
+        # for idx, sample in enumerate(self.dataset):
+        #     task = sample.get("task", 0)
+        #     indices_by_task[task].append(idx)
+        
+        # t = self.current_iter_fn()
+        # probs = cosine_schedule(t, self.total_iterations, self.num_tasks)
+        # print(f'For iter {t}, probs = {probs}')
+        # sampled_indices = []
+        # for task, indices in indices_by_task.items():
+        #     if not indices:
+        #         continue
+        #     # Determine sample count; here we simply use a proportion of available indices.
+        #     count = max(1, int(len(indices) * probs[task]))
+        #     # count = min(count, len(indices))
+        #     count = min(int(self.max_dataset_len * probs[task]), count)
+        #     sampled_indices.extend(random.sample(indices, count))
+        # random.shuffle(sampled_indices)
+        # print('Sampled indices:', len(sampled_indices), len(self.dataset))
+        # if t%2 == 0 and t > 0:
+        #     print('Sampled indices:', len(sampled_indices))
+        #     quit()
+        # return iter(sampled_indices)
+
+    def __len__(self):
+        return self.total_iterations * self.batch_size
+
+class CosineGRPOTrainer(GRPOTrainer):
+    def __init__(self, num_tasks=4, total_iterations=1200, *args, **kwargs):
+        self.num_tasks = num_tasks
+        self.total_iterations = total_iterations
+        super().__init__(*args, **kwargs)
+    
+    def _get_train_sampler(self):
+        batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
+        return CosineTaskSampler(self.train_dataset, 
+                                 num_tasks = self.num_tasks, 
+                                 total_iterations = self.total_iterations, 
+                                #  current_iter_fn= lambda: self.state.global_step,
+                                 batch_size = batch_size)
+    
+    def training_step(self, *args, **kwargs):
+        return super().training_step(*args, **kwargs)
+
+# class Cosine
 
 class BaseTrainer:
     """Base class for training and inference with Hydra configuration"""
@@ -188,29 +293,49 @@ class BlocksWorldTrainer(BaseTrainer):
     def _prepare_dataset(self):
         """Prepare dataset for training"""
         # If a dataset size limit is specified, sample equally from each file
-        if self.cfg.experiment.dataset_size > 0:
-            data_files = self.cfg.task.data_files
-            num_files = len(data_files)
-            samples_per_file = self.cfg.experiment.dataset_size // num_files
-
-            all_samples = []
-            for file in data_files:
-                # Load and shuffle the dataset for this file
-                file_dataset = load_dataset('json', data_files=file)['train']
-                file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-                # Select up to samples_per_file from this file (or all if fewer available)
-                num_samples = min(len(file_dataset), samples_per_file)
-                file_samples = file_dataset.select(range(num_samples))
-                all_samples.extend(file_samples)
+        all_samples = []
+        data_files = self.cfg.task.data_files
+        data_schedule = self.cfg.algorithm.training.curriculum_schedule
+        for task_idx, file in enumerate(data_files):
+            file_dataset = load_dataset('json', data_files=file)['train']
+            file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
             
-            # Convert the collected samples into a HuggingFace Dataset and shuffle the final list
-            dataset = Dataset.from_list(all_samples)
-            # dataset = Dataset.from_list(all_samples)
-            # dataset = Dataset.from_list(all_samples)
-        else:
-            # Load the entire dataset and shuffle if no size limit is provided
-            dataset = load_dataset('json', data_files=self.cfg.task.data_files)['train']
-            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+            if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
+                num_files = len(data_files)
+                samples_per_file = self.cfg.experiment.dataset_size // num_files
+                num_samples = min(len(file_dataset), samples_per_file)
+                file_dataset = file_dataset.select(range(num_samples))
+            
+            # Annotate with difficulty
+            task_annotations = [task_idx] * len(file_dataset)
+            file_dataset = file_dataset.add_column("task", task_annotations)
+            
+            all_samples.extend(file_dataset)
+        dataset = Dataset.from_list(all_samples)
+
+        # if self.cfg.experiment.dataset_size > 0:
+        #     data_files = self.cfg.task.data_files
+        #     num_files = len(data_files)
+        #     samples_per_file = self.cfg.experiment.dataset_size // num_files
+
+        #     all_samples = []
+        #     for file in data_files:
+        #         # Load and shuffle the dataset for this file
+        #         file_dataset = load_dataset('json', data_files=file)['train']
+        #         file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        #         # Select up to samples_per_file from this file (or all if fewer available)
+        #         num_samples = min(len(file_dataset), samples_per_file)
+        #         file_samples = file_dataset.select(range(num_samples))
+        #         all_samples.extend(file_samples)
+            
+        #     # Convert the collected samples into a HuggingFace Dataset and shuffle the final list
+        #     dataset = Dataset.from_list(all_samples)
+        #     # dataset = Dataset.from_list(all_samples)
+        #     # dataset = Dataset.from_list(all_samples)
+        # else:
+        #     # Load the entire dataset and shuffle if no size limit is provided
+        #     dataset = load_dataset('json', data_files=self.cfg.task.data_files)['train']
+        #     dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         
         # Final shuffle for randomness
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
@@ -231,7 +356,7 @@ class BlocksWorldTrainer(BaseTrainer):
             },
             {
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n"
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{icl_example}\n\n[Problem]\nHere is the initial state of the blocks: {init}\n\nHere is the goal state of the blocks: {goal}. Show your work in <think> </think> tags. After that, provide the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n"
             },
             {
                 "role": "assistant",
@@ -378,16 +503,29 @@ class BlocksWorldTrainer(BaseTrainer):
         model_config = self._get_model_config()
 
         # Setup training arguments based on algorithm
-        if algorithm == "grpo":
+        if algorithm == "grpo" or algorithm == "sgrpo":
             training_args = self._setup_grpo_training()
-            trainer = GRPOTrainer(
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._blocksworld_reward_fn],
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
-            )
+            data_schedule = self.cfg.algorithm.training.curriculum_schedule
+            if data_schedule == "balanced":
+                trainer = GRPOTrainer(
+                    model=model_config.model_name_or_path,
+                    reward_funcs=[self._blocksworld_reward_fn],
+                    args=training_args,
+                    train_dataset=train_dataset,
+                    eval_dataset=test_dataset,
+                    peft_config=get_peft_config(model_config),
+                )
+            elif data_schedule =="cosine":
+                trainer = CosineGRPOTrainer(
+                    num_tasks=len(self.cfg.task.data_files),
+                    total_iterations=training_args.max_steps,
+                    model=model_config.model_name_or_path,
+                    reward_funcs=[self._blocksworld_reward_fn],
+                    args=training_args,
+                    train_dataset=train_dataset,
+                    eval_dataset=test_dataset,
+                    peft_config=get_peft_config(model_config), 
+                )
 
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()

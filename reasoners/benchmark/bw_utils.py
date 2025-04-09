@@ -6,6 +6,7 @@ import yaml
 import random
 import numpy as np
 from pathlib import Path
+from blocksworld_reward_model import BlocksWorldModel
 
 try:
     from tarski.io import PDDLReader
@@ -57,7 +58,14 @@ def instance_to_text_blocksworld(problem, get_plan, data, plan_code="", shuffle=
     # print(GOAL)
     # print("plan")
     # print(PLAN)
-    return INIT, GOAL, PLAN
+    print(INIT)
+    print('-----')
+    print(GOAL)
+    bw_model = BlocksWorldModel(INIT, GOAL, PLAN)
+    goal = bw_model.simulate_plan(simplify=True)
+    print('-----')
+    print(goal)
+    return INIT, goal, PLAN
 
 def parse_problem(problem, data, shuffle):
     def get_sorted(init_atoms):
@@ -596,6 +604,7 @@ def extract_goals(example, return_raw=False):
     """
     goal_statement = example["question"].split("[STATEMENT]")[-1]\
         .split("My goal is to ")[1].split("My plan is as follows")[0].strip()
+    print(goal_statement)
     if return_raw:
         return goal_statement
     goals = re.findall("the [a-z]{0,10} block is on top of the [a-z]{0,10} block", goal_statement)
