@@ -28,6 +28,7 @@ import numpy as np
 import random
 from countdown_reward_model import CountdownRewardModel
 import math
+from functools import partial
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -201,7 +202,21 @@ class TaskSampler(torch.utils.data.Sampler):
 
     @staticmethod
     def _gaussian_schedule(t, T, num_tasks):
-        raise NotImplementedError("Gaussian schedule not implemented yet.")
+        # Move mean from 0 to (num_tasks-1) as time progresses, Use sqrt(t / T) to boost the the speed at the beginning
+        mu = (t / T) ** 0.5 * (num_tasks - 1)
+
+        # Set standard deviation
+        sigma = 0.5  # Adjust this value based on desired focus
+
+        # Calculate unnormalized probabilities using Gaussian PDF
+        unnormalized_probs = {}
+        for i in range(num_tasks):
+            # Calculate PDF of Gaussian for task i
+            exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
+            unnormalized_probs[i] = math.exp(exponent)
+
+        total = sum(unnormalized_probs.values())
+        return {i: prob / total for i, prob in unnormalized_probs.items()}
 
 
 class CurriculumGRPOTrainer(GRPOTrainer):
