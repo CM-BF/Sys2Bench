@@ -8,6 +8,10 @@ training:
   max_steps: 300
   curriculum: true
   curriculum_schedule: "cosine" # fixed in default
+  scheduler_params:
+    mu_exp: 0.5
+    sigma: 0.5
+    min_prob: true    # true: use default p_min. (float): use min_prob value. false: use 0.0
   per_device_train_batch_size: 1  
   gradient_accumulation_steps: 4
   gradient_checkpointing: true
