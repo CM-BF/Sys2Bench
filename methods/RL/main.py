@@ -115,6 +115,7 @@ class CosineTaskSampler(torch.utils.data.Sampler):
     def __len__(self):
         return self.total_iterations * self.batch_size
 
+
 class CosineGRPOTrainer(GRPOTrainer):
     def __init__(self, num_tasks=4, total_iterations=1200, *args, **kwargs):
         self.num_tasks = num_tasks
@@ -123,12 +124,101 @@ class CosineGRPOTrainer(GRPOTrainer):
     
     def _get_train_sampler(self):
         batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
-        return CosineTaskSampler(self.train_dataset, 
+        return CosineTaskSampler(self.train_dataset,
                                  num_tasks = self.num_tasks, 
                                  total_iterations = self.total_iterations, 
                                 #  current_iter_fn= lambda: self.state.global_step,
                                  batch_size = batch_size)
     
+    def training_step(self, *args, **kwargs):
+        return super().training_step(*args, **kwargs)
+
+
+class TaskSampler(torch.utils.data.Sampler):
+    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, seed=0):
+        """
+        Args:
+          dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
+          num_tasks: total number of task categories (e.g. 4)
+          total_iterations: total training iterations (T)
+          current_iter_fn: callable that returns current iteration (t)
+        """
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.max_dataset_len = len(self.dataset)
+        self.num_tasks = num_tasks
+        self.total_iterations = total_iterations
+        self.indices_by_task = {task_idx: (np.array(self.dataset['task']) == task_idx).nonzero()[0].tolist() for task_idx in range(num_tasks)}
+        schedule_funcs = {
+            'balanced': self._balanced_schedule,
+            'cosine': self._cosine_schedule,
+            'gaussian': self._gaussian_schedule,
+        }
+        self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
+
+    def __iter__(self):
+
+        for i in range(self.total_iterations):
+            probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
+
+            probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
+            print(f'For iter {i}, probs = {probs}')
+            # Sample a task for each slot in the batch using the probabilities.
+            chosen_tasks = np.random.choice(np.arange(self.num_tasks), size=self.batch_size, p=probs, replace=True)
+            batch_indices = []
+
+            for task in chosen_tasks:
+                indices = self.indices_by_task[task]
+
+                if len(indices) == 0:
+                    idx = random.randrange(len(self.dataset))
+                else:
+                    idx = random.choice(indices)
+                batch_indices.append(int(idx))
+            print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
+            yield from batch_indices
+
+    def __len__(self):
+        return self.total_iterations * self.batch_size
+
+    @staticmethod
+    def _balanced_schedule(t, T, num_tasks):
+        return {i: 1. / num_tasks for i in range(num_tasks)}
+
+    @staticmethod
+    def _cosine_schedule(t, T, num_tasks):
+        total = num_tasks * (num_tasks + 1) / 2.0
+        early = {i: (num_tasks - i) / total for i in range(num_tasks)}
+        late = {i: (i + 1) / total for i in range(num_tasks)}
+        alpha = 0.5 * (1 + math.cos(math.pi * t / T))
+        probs = {i: alpha * early[i] + (1 - alpha) * late[i] for i in range(num_tasks)}
+        # Enforce symmetric floor equal to the minimum probability in early/late.
+        p_min = 2 / (num_tasks * (num_tasks + 1))
+        for i in range(num_tasks):
+            probs[i] = max(probs[i], p_min)
+        norm = sum(probs.values())
+        return {i: probs[i] / norm for i in probs}
+
+    @staticmethod
+    def _gaussian_schedule(t, T, num_tasks):
+        raise NotImplementedError("Gaussian schedule not implemented yet.")
+
+
+class CurriculumGRPOTrainer(GRPOTrainer):
+    def __init__(self, num_tasks=4, total_iterations=1200, data_schedule='balanced', *args, **kwargs):
+        self.num_tasks = num_tasks
+        self.total_iterations = total_iterations
+        self.data_schedule = data_schedule
+        super().__init__(*args, **kwargs)
+
+    def _get_train_sampler(self):
+        batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
+        return TaskSampler(self.train_dataset,
+                           num_tasks=self.num_tasks,
+                           total_iterations=self.total_iterations,
+                           data_schedule=self.data_schedule,
+                           batch_size=batch_size)
+
     def training_step(self, *args, **kwargs):
         return super().training_step(*args, **kwargs)
 
@@ -503,29 +593,19 @@ class BlocksWorldTrainer(BaseTrainer):
         model_config = self._get_model_config()
 
         # Setup training arguments based on algorithm
-        if algorithm == "grpo" or algorithm == "sgrpo":
+        if 'grpo' in algorithm:
             training_args = self._setup_grpo_training()
-            data_schedule = self.cfg.algorithm.training.curriculum_schedule
-            if data_schedule == "balanced":
-                trainer = GRPOTrainer(
-                    model=model_config.model_name_or_path,
-                    reward_funcs=[self._blocksworld_reward_fn],
-                    args=training_args,
-                    train_dataset=train_dataset,
-                    eval_dataset=test_dataset,
-                    peft_config=get_peft_config(model_config),
-                )
-            elif data_schedule =="cosine":
-                trainer = CosineGRPOTrainer(
-                    num_tasks=len(self.cfg.task.data_files),
-                    total_iterations=training_args.max_steps,
-                    model=model_config.model_name_or_path,
-                    reward_funcs=[self._blocksworld_reward_fn],
-                    args=training_args,
-                    train_dataset=train_dataset,
-                    eval_dataset=test_dataset,
-                    peft_config=get_peft_config(model_config), 
-                )
+            trainer = CurriculumGRPOTrainer(
+                num_tasks=len(self.cfg.task.data_files),
+                total_iterations=training_args.max_steps,
+                data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                model=model_config.model_name_or_path,
+                reward_funcs=[self._blocksworld_reward_fn],
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                peft_config=get_peft_config(model_config),
+            )
 
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()
@@ -722,21 +802,22 @@ class CountdownTrainer(BaseTrainer):
             all_data = [load_dataset(data_path, download_mode='FORCE_REDOWNLOAD') for data_path in data_files]
         else:
             all_data = [load_dataset(data_path) for data_path in data_files]
-        train_data = [data['train'].shuffle(seed=self.cfg.experiment.dataset_seed) for data in all_data]
-        if self.cfg.task.train_size > 0: # For Blocksworld we can have quite an imbalance.
-            train_data = [data.select(range(self.cfg.task.train_size) // len(data_files)) for data in train_data]
-        test_data = [data['test'].shuffle(seed=self.cfg.experiment.dataset_seed) for data in all_data]
-        if self.cfg.task.test_size > 0:
-            test_data = [data.select(range(self.cfg.task.test_size) // len(data_files)) for data in test_data]
+        train_data = [data['train'] for data in all_data]
+        test_data = [data['test'] for data in all_data]
+        # Annotate with difficulty
+        add_task_difficulty = lambda task_idx, dataset: dataset.add_column("task", [task_idx] * len(dataset))
+        train_data = [add_task_difficulty(i, data) for i, data in enumerate(train_data)]
+        test_data = [add_task_difficulty(i, data) for i, data in enumerate(test_data)]
+
         train_dataset = concatenate_datasets(train_data)
         test_dataset = concatenate_datasets(test_data)
-        # train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        # test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        train_dataset = train_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        test_dataset = test_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
         # Limit dataset size if specified
-        # if self.cfg.task.train_size > 0:
-        #     train_dataset = train_dataset.select(range(self.cfg.task.train_size))
-        #     test_dataset = test_dataset.select(range(self.cfg.task.test_size))
+        if self.cfg.task.train_size > 0:
+            train_dataset = train_dataset.select(range(self.cfg.task.train_size))
+            test_dataset = test_dataset.select(range(self.cfg.task.test_size))
 
         print(f"Dataset prepared with {len(train_dataset)} training samples and {len(test_dataset)} test samples")
         return train_dataset, test_dataset
@@ -869,13 +950,16 @@ class CountdownTrainer(BaseTrainer):
         model_config = self._get_model_config()
 
         # Setup training arguments based on algorithm
-        if algorithm == "grpo":
+        if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
-            trainer = GRPOTrainer(
+            trainer = CurriculumGRPOTrainer(
                 model=model_config.model_name_or_path,
                 reward_funcs=[self._countdown_reward_fn],
                 args=training_args,
                 train_dataset=train_dataset,
+                num_tasks=len(self.cfg.task.data_files),
+                total_iterations=training_args.max_steps,
+                data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 eval_dataset=test_dataset,
                 peft_config=get_peft_config(model_config),
             )
