@@ -136,7 +136,7 @@ class CosineGRPOTrainer(GRPOTrainer):
 
 
 class TaskSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, seed=0):
+    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, scheduler_params, seed=0):
         """
         Args:
           dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
@@ -153,7 +153,7 @@ class TaskSampler(torch.utils.data.Sampler):
         schedule_funcs = {
             'balanced': self._balanced_schedule,
             'cosine': self._cosine_schedule,
-            'gaussian': self._gaussian_schedule,
+            'gaussian': partial(self._gaussian_schedule, **scheduler_params),
         }
         self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
 
@@ -201,12 +201,22 @@ class TaskSampler(torch.utils.data.Sampler):
         return {i: probs[i] / norm for i in probs}
 
     @staticmethod
-    def _gaussian_schedule(t, T, num_tasks):
+    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob):
+        '''
+        Gaussian schedule for task sampling.
+        mu_exp: exponent for the mean, typically 1.0. Move faster at the beginning: < 1.0. Move slower at the beginning: > 1.0
+        sigma: standard deviation of the Gaussian distribution
+        min_prob: minimum probability for each task
+        '''
         # Move mean from 0 to (num_tasks-1) as time progresses, Use sqrt(t / T) to boost the the speed at the beginning
-        mu = (t / T) ** 0.5 * (num_tasks - 1)
+        mu = (t / T) ** mu_exp * (num_tasks - 1)
 
-        # Set standard deviation
-        sigma = 0.5  # Adjust this value based on desired focus
+        if isinstance(min_prob, bool):
+            p_min = 2 / (num_tasks * (num_tasks + 1)) if min_prob else 0.0
+        elif isinstance(min_prob, float):
+            p_min = min_prob
+        else:
+            raise ValueError("min_prob should be either a boolean or a float")
 
         # Calculate unnormalized probabilities using Gaussian PDF
         unnormalized_probs = {}
@@ -214,16 +224,18 @@ class TaskSampler(torch.utils.data.Sampler):
             # Calculate PDF of Gaussian for task i
             exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
             unnormalized_probs[i] = math.exp(exponent)
+            unnormalized_probs[i] = max(unnormalized_probs[i], p_min)
 
         total = sum(unnormalized_probs.values())
         return {i: prob / total for i, prob in unnormalized_probs.items()}
 
 
 class CurriculumGRPOTrainer(GRPOTrainer):
-    def __init__(self, num_tasks=4, total_iterations=1200, data_schedule='balanced', *args, **kwargs):
+    def __init__(self, num_tasks=4, total_iterations=1200, data_schedule='balanced', scheduler_params: dict=None, *args, **kwargs):
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
         self.data_schedule = data_schedule
+        self.scheduler_params=scheduler_params
         super().__init__(*args, **kwargs)
 
     def _get_train_sampler(self):
@@ -232,6 +244,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            num_tasks=self.num_tasks,
                            total_iterations=self.total_iterations,
                            data_schedule=self.data_schedule,
+                           scheduler_params=self.scheduler_params,
                            batch_size=batch_size)
 
     def training_step(self, *args, **kwargs):
@@ -614,6 +627,7 @@ class BlocksWorldTrainer(BaseTrainer):
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                scheduler_params=self.cfg.algorithm.training.scheduler_params,
                 model=model_config.model_name_or_path,
                 reward_funcs=[self._blocksworld_reward_fn],
                 args=training_args,
@@ -975,6 +989,7 @@ class CountdownTrainer(BaseTrainer):
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                scheduler_params=self.cfg.algorithm.training.scheduler_params,
                 eval_dataset=test_dataset,
                 peft_config=get_peft_config(model_config),
             )
