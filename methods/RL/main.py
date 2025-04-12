@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Union
 
 sys.path.append(os.environ['ROOT_PATH'])
 import re
@@ -29,6 +30,8 @@ import random
 from countdown_reward_model import CountdownRewardModel
 import math
 from functools import partial
+
+OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -201,7 +204,7 @@ class TaskSampler(torch.utils.data.Sampler):
         return {i: probs[i] / norm for i in probs}
 
     @staticmethod
-    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob):
+    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob: Union[bool, float]=False):
         '''
         Gaussian schedule for task sampling.
         mu_exp: exponent for the mean, typically 1.0. Move faster at the beginning: < 1.0. Move slower at the beginning: > 1.0
