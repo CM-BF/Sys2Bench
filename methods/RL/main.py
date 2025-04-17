@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Union
 
 sys.path.append(os.environ['ROOT_PATH'])
 import re
@@ -29,6 +30,8 @@ import random
 from countdown_reward_model import CountdownRewardModel
 import math
 from functools import partial
+
+OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -209,14 +212,14 @@ class TaskSampler(torch.utils.data.Sampler):
         return {i: probs[i] / norm for i in probs}
 
     @staticmethod
-    def _gaussian_schedule(t, T, num_tasks, mu_exp=0.5, sigma=0.5, min_prob=True):
-        """
-        Gaussian schedule for task sampling. Ensures each task gets at least a minimum probability.
-        
-        mu_exp: exponent for the mean; < 1 speeds up early movement, > 1 slows it down.
-        sigma: standard deviation for the Gaussian.
-        min_prob: if True, use default min (2/(N*(N+1))); if float, use that as minimum probability.
-        """
+    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob: Union[bool, float]=False):
+        '''
+        Gaussian schedule for task sampling.
+        mu_exp: exponent for the mean, typically 1.0. Move faster at the beginning: < 1.0. Move slower at the beginning: > 1.0
+        sigma: standard deviation of the Gaussian distribution
+        min_prob: minimum probability for each task
+        '''
+        # Move mean from 0 to (num_tasks-1) as time progresses, Use sqrt(t / T) to boost the the speed at the beginning
         mu = (t / T) ** mu_exp * (num_tasks - 1)
         p_min = (2 / (num_tasks * (num_tasks + 1))) if (min_prob is True) else (min_prob if isinstance(min_prob, float) else None)
         if p_min is None: raise ValueError("min_prob should be either a boolean or a float")
