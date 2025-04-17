@@ -7,7 +7,7 @@ training:
   logging_steps: 10
   max_steps: 1200
   curriculum: false
-  curriculum_schedule: "cosine" # fixed in default
+  curriculum_schedule: "balanced" # fixed in default
   scheduler_params:
     mu_exp: 0.5
     sigma: 0.5

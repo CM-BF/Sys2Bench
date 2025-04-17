@@ -154,8 +154,16 @@ class TaskSampler(torch.utils.data.Sampler):
             'balanced': self._balanced_schedule,
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
+            'classic': self._step_schedule
         }
+        print(f"Data Schedule: {data_schedule}")
         self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
+    
+    # Classical Curriculum Learning
+    @staticmethod    
+    def _step_schedule(t, T, num_tasks):
+        active_task = min(int(t * num_tasks / T), num_tasks - 1)
+        return dict(enumerate(np.eye(num_tasks)[active_task].tolist()))
 
     def __iter__(self):
 
@@ -201,33 +209,37 @@ class TaskSampler(torch.utils.data.Sampler):
         return {i: probs[i] / norm for i in probs}
 
     @staticmethod
-    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob):
-        '''
-        Gaussian schedule for task sampling.
-        mu_exp: exponent for the mean, typically 1.0. Move faster at the beginning: < 1.0. Move slower at the beginning: > 1.0
-        sigma: standard deviation of the Gaussian distribution
-        min_prob: minimum probability for each task
-        '''
-        # Move mean from 0 to (num_tasks-1) as time progresses, Use sqrt(t / T) to boost the the speed at the beginning
+    def _gaussian_schedule(t, T, num_tasks, mu_exp=0.5, sigma=0.5, min_prob=True):
+        """
+        Gaussian schedule for task sampling. Ensures each task gets at least a minimum probability.
+        
+        mu_exp: exponent for the mean; < 1 speeds up early movement, > 1 slows it down.
+        sigma: standard deviation for the Gaussian.
+        min_prob: if True, use default min (2/(N*(N+1))); if float, use that as minimum probability.
+        """
         mu = (t / T) ** mu_exp * (num_tasks - 1)
-
-        if isinstance(min_prob, bool):
-            p_min = 2 / (num_tasks * (num_tasks + 1)) if min_prob else 0.0
-        elif isinstance(min_prob, float):
-            p_min = min_prob
-        else:
-            raise ValueError("min_prob should be either a boolean or a float")
+        p_min = (2 / (num_tasks * (num_tasks + 1))) if (min_prob is True) else (min_prob if isinstance(min_prob, float) else None)
+        if p_min is None: raise ValueError("min_prob should be either a boolean or a float")
+        if num_tasks * p_min > 1: raise ValueError("num_tasks * p_min must not exceed 1")
+        
+        # Compute normalized Gaussian probabilities.
+        base = [math.exp(-((i - mu) ** 2) / (2 * sigma ** 2)) for i in range(num_tasks)]
+        total = sum(base)
+        q = [b / total for b in base]
+        
+        # Mix with uniform floor to guarantee each probability is at least p_min.
+        return {i: p_min + (1 - num_tasks * p_min) * q_i for i, q_i in enumerate(q)}
 
         # Calculate unnormalized probabilities using Gaussian PDF
-        unnormalized_probs = {}
-        for i in range(num_tasks):
-            # Calculate PDF of Gaussian for task i
-            exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
-            unnormalized_probs[i] = math.exp(exponent)
-            unnormalized_probs[i] = max(unnormalized_probs[i], p_min)
+        # unnormalized_probs = {}
+        # for i in range(num_tasks):
+        #     # Calculate PDF of Gaussian for task i
+        #     exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
+        #     unnormalized_probs[i] = math.exp(exponent)
+        #     unnormalized_probs[i] = max(unnormalized_probs[i], p_min)
 
-        total = sum(unnormalized_probs.values())
-        return {i: prob / total for i, prob in unnormalized_probs.items()}
+        # total = sum(unnormalized_probs.values())
+        # return {i: prob / total for i, prob in unnormalized_probs.items()}
 
 
 class CurriculumGRPOTrainer(GRPOTrainer):
@@ -418,11 +430,11 @@ class BlocksWorldTrainer(BaseTrainer):
             file_dataset = load_dataset('json', data_files=file)['train']
             file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
             
-            if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
-                num_files = len(data_files)
-                samples_per_file = self.cfg.experiment.dataset_size // num_files
-                num_samples = min(len(file_dataset), samples_per_file)
-                file_dataset = file_dataset.select(range(num_samples))
+            # if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
+            #     num_files = len(data_files)
+            #     samples_per_file = self.cfg.experiment.dataset_size // num_files
+            #     num_samples = min(len(file_dataset), samples_per_file)
+            #     file_dataset = file_dataset.select(range(num_samples))
             
             # Annotate with difficulty
             task_annotations = [task_idx] * len(file_dataset)
