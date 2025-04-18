@@ -1,18 +1,38 @@
 import random
 import re
-
+from collections import Counter
 
 def sc_output_extractor(algo_output):
-    from collections import Counter
-    answers = []
-    for x in algo_output:
-        answers.append(extract_plan(x))
-            
-    # answers = [x for x in algo_output if x is not None]
-    counter = Counter(answers)
-    if counter == {}:
+    """
+    If algo_output is a flat list, returns the majority extract_plan().
+    If algo_output is a list of lists, performs majority vote per index
+    and returns a list of results.
+    """
+    if not algo_output:
         return None
-    return counter.most_common(1)[0][0]
+
+    # Helper to get the top-voted plan from a list of raw outputs
+    def majority_plan(raw_outputs):
+        answers = [extract_plan(x) for x in raw_outputs]
+        counter = Counter(answers)
+        if not counter:
+            return None
+        return counter.most_common(1)[0][0]
+
+    # Detect nested list case
+    first = algo_output[0]
+    if isinstance(first, list):
+        # assume all inner lists are same length
+        length = len(first)
+        results = []
+        for idx in range(length):
+            # collect the idx-th element from each sub-list
+            column = [sublist[idx] for sublist in algo_output]
+            results.append(majority_plan(column))
+        return results
+
+    # plain-list case
+    return majority_plan(algo_output)
 
 
 def extract_plan(text):

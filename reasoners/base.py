@@ -281,6 +281,69 @@ class Evaluator():
         
         return accuracy
 
+    def batched_evaluate(self, reasoner, shuffle_prompt=True, num_shot=4, resume=0, log_dir=None, batch_size=16):
+        self.dataset = list(self.full_dataset)[resume:]
+        try:
+            algo_name = reasoner.search_algo.__class__.__name__
+        except Exception:
+            algo_name = "unknown"
+            
+        if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+            if log_dir is None:
+                log_dir = f'logs/{self._dataset_name}_{algo_name}/{datetime.now().strftime("%m%d%Y-%H%M%S")}'
+            if os.path.exists(log_dir):
+                shutil.rmtree(log_dir)
+            os.makedirs(log_dir, exist_ok=(resume > 0))
+            os.makedirs(os.path.join(log_dir, 'algo_output'), exist_ok=True)
+            with open(os.path.join(log_dir, 'args.txt'), 'w') as f:
+                print(sys.argv, file=f)
+
+        correct_count = 0
+        total_examples = len(self.dataset)
+        disable_tqdm = self.disable_tqdm or (torch.distributed.is_initialized() and torch.distributed.get_rank() != 0)
+        pbar = tqdm(range(0, total_examples, batch_size),
+                    initial=resume,
+                    desc=self._dataset_name,
+                    disable=disable_tqdm)
+        
+        idx = resume
+        for batch_start in pbar:
+            batch_examples = self.dataset[batch_start: batch_start + batch_size]
+            batch_inputs = []
+            for example in batch_examples:
+                batch_inputs.append(self.input_processor(example))
+        
+                
+            algo_outputs = reasoner(batch_inputs, prompt=self.sample_prompt(
+                                        shuffle_prompt=shuffle_prompt,
+                                        num_shot=num_shot))
+            
+            for output_idx, example in enumerate(batch_examples):
+                print("\n" + "------------------------------------------------------------------", flush=True)
+                # print("INPUT PROCESSOR for EXAMPLE: ", self.input_processor(example), flush=True)
+                algo_output = algo_outputs[output_idx]
+                # print("ALGO OUTPUT", algo_output, flush=True)
+                output = self.output_extractor(algo_output)
+                answer = self.answer_extractor(example)
+
+                correct = self.eval_output(answer, output)
+                correct_count += correct
+                idx += 1
+                accuracy = correct_count / idx
+
+                log_str = f'Case #{idx}: correct={correct}, output={output}, answer={answer}; accuracy={accuracy:.3f} ({correct_count}/{idx})'
+                if self.test_at_n and self.test_at_n > 1:
+                    log_str += f' (test at {self.test_at_n})'
+                tqdm.write(log_str)
+
+                if (not self.disable_log) and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0):
+                    with open(os.path.join(log_dir, 'result.log'), 'a') as f:
+                        print(log_str, file=f)
+                    with open(os.path.join(log_dir, 'algo_output', f'{idx}.pkl'), 'wb') as f:
+                        pickle.dump(algo_output, f)
+
+        return accuracy
+
     def evaluate_sc(self,
                  reasoner,
                  shuffle_prompt=True,

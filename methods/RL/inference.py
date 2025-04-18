@@ -35,17 +35,20 @@ class RLReasoner():
     def __call__(self, example, prompt=None):
         # inputs = prompt["icl"].replace("<init_state>", example["init"])\
         #     .replace("<goals>", example["goal"]).replace("<action>", "")
-        inputs = self.get_r1_prompt(example)
-        # print(inputs)
-        # quit()
+        if isinstance(example, list):
+            inputs = [self.get_r1_prompt(ex) for ex in example]
+        else:
+            inputs = [self.get_r1_prompt(example)]
         outputs = []
         for _ in range(self.sc_num):
           if self.model_type == "completion":   
-              outputs.append(self.base_model.generate([inputs],
+              outputs.append(self.base_model.generate(inputs,
                                             hide_input=True,
                                             do_sample=True,
-                                            temperature=0.0).text[0].strip())  
-        # print(outputs)
+                                            skip_special_tokens=False,
+                                            temperature=0.0).text) 
+        print(len(outputs), len(outputs[0]))
+        outputs = [list(group) for group in zip(*outputs)]
         # quit()
         return outputs    
 
@@ -61,6 +64,7 @@ def main(model_checkpoint=300,
          sc_num=1,
          use_icl = False,
          use_vllm = False,
+         max_batch_size=64,
          ):
     print('Running BW inference...')
     model_dir = model_dir.format(num=model_checkpoint)
@@ -80,11 +84,11 @@ def main(model_checkpoint=300,
     if use_icl:
         icl = generate_icl(icl_examples, provide_think_icl=False, num_icl = 2)
     print(icl)
-    base_model = HFModel(model_pth=model_dir, tokenizer_pth=model_dir, max_new_tokens=512)
+    base_model = HFModel(model_pth=model_dir, tokenizer_pth=model_dir, max_new_tokens=512, max_batch_size=max_batch_size)
     reasoner = RLReasoner(base_model, temperature=temperature, sc_num=sc_num, icl_example=icl)
     evaluator = BWEvaluator(config_file=config_file, domain_file=domain_file, data_path=data_path, init_prompt=prompt, disable_log=False, output_extractor=sc_output_extractor, sample_prompt_type="rap") # rap prompt includes cot
-    accuracy = evaluator.evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir)
-    
+    # accuracy = evaluator.evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir)
+    accuracy = evaluator.batched_evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir, batch_size=max_batch_size)
     print('Accuracy: ', accuracy)
 
 
