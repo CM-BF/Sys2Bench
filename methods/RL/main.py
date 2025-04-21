@@ -1130,347 +1130,333 @@ class CountdownTrainer(BaseTrainer):
 
 
 class GSM8KTrainer(BaseTrainer):
-   """Class for training and inference on gsm8k models"""
+    """Class for training and inference on gsm8k models"""
 
 
-   def _prepare_dataset(self):
-       """Prepare dataset for training"""
-       all_samples = []
-       data_files = self.cfg.task.data_files
+    def _prepare_dataset(self):
+        """Prepare dataset for training"""
+        all_samples = []
+        data_files = self.cfg.task.data_files
 
 
-       # data_schedule = self.cfg.algorithm.training.curriculum_schedule
-       for task_idx, file in enumerate(data_files):
-           file_dataset = load_dataset('json', data_files=file)['train']
-           file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        # data_schedule = self.cfg.algorithm.training.curriculum_schedule
+        for task_idx, file in enumerate(data_files):
+            file_dataset = load_dataset('json', data_files=file)['train']
+            file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
           
-           # if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
-           #     num_files = len(data_files)
-           #     samples_per_file = self.cfg.experiment.dataset_size // num_files
-           #     num_samples = min(len(file_dataset), samples_per_file)
-           #     file_dataset = file_dataset.select(range(num_samples))
+            # if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
+            #     num_files = len(data_files)
+            #     samples_per_file = self.cfg.experiment.dataset_size // num_files
+            #     num_samples = min(len(file_dataset), samples_per_file)
+            #     file_dataset = file_dataset.select(range(num_samples))
           
-           # Annotate with difficulty
-           task_annotations = [task_idx] * len(file_dataset)
-           file_dataset = file_dataset.add_column("task", task_annotations)
+            # Annotate with difficulty
+            task_annotations = [task_idx] * len(file_dataset)
+            file_dataset = file_dataset.add_column("task", task_annotations)
           
-           all_samples.extend(file_dataset)
-       dataset = Dataset.from_list(all_samples)
+            all_samples.extend(file_dataset)
+        dataset = Dataset.from_list(all_samples)
 
 
-       dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-       print(f"Dataset prepared with {len(dataset)} samples")
+        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        print(f"Dataset prepared with {len(dataset)} samples")
 
 
-       return dataset
-  
-   def extract_answer(self, text):
-       """Extract int from raw gsm8k answer string"""
-       marker_pos = text.find('####')
+        return dataset
+
+    def extract_answer(self, text):
+        """Extract int from raw gsm8k answer string"""
+        text = text.replace(",", "")
+        marker_pos = text.find('####')
       
-       if marker_pos == -1:
-           return None
+        if marker_pos == -1:
+            return None
       
-       answer_text = text[marker_pos + 4:].strip()
-       answer_text = answer_text.split()[0]
+        answer_text = text[marker_pos + 4:].strip()
+        answer_text = answer_text.split()[0]
       
-       try:
-           return float(answer_text)
-       except ValueError:
-           return None
+        try:
+            return float(answer_text)
+        except ValueError:
+            return None
       
-   def _generate_prompt(self, tokenizer, example):
-       """Generate prompt for the gsm8k model"""
-       # Extract target and numbers from the example
-       question = example.get("question")
-       answer = self.extract_answer(example.get("answer"))
+    def _generate_prompt(self, tokenizer, example):
+        """Generate prompt for the gsm8k model"""
+        # Extract target and numbers from the example
+        question = example.get("question")
+        answer_str = example.get("answer")
 
+        answer = self.extract_answer(answer_str)
+        # if "gsm8k2" in self.cfg.task.name and example.get("task") == 0:
+            # answer = float(answer_str)
 
-       messages = [
-           {
-               "role": "system",
-               "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
-           },
-           {
-               "role": "user",
-               "content": f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
-           },
-           {
-               "role": "assistant",
-               "content": "Let me solve this step by step.\n<think>"
-           }
-       ]
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+            },
+            {
+                "role": "user",
+                "content": f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
+            },
+            {
+                "role": "assistant",
+                "content": "Let me solve this step by step.\n<think>"
+            }
+        ]
 
 
-       return {
-           "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
-           "answer": answer,
-       }
+        return {
+            "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
+            "answer": answer,
+        }
 
 
-   def _validate_gsm8k_response_format(self, response: str):
-       """Validate the gsm8k response format"""
-       # Remove leading/trailing whitespace
-       response = response.strip()
+    def _validate_gsm8k_response_format(self, response: str):
+        """Validate the gsm8k response format"""
+        # Remove leading/trailing whitespace
+        response = response.strip()
 
 
-       # Must contain <think> and </think> tags
-       if "<think>" not in response or "</think>" not in response:
-           print('Response does not contain think tags')
-           return False
+        # Must contain <think> and </think> tags
+        if "<think>" not in response or "</think>" not in response:
+            print('Response does not contain think tags')
+            return False
 
 
-       # Must contain <answer> and </answer> tags
-       if "<answer>" not in response or "</answer>" not in response:
-           print('Response does not contain answer tags')
-           return False
+        # Must contain <answer> and </answer> tags
+        if "<answer>" not in response or "</answer>" not in response:
+            print('Response does not contain answer tags')
+            return False
 
 
-       # Check that tags are in correct order
-       think_open = response.find("<think>")
-       think_close = response.find("</think>")
-       answer_open = response.find("<answer>")
-       answer_close = response.find("</answer>")
+        # Check that tags are in correct order
+        think_open = response.find("<think>")
+        think_close = response.find("</think>")
+        answer_open = response.find("<answer>")
+        answer_close = response.find("</answer>")
 
 
-       if think_close < think_open or answer_close < answer_open:
-           return False
+        if think_close < think_open or answer_close < answer_open:
+            return False
 
 
-       if answer_open < think_close:
-           return False
+        if answer_open < think_close:
+            return False
 
 
-       return True
+        return True
 
 
-   def _gsm8k_reward_fn(self, completions, answer, **kwargs):
-       """Reward function for gsm8k task"""
-       rewards = []
+    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
+        """Reward function for gsm8k task"""
+        rewards = []
 
 
 
 
-       for completion, answer_i in zip(completions, answer):
-           try:
-               print('#########################')
-               completion = "<think>" + completion
-               print(completion)
+        for completion, answer_i in zip(completions, answer):
+            try:
+                print('#########################')
+                completion = "<think>" + completion
+                print(completion)
 
 
-               if not self._validate_gsm8k_response_format(completion):
-                   print('Response Format Error')
-                   rewards.append(0.0)  # Penalty to avoid format errors
-                   continue
+                if not self._validate_gsm8k_response_format(completion):
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
 
 
-               # Use the GSM8KRewardModel class
-               reward_model = GSM8KRewardModel(answer_i)
-               reward = reward_model.compute_score(completion)
-               rewards.append(reward)
-               print('-----')
-               print(reward)
-               print('-----')
-               print('#########################')
-           except Exception as e:
-               print(e)
-               rewards.append(0.0)
+                # Use the GSM8KRewardModel class
+                reward_model = GSM8KRewardModel(answer_i)
+                reward = reward_model.compute_score(completion)
+                rewards.append(reward)
+                print('-----')
+                print(reward)
+                print('-----')
+                print('#########################')
+            except Exception as e:
+                print(e)
+                rewards.append(0.0)
 
 
-       return rewards
+        return rewards
 
 
-   def train(self):
-       """Train a model using the specified algorithm with configurations from Hydra"""
-       # Extract config values
-       model_name = self.cfg.model.name
-       output_model_name = self.cfg.output.run_name
-       algorithm = self.cfg.algorithm.name
+    def train(self):
+        """Train a model using the specified algorithm with configurations from Hydra"""
+        # Extract config values
+        model_name = self.cfg.model.name
+        output_model_name = self.cfg.output.run_name
+        algorithm = self.cfg.algorithm.name
 
 
-       # Load tokenizer
-       tokenizer = AutoTokenizer.from_pretrained(
-           model_name,
-           trust_remote_code=self.cfg.model.trust_remote_code
-       )
+        # Load tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            trust_remote_code=self.cfg.model.trust_remote_code
+        )
 
 
-       # Prepare dataset
-       dataset = self._prepare_dataset()
-       dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+        # Prepare dataset
+        dataset = self._prepare_dataset()
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
 
 
-       # Split dataset
-       train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-       train_dataset = train_test_split["train"]
-       test_dataset = train_test_split["test"]
+        # Split dataset
+        train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
+        train_dataset = train_test_split["train"]
+        test_dataset = train_test_split["test"]
 
 
-       # Setup Model config
-       model_config = self._get_model_config()
+        # Setup Model config
+        model_config = self._get_model_config()
 
 
-       # Setup training arguments based on algorithm
-       if "grpo" in algorithm:
-           training_args = self._setup_grpo_training()
-           trainer = CurriculumGRPOTrainer(
-               model=model_config.model_name_or_path,
-               reward_funcs=[self._gsm8k_reward_fn],
-               args=training_args,
-               train_dataset=train_dataset,
-               num_tasks=len(self.cfg.task.data_files),
-               total_iterations=training_args.max_steps,
-               data_schedule=self.cfg.algorithm.training.curriculum_schedule,
-               scheduler_params=self.cfg.algorithm.training.scheduler_params,
-               eval_dataset=test_dataset,
-               peft_config=get_peft_config(model_config),
-           )
+        # Setup training arguments based on algorithm
+        if "grpo" in algorithm:
+            training_args = self._setup_grpo_training()
+            trainer = CurriculumGRPOTrainer(
+                model=model_config.model_name_or_path,
+                reward_funcs=[self._gsm8k_reward_fn],
+                args=training_args,
+                train_dataset=train_dataset,
+                num_tasks=len(self.cfg.task.data_files),
+                total_iterations=training_args.max_steps,
+                data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                scheduler_params=self.cfg.algorithm.training.scheduler_params,
+                eval_dataset=test_dataset,
+                peft_config=get_peft_config(model_config),
+            )
 
 
-       elif algorithm == "ppo":
-           training_args = self._setup_ppo_training()
-           trainer = PPOTrainer(
-               model=model_config.model_name_or_path,
-               ref_model=model_config.model_name_or_path,  # Same model as reference
-               tokenizer=tokenizer,
-               args=training_args,
-               reward_fn=self._gsm8k_reward_fn,
-               train_dataset=train_dataset,
-               eval_dataset=test_dataset,
-               peft_config=get_peft_config(model_config),
-           )
+        elif algorithm == "ppo":
+            training_args = self._setup_ppo_training()
+            trainer = PPOTrainer(
+                model=model_config.model_name_or_path,
+                ref_model=model_config.model_name_or_path,  # Same model as reference
+                tokenizer=tokenizer,
+                args=training_args,
+                reward_fn=self._gsm8k_reward_fn,
+                train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                peft_config=get_peft_config(model_config),
+            )
 
 
-       else:
-           raise ValueError(f"Unsupported algorithm: {algorithm}")
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
 
 
-       # Train model
-       trainer.train()
-       trainer.save_model(training_args.output_dir)
+        # Train model
+        trainer.train()
+        trainer.save_model(training_args.output_dir)
 
 
-       if self.cfg.algorithm.training.push_to_hub:
-           trainer.push_to_hub(dataset_name='gsm8k-dataset')
+        if self.cfg.algorithm.training.push_to_hub:
+            trainer.push_to_hub(dataset_name='gsm8k-dataset')
 
 
-   def inference(self):
-       """Run inference using the trained model"""
-       # Extract config values
-       model_checkpoint = self.cfg.task.inference.checkpoint
-       sc_num = self.cfg.task.inference.sc_num
+    def inference(self):
+        """Run inference using the trained model"""
+        # Extract config values
+        model_checkpoint = self.cfg.task.inference.checkpoint
+        sc_num = self.cfg.task.inference.sc_num
 
 
-       # Generate checkpoint path
-       model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+        # Generate checkpoint path
+        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
 
+        # Load model and tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_dir,
+            trust_remote_code=self.cfg.model.trust_remote_code
+        )
 
-       # Load test dataset
-       dataset = self._prepare_dataset()
-       dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+        # Load test dataset
+        dataset = self._prepare_dataset()
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
 
 
-       # Split dataset
-       train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-       train_dataset = train_test_split["train"]
-       test_dataset = train_test_split["test"]
+        # Split dataset
+        train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
+        train_dataset = train_test_split["train"]
+        test_dataset = train_test_split["test"]
 
+        # Custom model for inference
+        model = HFModel(
+            model_pth=model_dir,
+            tokenizer_pth=model_dir,
+            max_new_tokens=self.cfg.task.inference.max_new_tokens
+        )
 
-       # Load model and tokenizer
-       tokenizer = AutoTokenizer.from_pretrained(
-           model_dir,
-           trust_remote_code=self.cfg.model.trust_remote_code
-       )
 
+        # Run inference on test dataset
+        correct = 0
+        rewards = 0
+        total = 0
+        results = []
 
-       # Custom model for inference
-       model = HFModel(
-           model_pth=model_dir,
-           tokenizer_pth=model_dir,
-           max_new_tokens=self.cfg.task.inference.max_new_tokens
-       )
+        for example in tqdm(test_dataset):
+            # Generate prompt
+            prompt = example["prompt"]
 
+            # Generate responses
+            outputs = []
+            for _ in range(sc_num):
+                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
+                outputs.append(output)
 
-       # Run inference on test dataset
-       correct = 0
-       rewards = 0
-       total = 0
-       results = []
 
+            # Evaluate responses
+            for output in outputs:
+                answer = example["answer"]
 
-       for example in tqdm(test_dataset):
-           # Generate prompt
-           prompt_data = self._generate_prompt(tokenizer, example)
-           prompt = prompt_data["prompt"]
+                # Use the GSM8KRewardModel for evaluation
+                reward_model = GSM8KRewardModel(answer)
 
 
-           # Generate responses
-           outputs = []
-           for _ in range(sc_num):
-               output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
-               outputs.append(output)
+                # Calculate score
+                score = reward_model.compute_score(output)
 
+                # Record results
+                results.append({
+                    "prompt": prompt,
+                    "output": output,
+                    "solution": answer,
+                    "score": score
+                })
 
-           # Evaluate responses
-           for output in outputs:
-               # Prepare ground truth for scoring
-               ground_truth = {
-                   "target": prompt_data["target"],
-                   "numbers": prompt_data["numbers"]
-               }
 
+                rewards += score
+                if score > 0.5:  # Assuming score > 0.5 means correct answer
+                    correct += 1
+                total += 1
 
-               # Use the GSM8KRewardModel for evaluation
-               reward_model = GSM8KRewardModel(prompt_data["target"], prompt_data["numbers"])
 
+        # Calculate accuracy
+        accuracy = correct / total if total > 0 else 0
+        rewards /= total if total > 0 else 0
+        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
 
-               # Calculate score
-               score = reward_model.compute_score(output)
 
+        # Save results to output directory
+        evaluation_results = {
+            "accuracy": accuracy,
+            "rewards": rewards,
+            "model_checkpoint": model_checkpoint,
+            "sc_num": sc_num,
+            "detailed_results": results,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
 
-               # Extract solution
-               solution = reward_model.extract_equation(output)
 
+        with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+            json.dump(evaluation_results, f, indent=2)
 
-               # Record results
-               results.append({
-                   "prompt": prompt,
-                   "output": output,
-                   "solution": solution,
-                   "target": prompt_data["target"],
-                   "numbers": prompt_data["numbers"],
-                   "score": score
-               })
 
-
-               rewards += score
-               if score > 0.5:  # Assuming score > 0.5 means correct answer
-                   correct += 1
-               total += 1
-
-
-       # Calculate accuracy
-       accuracy = correct / total if total > 0 else 0
-       rewards /= total if total > 0 else 0
-       print(f'Accuracy: {accuracy}, Rewards: {rewards}')
-
-
-       # Save results to output directory
-       evaluation_results = {
-           "accuracy": accuracy,
-           "rewards": rewards,
-           "model_checkpoint": model_checkpoint,
-           "sc_num": sc_num,
-           "detailed_results": results,
-           "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-       }
-
-
-       # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-       #     json.dump(evaluation_results, f, indent=2)
-
-
-       return accuracy
+        return accuracy
 
 class RLReasoner:
     """Class for reasoning with RL models"""
@@ -1549,7 +1535,7 @@ def main(cfg: DictConfig):
         trainer = BlocksWorldTrainer(cfg)
     elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
-    elif "gsm8k" in task:
+    elif "gsm8k" or "easymath" in task:
         trainer = GSM8KTrainer(cfg)
     else:
         raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
