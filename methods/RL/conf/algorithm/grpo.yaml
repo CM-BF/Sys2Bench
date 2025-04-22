@@ -5,7 +5,6 @@ training:
   learning_rate: 1e-6
   lr_scheduler_type: "cosine"
   logging_steps: 10
-  eval_steps: 10
   max_steps: 1600
   curriculum: false
   curriculum_schedule: "gaussian" # fixed in default
@@ -26,5 +25,6 @@ training:
   push_to_hub: true
   save_strategy: "steps"
   save_steps: ${algorithm.training.max_steps}
-  eval_strategy: "steps"
   tf32: false
+  eval_strategy: steps
+  eval_steps: 200
