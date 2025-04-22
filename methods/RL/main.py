@@ -18,6 +18,7 @@ from datasets import load_dataset, concatenate_datasets, Dataset
 from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
+import datasets
 
 # Task-specific imports
 from blocksworld_reward_model import BlocksWorldModel
@@ -1171,6 +1172,8 @@ class ArithmeticTrainer(BaseTrainer):
             question = example["question"]
             sft = example["answer"]
             answer = self.extract_answer(sft)
+            if 'gsm8k2' in self.cfg.task.name and example.get("task") == 0:
+                answer = float(sft)
             instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
 
         elif 'aqua' in self.cfg.task.name:
@@ -1351,15 +1354,15 @@ class ArithmeticTrainer(BaseTrainer):
         )
 
         # Load test dataset
-        dataset = self._prepare_dataset()
-        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-
-
-        # Split dataset
-        train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-        train_dataset = train_test_split["train"]
-        test_dataset = train_test_split["test"]
-
+        if "gsm8k" in self.cfg.task.name:
+          dataset = datasets.load_dataset("gsm8k", "main", split="test")
+          dataset = dataset.add_column("task", [0] * len(dataset))
+        else:
+          dataset = self._prepare_dataset()
+          train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
+          dataset = train_test_split["test"]
+            
+        test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
         # Custom model for inference
         model = HFModel(
             model_pth=model_dir,
@@ -1368,48 +1371,48 @@ class ArithmeticTrainer(BaseTrainer):
         )
 
 
-        # Run inference on test dataset
+
         correct = 0
         rewards = 0
         total = 0
+        resume = 0
+        batch_size = 16
         results = []
 
-        for example in tqdm(test_dataset):
-            # Generate prompt
-            prompt = example["prompt"]
+        pbar = tqdm(range(0, len(test_dataset), batch_size),
+                    initial=resume,
+                    desc=self.cfg.task.name)
+        
+        for batch_start in pbar:
+        # Generate batched responses
+            batch = test_dataset[batch_start: batch_start + batch_size]
+            batch_examples = [dict(zip(batch, t)) for t in zip(*batch.values())] 
+            inputs = [input["prompt"] for input in batch_examples]
 
-            # Generate responses
-            outputs = []
-            for _ in range(sc_num):
-                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
-                outputs.append(output)
-
-
-            # Evaluate responses
-            for output in outputs:
-                answer = example["answer"]
-
-                # Use the GSM8KRewardModel for evaluation
+            outputs = model.generate(inputs,
+                                          hide_input=True,
+                                          do_sample=True,
+                                          skip_special_tokens=False,
+                                          temperature=0.0).text
+      
+            for output_idx, output in enumerate(outputs):
+                answer = test_dataset[batch_start + output_idx]["answer"]
                 reward_model = GSM8KRewardModel(answer)
-
-
-                # Calculate score
                 score = reward_model.compute_score(output)
 
                 # Record results
                 results.append({
-                    "prompt": prompt,
+                    "prompt": inputs[output_idx],
                     "output": output,
                     "solution": answer,
                     "score": score
                 })
 
-
-                rewards += score
-                if score > 0.5:  # Assuming score > 0.5 means correct answer
+                if score > 0.5:
                     correct += 1
                 total += 1
-
+            accuracy = correct / total if total > 0 else 0
+            print(accuracy)
 
         # Calculate accuracy
         accuracy = correct / total if total > 0 else 0
@@ -1427,7 +1430,7 @@ class ArithmeticTrainer(BaseTrainer):
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-
+        os.makedirs(model_dir, exist_ok=True)
         with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
             json.dump(evaluation_results, f, indent=2)
 
