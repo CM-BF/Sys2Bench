@@ -1,13 +1,11 @@
 #!/bin/bash
 
 #SBATCH --job-name=TrainReasoner
+#SBATCH --account=ASC25013
 #SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --partition=gpu-a100
 #SBATCH --time=0-8:00:00
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:a100:2
-#SBATCH --partition=gpu
-#SBATCH --mem=16G
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
 
@@ -15,21 +13,45 @@
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} started ..."
 
 
-ml CUDA
-ml WebProxy
-ml Miniconda3
-source /sw/eb/sw/Miniconda3/23.10.0-1/etc/profile.d/conda.sh
+mu="0.5"
+sigma="0.5"
+max_steps="1600"
+for i in "$@"; do
+  case "$i" in
+    --model=*)
+      model="${i#*=}"
+      ;;
+    --task=*)
+      task="${i#*=}"
+      ;;
+    --schedule=*)
+      schedule="${i#*=}"
+      ;;
+    --mu=*)
+      mu="${i#*=}"
+      ;;
+    --sigma=*)
+      sigma="${i#*=}"
+      ;;
+    --max_steps=*)
+      max_steps="${i#*=}"
+      ;;
+  esac
+done
+
+
+source $WORK/miniconda3/etc/profile.d/conda.sh
 conda activate sys2bench_env
-cd $SCRATCH/projects/Sys2Bench
+cd $WORK/projects/Sys2Bench
 
 
-ROOT_PATH="$SCRATCH/projects/Sys2Bench" \
+ROOT_PATH="$WORK/projects/Sys2Bench" \
 accelerate launch \
 --mixed_precision bf16 \
---num_processes 1 \
+--num_processes 2 \
 --num_machines 1 \
 --use_deepspeed \
---gpu_ids 0,1 \
+--gpu_ids all \
 --zero_stage 3 \
 --offload_optimizer_device none \
 --offload_param_device none \
@@ -37,18 +59,14 @@ accelerate launch \
 --zero3_init_flag true \
 --dynamo_backend no \
 methods/RL/main.py \
-model=qwen15 \
-task=aqua \
-algorithm.training.curriculum_schedule=balanced \
-algorithm.training.max_steps=1600 \
+model="$model" \
+task="$task" \
+algorithm.training.curriculum_schedule="$schedule" \
+algorithm.training.scheduler_params.mu_exp="$mu" \
+algorithm.training.scheduler_params.sigma="$sigma" \
+algorithm.training.max_steps="$max_steps" \
 algorithm.training.report_to=\[tensorboard\] \
-algorithm.training.save_strategy=no \
-algorithm.training.push_to_hub=false \
-algorithm.training.tf32=true \
-algorithm.training.per_device_train_batch_size=1 \
-algorithm.training.vllm_gpu_memory_utilization=0.7 \
-task.training.max_prompt_length=400 \
-task.training.max_completion_length=512
+algorithm.training.push_to_hub=false
 
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} stopped ..."
