@@ -372,6 +372,9 @@ class BaseTrainer:
             "hub_model_id": self.cfg.output.run_name,
             "save_strategy": training_cfg.save_strategy,
             "save_steps": training_cfg.save_steps,
+            "tf32": training_cfg.tf32,
+            "eval_strategy": training_cfg.eval_strategy,
+            "eval_steps": training_cfg.eval_steps
         }
 
         return common_args, output_dir

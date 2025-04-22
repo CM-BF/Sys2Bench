@@ -47,7 +47,6 @@ algorithm.training.push_to_hub=false \
 algorithm.training.tf32=true \
 algorithm.training.per_device_train_batch_size=1 \
 algorithm.training.vllm_gpu_memory_utilization=0.7 \
-algorithm.training.eval_steps=200 \
 task.training.max_prompt_length=400 \
 task.training.max_completion_length=512
 
