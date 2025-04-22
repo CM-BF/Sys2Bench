@@ -11,7 +11,7 @@ training:
   max_completion_length: 512
 
 inference:
-  checkpoint: 1200
+  checkpoint: 1600
   steps: 4
   temperature: 0.0
   sc_num: 1

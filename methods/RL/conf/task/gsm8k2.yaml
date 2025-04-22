@@ -1,7 +1,6 @@
-# conf/task/blocksworld.yaml
 name: "gsm8k2"
 data_files:
-  - split_benchmarks/TEMH_splits/easymath_aqua_gsm8k_splits/trivial_easymath.jsonl
+  - split_benchmarks/sc_splits/easymath_sc_splits/trivial.jsonl
   - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_easy.jsonl
   - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_medium.jsonl
   - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_hard.jsonl

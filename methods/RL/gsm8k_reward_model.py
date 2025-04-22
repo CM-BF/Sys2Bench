@@ -16,9 +16,9 @@ class GSM8KRewardModel:
 
 
         Args:
-            answer (float): The solution to the problem
+            answer (string): The solution to the problem
         """
-        self.answer = answer
+        self.answer = float(answer)
 
 
 
