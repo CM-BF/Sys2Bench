@@ -16,7 +16,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from datasets import load_dataset, concatenate_datasets, Dataset
 from huggingface_hub import login
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
 
 # Task-specific imports
@@ -31,7 +31,9 @@ from countdown_reward_model import CountdownRewardModel
 import math
 from functools import partial
 from gsm8k_reward_model import GSM8KRewardModel
+import logging
 
+log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
 
 def cosine_schedule(t, T, num_tasks):
@@ -160,7 +162,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule
         }
-        print(f"Data Schedule: {data_schedule}")
+        log.info(f"Data Schedule: {data_schedule}")
         self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
     
     # Classical Curriculum Learning
@@ -175,7 +177,6 @@ class TaskSampler(torch.utils.data.Sampler):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
 
             probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
-            print(f'For iter {i}, probs = {probs}')
             # Sample a task for each slot in the batch using the probabilities.
             chosen_tasks = np.random.choice(np.arange(self.num_tasks), size=self.batch_size, p=probs, replace=True)
             batch_indices = []
@@ -188,7 +189,7 @@ class TaskSampler(torch.utils.data.Sampler):
                 else:
                     idx = random.choice(indices)
                 batch_indices.append(int(idx))
-            print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
+            log.info(f"Iteration {i}: Probs = {probs} Batch indices = {batch_indices} Task Difficulties = {chosen_tasks}")
             yield from batch_indices
 
     def __len__(self):
@@ -1129,43 +1130,23 @@ class CountdownTrainer(BaseTrainer):
 
 
 
-class GSM8KTrainer(BaseTrainer):
-    """Class for training and inference on gsm8k models"""
-
+class ArithmeticTrainer(BaseTrainer):
+    """Class for training and inference on Arithmetic models"""
 
     def _prepare_dataset(self):
         """Prepare dataset for training"""
         all_samples = []
-        data_files = self.cfg.task.data_files
-
-
-        # data_schedule = self.cfg.algorithm.training.curriculum_schedule
-        for task_idx, file in enumerate(data_files):
+        for task_idx, file in enumerate(self.cfg.task.data_files):
             file_dataset = load_dataset('json', data_files=file)['train']
-            file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-          
-            # if self.cfg.experiment.dataset_size > 0 and data_schedule == 'fixed':
-            #     num_files = len(data_files)
-            #     samples_per_file = self.cfg.experiment.dataset_size // num_files
-            #     num_samples = min(len(file_dataset), samples_per_file)
-            #     file_dataset = file_dataset.select(range(num_samples))
-          
             # Annotate with difficulty
-            task_annotations = [task_idx] * len(file_dataset)
-            file_dataset = file_dataset.add_column("task", task_annotations)
-          
+            file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
             all_samples.extend(file_dataset)
         dataset = Dataset.from_list(all_samples)
-
-
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        print(f"Dataset prepared with {len(dataset)} samples")
-
-
         return dataset
 
     def extract_answer(self, text):
-        """Extract int from raw gsm8k answer string"""
+        """Extract answer from raw gsm8k answer string"""
         text = text.replace(",", "")
         marker_pos = text.find('####')
       
@@ -1176,19 +1157,25 @@ class GSM8KTrainer(BaseTrainer):
         answer_text = answer_text.split()[0]
       
         try:
-            return float(answer_text)
+            return answer_text
         except ValueError:
             return None
       
     def _generate_prompt(self, tokenizer, example):
-        """Generate prompt for the gsm8k model"""
-        # Extract target and numbers from the example
-        question = example.get("question")
-        answer_str = example.get("answer")
+        """Generate prompt for the arithmetic model"""
+        
+        if 'gsm8k' in self.cfg.task.name:
+            question = example["question"]
+            sft = example["answer"]
+            answer = self.extract_answer(sft)
+            instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
 
-        answer = self.extract_answer(answer_str)
-        # if "gsm8k2" in self.cfg.task.name and example.get("task") == 0:
-            # answer = float(answer_str)
+        elif 'aqua' in self.cfg.task.name:
+            question = example["question"]
+            sft = example["rationale"]
+            answer = example["answer"].strip()
+            options = "  ".join(example["options"])
+            instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
 
         messages = [
             {
@@ -1197,7 +1184,7 @@ class GSM8KTrainer(BaseTrainer):
             },
             {
                 "role": "user",
-                "content": f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
+                "content": instruction
             },
             {
                 "role": "assistant",
@@ -1205,82 +1192,75 @@ class GSM8KTrainer(BaseTrainer):
             }
         ]
 
-
         return {
             "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
+            "sft" : sft,
             "answer": answer,
+            "task" : example["task"]
         }
 
-
-    def _validate_gsm8k_response_format(self, response: str):
-        """Validate the gsm8k response format"""
-        # Remove leading/trailing whitespace
+    @staticmethod
+    def _format_reward_fn(response: str, format_score=0.1):
+        """Validate the response format"""
         response = response.strip()
 
+        # Rule 1: Must start with <think> and end with </answer>
+        if not response.startswith("<think>") or not response.endswith("</answer>"):
+            return 0.0, "Response does not start with <think> or end with </answer>"
 
-        # Must contain <think> and </think> tags
-        if "<think>" not in response or "</think>" not in response:
-            print('Response does not contain think tags')
-            return False
+        # Rule 2: Must contain exactly one of each tag.
+        if response.count("<think>") != 1 or response.count("</think>") != 1:
+            return 0.0, 'Response does not contain exactly one of each think tag'
+        if response.count("<answer>") != 1 or response.count("</answer>") != 1:
+            return 0.0, 'Response does not contain exactly one of each answer tag'
 
-
-        # Must contain <answer> and </answer> tags
-        if "<answer>" not in response or "</answer>" not in response:
-            print('Response does not contain answer tags')
-            return False
-
-
-        # Check that tags are in correct order
+        # Find indices for each tag.
         think_open = response.find("<think>")
         think_close = response.find("</think>")
-        answer_open = response.find("<answer>")
-        answer_close = response.find("</answer>")
+        plan_open = response.find("<answer>")
+        plan_close = response.find("</answer>")
 
+        # Rule 3: The order should be: <think> ... </think> then <answer> ... </answer>
+        if think_open != 0:  # Should start with <think>
+            return 0.0, 'Response does not start with <think>'
+        if think_close == -1 or plan_open == -1 or plan_close == -1:
+            return 0.0, 'Response does not contain <answer> and </answer>, or </think>'
+        if think_close > plan_open:
+            return 0.0, 'Response has closing think tag after opening answer tag'
 
-        if think_close < think_open or answer_close < answer_open:
-            return False
+        # Rule 4: Check non-empty content between tags.
+        think_content = response[len("<think>"):think_close].strip()
+        plan_content = response[plan_open + len("<answer>"):plan_close].strip()
+        if not think_content or not plan_content:
+            return 0.0, 'Empty content between tags'
 
+        # Rule 5: Check <answer> immedietly follows </think>
+        if not (response[think_close+len("</think>"):plan_open].strip() == ''):
+            return 0.0, 'There is content between </think> and <answer>'
 
-        if answer_open < think_close:
-            return False
+        return format_score, 'Correctly Formatted'
 
+    @staticmethod
+    def _correctness_reward_fn(response: str, answer: str, correctness_score=0.9):
+        answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
+        if len(answer_match) > 0:
+            if answer_match[0].strip() == answer:
+                return correctness_score
+        return 0.0
 
-        return True
-
-
-    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
-        """Reward function for gsm8k task"""
+    def _reward_fn(self, prompts, completions, **kwargs):
         rewards = []
-
-
-
-
-        for completion, answer_i in zip(completions, answer):
+        for completion, answer in zip(completions, kwargs['answer']):
             try:
-                print('#########################')
                 completion = "<think>" + completion
-                print(completion)
-
-
-                if not self._validate_gsm8k_response_format(completion):
-                    print('Response Format Error')
-                    rewards.append(0.0)  # Penalty to avoid format errors
-                    continue
-
-
-                # Use the GSM8KRewardModel class
-                reward_model = GSM8KRewardModel(answer_i)
-                reward = reward_model.compute_score(completion)
+                format_reward, reason_str = self._format_reward_fn(completion)
+                correctness_reward = self._correctness_reward_fn(completion, answer)
+                reward = format_reward + correctness_reward
+                log.info(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
                 rewards.append(reward)
-                print('-----')
-                print(reward)
-                print('-----')
-                print('#########################')
             except Exception as e:
-                print(e)
+                log.info(e)
                 rewards.append(0.0)
-
-
         return rewards
 
 
@@ -1291,68 +1271,61 @@ class GSM8KTrainer(BaseTrainer):
         output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
 
-
-        # Load tokenizer
+        # Load tokenizer & model
+        model_config = self._get_model_config()
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
         )
-
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
 
         # Prepare dataset
         dataset = self._prepare_dataset()
-        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-
-
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         # Split dataset
-        train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-        train_dataset = train_test_split["train"]
-        test_dataset = train_test_split["test"]
-
-
-        # Setup Model config
-        model_config = self._get_model_config()
-
+        dataset = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
+        log.info(dataset)
 
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._gsm8k_reward_fn],
+                model=model,
+                reward_funcs=self._reward_fn,
                 args=training_args,
-                train_dataset=train_dataset,
+                train_dataset=dataset['train'],
+                eval_dataset=dataset['test'],
+                processing_class=tokenizer,
+                peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
             )
-
-
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()
             trainer = PPOTrainer(
-                model=model_config.model_name_or_path,
+                model=model,
                 ref_model=model_config.model_name_or_path,  # Same model as reference
                 tokenizer=tokenizer,
                 args=training_args,
-                reward_fn=self._gsm8k_reward_fn,
-                train_dataset=train_dataset,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
+                reward_fn=self._reward_fn,
+                train_dataset=dataset['train'],
+                eval_dataset=dataset['test'],
+                peft_config=peft_config,
             )
-
-
         else:
             raise ValueError(f"Unsupported algorithm: {algorithm}")
-
 
         # Train model
         trainer.train()
         trainer.save_model(training_args.output_dir)
-
 
         if self.cfg.algorithm.training.push_to_hub:
             trainer.push_to_hub(dataset_name='gsm8k-dataset')
@@ -1535,8 +1508,8 @@ def main(cfg: DictConfig):
         trainer = BlocksWorldTrainer(cfg)
     elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
-    elif "gsm8k" or "easymath" in task:
-        trainer = GSM8KTrainer(cfg)
+    elif "gsm8k" or "easymath" or "aqua" in task:
+        trainer = ArithmeticTrainer(cfg)
     else:
         raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
 
