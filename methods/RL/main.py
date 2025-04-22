@@ -33,9 +33,15 @@ import math
 from functools import partial
 from gsm8k_reward_model import GSM8KRewardModel
 import logging
+from accelerate import Accelerator
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
+
+accelerator = Accelerator()
+def log_on_main(text):
+    if accelerator.is_main_process:
+        log.info(text)
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -163,7 +169,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule
         }
-        log.info(f"Data Schedule: {data_schedule}")
+        log_on_main(f"Data Schedule: {data_schedule}")
         self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
     
     # Classical Curriculum Learning
@@ -190,7 +196,7 @@ class TaskSampler(torch.utils.data.Sampler):
                 else:
                     idx = random.choice(indices)
                 batch_indices.append(int(idx))
-            log.info(f"Iteration {i}: Probs = {probs} Batch indices = {batch_indices} Task Difficulties = {chosen_tasks}")
+            log_on_main(f"Iteration {i}: Probs = {probs} Batch indices = {batch_indices} Task Difficulties = {chosen_tasks}")
             yield from batch_indices
 
     def __len__(self):
@@ -357,25 +363,25 @@ class BaseTrainer:
         output_dir = self.output_dir
 
         common_args = {
-            "output_dir": str(output_dir),
             "learning_rate": training_cfg.learning_rate,
             "lr_scheduler_type": training_cfg.lr_scheduler_type,
-            "logging_steps": training_cfg.logging_steps,
             "max_steps": training_cfg.max_steps * len(self.cfg.task.data_files) if training_cfg.curriculum else training_cfg.max_steps,
             "per_device_train_batch_size": training_cfg.per_device_train_batch_size,
             "gradient_accumulation_steps": training_cfg.gradient_accumulation_steps,
-            "gradient_checkpointing": training_cfg.gradient_checkpointing,
-            "bf16": training_cfg.bf16,
-            # Reporting
             "report_to": list(training_cfg.report_to),
             "run_name": self.cfg.output.run_name,
             "push_to_hub": training_cfg.push_to_hub,
+            "gradient_checkpointing": True,
+            "bf16": True,
+            "save_strategy": 'no',
+            "tf32": True,
+            "eval_strategy": "no",
+            "logging_steps": 10,
+            "output_dir": str(output_dir),
             "hub_model_id": self.cfg.output.run_name,
-            "save_strategy": training_cfg.save_strategy,
-            "save_steps": training_cfg.save_steps,
-            "tf32": training_cfg.tf32,
-            "eval_strategy": training_cfg.eval_strategy,
-            "eval_steps": training_cfg.eval_steps
+            "seed": self.cfg.experiment.dataset_seed,
+            "logging_dir": str(output_dir),
+            "accelerator_config":{'split_batches':True}
         }
 
         return common_args, output_dir
@@ -613,11 +619,19 @@ class BlocksWorldTrainer(BaseTrainer):
             with open(self.cfg.task.icl_examples_file) as f:
                 icl_examples = json.load(f)
 
-        # Load tokenizer
+        # Load tokenizer and model
+        model_config = self._get_model_config()
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
         )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
 
         # Prepare dataset
         dataset = self._prepare_dataset()
@@ -638,23 +652,21 @@ class BlocksWorldTrainer(BaseTrainer):
         train_dataset = train_test_split["train"]
         test_dataset = train_test_split["test"]
 
-        # Setup Model config
-        model_config = self._get_model_config()
-
         # Setup training arguments based on algorithm
         if 'grpo' in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
+                model=model,
+                reward_funcs=self._blocksworld_reward_fn,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._blocksworld_reward_fn],
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
             )
 
         elif algorithm == "ppo":
@@ -980,11 +992,19 @@ class CountdownTrainer(BaseTrainer):
         output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
 
-        # Load tokenizer
+        # Load tokenizer and model
+        model_config = self._get_model_config()
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
         )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
 
         # Prepare dataset
         train_dataset, test_dataset = self._prepare_dataset(self.cfg.task.data_files)
@@ -996,23 +1016,21 @@ class CountdownTrainer(BaseTrainer):
         # train_dataset = train_test_split["train"]
         # test_dataset = train_test_split["test"]
 
-        # Setup Model config
-        model_config = self._get_model_config()
-
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._countdown_reward_fn],
+                model=model,
+                reward_funcs=self._countdown_reward_fn,
                 args=training_args,
                 train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
             )
 
         elif algorithm == "ppo":
@@ -1240,10 +1258,6 @@ class ArithmeticTrainer(BaseTrainer):
         if not think_content or not plan_content:
             return 0.0, 'Empty content between tags'
 
-        # Rule 5: Check <answer> immedietly follows </think>
-        if not (response[think_close+len("</think>"):plan_open].strip() == ''):
-            return 0.0, 'There is content between </think> and <answer>'
-
         return format_score, 'Correctly Formatted'
 
     @staticmethod
@@ -1262,10 +1276,10 @@ class ArithmeticTrainer(BaseTrainer):
                 format_reward, reason_str = self._format_reward_fn(completion)
                 correctness_reward = self._correctness_reward_fn(completion, answer)
                 reward = format_reward + correctness_reward
-                log.info(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
+                log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
                 rewards.append(reward)
             except Exception as e:
-                log.info(e)
+                log_on_main(e)
                 rewards.append(0.0)
         return rewards
 
@@ -1294,9 +1308,7 @@ class ArithmeticTrainer(BaseTrainer):
         # Prepare dataset
         dataset = self._prepare_dataset()
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
-        # Split dataset
-        dataset = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-        log.info(dataset)
+        log_on_main(dataset)
 
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
@@ -1305,8 +1317,7 @@ class ArithmeticTrainer(BaseTrainer):
                 model=model,
                 reward_funcs=self._reward_fn,
                 args=training_args,
-                train_dataset=dataset['train'],
-                eval_dataset=dataset['test'],
+                train_dataset=dataset,
                 processing_class=tokenizer,
                 peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
