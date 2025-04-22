@@ -1258,6 +1258,10 @@ class ArithmeticTrainer(BaseTrainer):
         if not think_content or not plan_content:
             return 0.0, 'Empty content between tags'
 
+        # Rule 5: Check <answer> immedietly follows </think>
+        if not (response[think_close+len("</think>"):plan_open].strip() == ''):
+            return 0.0, 'There is content between </think> and <answer>'
+
         return format_score, 'Correctly Formatted'
 
     @staticmethod
