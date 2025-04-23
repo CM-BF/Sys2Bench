@@ -1289,8 +1289,8 @@ class ArithmeticTrainer(BaseTrainer):
                 completion = "<think>" + completion
                 print(completion)
 
-
-                if not self._is_formatted(completion):
+                is_formatted, reason_str = self._is_formatted(completion)
+                if not is_formatted:
                     print('Response Format Error')
                     rewards.append(0.0)  # Penalty to avoid format errors
                     continue
