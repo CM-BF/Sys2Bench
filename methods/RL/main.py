@@ -365,23 +365,23 @@ class BaseTrainer:
         common_args = {
             "learning_rate": training_cfg.learning_rate,
             "lr_scheduler_type": training_cfg.lr_scheduler_type,
+            "logging_steps": training_cfg.logging_steps,
             "max_steps": training_cfg.max_steps * len(self.cfg.task.data_files) if training_cfg.curriculum else training_cfg.max_steps,
             "per_device_train_batch_size": training_cfg.per_device_train_batch_size,
             "gradient_accumulation_steps": training_cfg.gradient_accumulation_steps,
-            "report_to": list(training_cfg.report_to),
-            "push_to_hub": training_cfg.push_to_hub,
             "gradient_checkpointing": training_cfg.gradient_checkpointing,
             "bf16": training_cfg.bf16,
+            "report_to": list(training_cfg.report_to),
+            "push_to_hub": training_cfg.push_to_hub,
             "save_strategy": training_cfg.save_strategy,
             "save_steps": training_cfg.save_steps,
+            "tf32": training_cfg.tf32,
             "output_dir": str(output_dir),
-            "logging_dir": str(output_dir),
             "run_name": self.cfg.output.run_name,
             "hub_model_id": self.cfg.output.run_name,
             "seed": self.cfg.experiment.dataset_seed,
-            "logging_steps": 10,
+            "logging_dir": str(output_dir),
             "eval_strategy": "no",
-            "tf32": True,
             "accelerator_config": {'split_batches': True}
         }
 
