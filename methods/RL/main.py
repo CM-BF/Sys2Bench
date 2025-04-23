@@ -158,7 +158,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
         }
-        self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
+        self.schedule_func = schedule_funcs[data_schedule]
 
     def __iter__(self):
 
