@@ -31,17 +31,21 @@ import random
 from countdown_reward_model import CountdownRewardModel
 import math
 from functools import partial
+# For Arithmetic Tasks
 from gsm8k_reward_model import GSM8KRewardModel
 import logging
 from accelerate import Accelerator
+from vllm import LLM, SamplingParams
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
+
 
 accelerator = Accelerator()
 def log_on_main(text):
     if accelerator.is_main_process:
         log.info(text)
+
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -306,6 +310,8 @@ class BaseTrainer:
         except Exception as e:
             print("Logging in to Hugging Face")
             login(token=hf_token, add_to_git_credential=True)
+
+        self.last_log_time = None
 
     def train(self):
         """Train a model"""
@@ -1225,19 +1231,19 @@ class ArithmeticTrainer(BaseTrainer):
         }
 
     @staticmethod
-    def _format_reward_fn(response: str, format_score=0.1):
+    def _is_formatted(response: str):
         """Validate the response format"""
         response = response.strip()
 
         # Rule 1: Must start with <think> and end with </answer>
         if not response.startswith("<think>") or not response.endswith("</answer>"):
-            return 0.0, "Response does not start with <think> or end with </answer>"
+            return False, "Response does not start with <think> or end with </answer>"
 
         # Rule 2: Must contain exactly one of each tag.
         if response.count("<think>") != 1 or response.count("</think>") != 1:
-            return 0.0, 'Response does not contain exactly one of each think tag'
+            return False, 'Response does not contain exactly one of each think tag'
         if response.count("<answer>") != 1 or response.count("</answer>") != 1:
-            return 0.0, 'Response does not contain exactly one of each answer tag'
+            return False, 'Response does not contain exactly one of each answer tag'
 
         # Find indices for each tag.
         think_open = response.find("<think>")
@@ -1247,42 +1253,54 @@ class ArithmeticTrainer(BaseTrainer):
 
         # Rule 3: The order should be: <think> ... </think> then <answer> ... </answer>
         if think_open != 0:  # Should start with <think>
-            return 0.0, 'Response does not start with <think>'
+            return False, 'Response does not start with <think>'
         if think_close == -1 or plan_open == -1 or plan_close == -1:
-            return 0.0, 'Response does not contain <answer> and </answer>, or </think>'
+            return False, 'Response does not contain <answer> and </answer>, or </think>'
         if think_close > plan_open:
-            return 0.0, 'Response has closing think tag after opening answer tag'
+            return False, 'Response has closing think tag after opening answer tag'
 
         # Rule 4: Check non-empty content between tags.
         think_content = response[len("<think>"):think_close].strip()
         plan_content = response[plan_open + len("<answer>"):plan_close].strip()
         if not think_content or not plan_content:
-            return 0.0, 'Empty content between tags'
+            return False, 'Empty content between tags'
 
         # Rule 5: Check <answer> immedietly follows </think>
         if not (response[think_close+len("</think>"):plan_open].strip() == ''):
-            return 0.0, 'There is content between </think> and <answer>'
+            return False, 'There is content between </think> and <answer>'
 
-        return format_score, 'Correctly Formatted'
+        return True, 'Correctly Formatted'
 
     @staticmethod
-    def _correctness_reward_fn(response: str, answer: str, correctness_score=0.9):
+    def _is_correct(response: str, answer: str):
         answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
         if len(answer_match) > 0:
             if answer_match[0].strip() == answer:
-                return correctness_score
-        return 0.0
+                return True
+        return False
 
-    def _reward_fn(self, prompts, completions, **kwargs):
+    def arithmetic_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
         rewards = []
         for completion, answer in zip(completions, kwargs['answer']):
             try:
                 completion = "<think>" + completion
-                format_reward, reason_str = self._format_reward_fn(completion)
-                correctness_reward = self._correctness_reward_fn(completion, answer)
-                reward = format_reward + correctness_reward
-                log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
+
+                is_formatted, reason_str = self._is_formatted(completion)
+                is_correct = self._is_correct(completion, answer)
+
+                reward = 0.0
+                if is_formatted:
+                    reward += formatted_reward
+                if is_correct:
+                    reward += correctness_reward
                 rewards.append(reward)
+
+                if self.last_log_time is None:
+                    self.last_log_time = time.time()
+                if time.time() - self.last_log_time > 10:
+                    self.last_log_time = time.time()
+                    log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
+
             except Exception as e:
                 log_on_main(e)
                 rewards.append(0.0)
@@ -1320,7 +1338,7 @@ class ArithmeticTrainer(BaseTrainer):
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
                 model=model,
-                reward_funcs=self._reward_fn,
+                reward_funcs=self.arithmetic_reward_fn,
                 args=training_args,
                 train_dataset=dataset,
                 processing_class=tokenizer,
@@ -1355,103 +1373,108 @@ class ArithmeticTrainer(BaseTrainer):
 
     def inference(self):
         """Run inference using the trained model"""
-        # Extract config values
-        model_checkpoint = self.cfg.task.inference.checkpoint
-        sc_num = self.cfg.task.inference.sc_num
+        if self.cfg.task.name == "aqua":
+            pass
 
 
-        # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
-
-        # Load model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_dir,
-            trust_remote_code=self.cfg.model.trust_remote_code
-        )
-
-        # Load test dataset
-        if "gsm8k" in self.cfg.task.name:
-          dataset = datasets.load_dataset("gsm8k", "main", split="test")
-          dataset = dataset.add_column("task", [0] * len(dataset))
         else:
-          dataset = self._prepare_dataset()
-          train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-          dataset = train_test_split["test"]
-
-        test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-        # Custom model for inference
-        model = HFModel(
-            model_pth=model_dir,
-            tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens
-        )
+            # Extract config values
+            model_checkpoint = self.cfg.task.inference.checkpoint
+            sc_num = self.cfg.task.inference.sc_num
 
 
+            # Generate checkpoint path
+            model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
 
-        correct = 0
-        rewards = 0
-        total = 0
-        resume = 0
-        batch_size = 16
-        results = []
+            # Load model and tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_dir,
+                trust_remote_code=self.cfg.model.trust_remote_code
+            )
 
-        pbar = tqdm(range(0, len(test_dataset), batch_size),
-                    initial=resume,
-                    desc=self.cfg.task.name)
+            # Load test dataset
+            if "gsm8k" in self.cfg.task.name:
+                dataset = datasets.load_dataset("gsm8k", "main", split="test")
+                dataset = dataset.add_column("task", [0] * len(dataset))
+            else:
+                dataset = self._prepare_dataset()
+                train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
+                dataset = train_test_split["test"]
 
-        for batch_start in pbar:
-        # Generate batched responses
-            batch = test_dataset[batch_start: batch_start + batch_size]
-            batch_examples = [dict(zip(batch, t)) for t in zip(*batch.values())]
-            inputs = [input["prompt"] for input in batch_examples]
+            test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+            # Custom model for inference
+            model = HFModel(
+                model_pth=model_dir,
+                tokenizer_pth=model_dir,
+                max_new_tokens=self.cfg.task.inference.max_new_tokens
+            )
 
-            outputs = model.generate(inputs,
-                                          hide_input=True,
-                                          do_sample=True,
-                                          skip_special_tokens=False,
-                                          temperature=0.0).text
 
-            for output_idx, output in enumerate(outputs):
-                answer = test_dataset[batch_start + output_idx]["answer"]
-                reward_model = GSM8KRewardModel(answer)
-                score = reward_model.compute_score(output)
 
-                # Record results
-                results.append({
-                    "prompt": inputs[output_idx],
-                    "output": output,
-                    "solution": answer,
-                    "score": score
-                })
+            correct = 0
+            rewards = 0
+            total = 0
+            resume = 0
+            batch_size = 16
+            results = []
 
-                if score > 0.5:
-                    correct += 1
-                total += 1
+            pbar = tqdm(range(0, len(test_dataset), batch_size),
+                        initial=resume,
+                        desc=self.cfg.task.name)
+
+            for batch_start in pbar:
+            # Generate batched responses
+                batch = test_dataset[batch_start: batch_start + batch_size]
+                batch_examples = [dict(zip(batch, t)) for t in zip(*batch.values())]
+                inputs = [input["prompt"] for input in batch_examples]
+
+                outputs = model.generate(inputs,
+                                            hide_input=True,
+                                            do_sample=True,
+                                            skip_special_tokens=False,
+                                            temperature=0.0).text
+
+                for output_idx, output in enumerate(outputs):
+                    answer = test_dataset[batch_start + output_idx]["answer"]
+                    reward_model = GSM8KRewardModel(answer)
+                    score = reward_model.compute_score(output)
+
+                    # Record results
+                    results.append({
+                        "prompt": inputs[output_idx],
+                        "output": output,
+                        "solution": answer,
+                        "score": score
+                    })
+
+                    if score > 0.5:
+                        correct += 1
+                    total += 1
+                accuracy = correct / total if total > 0 else 0
+                print(accuracy)
+
+            # Calculate accuracy
             accuracy = correct / total if total > 0 else 0
-            print(accuracy)
-
-        # Calculate accuracy
-        accuracy = correct / total if total > 0 else 0
-        rewards /= total if total > 0 else 0
-        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
+            rewards /= total if total > 0 else 0
+            print(f'Accuracy: {accuracy}, Rewards: {rewards}')
 
 
-        # Save results to output directory
-        evaluation_results = {
-            "accuracy": accuracy,
-            "rewards": rewards,
-            "model_checkpoint": model_checkpoint,
-            "sc_num": sc_num,
-            "detailed_results": results,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+            # Save results to output directory
+            evaluation_results = {
+                "accuracy": accuracy,
+                "rewards": rewards,
+                "model_checkpoint": model_checkpoint,
+                "sc_num": sc_num,
+                "detailed_results": results,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
 
-        os.makedirs(model_dir, exist_ok=True)
-        with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-            json.dump(evaluation_results, f, indent=2)
+            os.makedirs(model_dir, exist_ok=True)
+            with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+                json.dump(evaluation_results, f, indent=2)
 
 
-        return accuracy
+            return accuracy
 
 class RLReasoner:
     """Class for reasoning with RL models"""
