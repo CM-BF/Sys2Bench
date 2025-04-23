@@ -57,8 +57,10 @@ accelerate launch \
 --offload_param_device none \
 --gradient_accumulation_steps 4 \
 --zero3_init_flag true \
+--zero3_save_16bit_model true \
 --dynamo_backend no \
 methods/RL/main.py \
+mode=train \
 model="$model" \
 task="$task" \
 algorithm.training.curriculum_schedule="$schedule" \
@@ -69,6 +71,16 @@ algorithm.training.report_to=\[tensorboard\] \
 algorithm.training.push_to_hub=false \
 algorithm.training.save_strategy=no \
 algorithm.training.vllm_gpu_memory_utilization=0.8
+
+
+# methods/RL/main.py \
+# mode=inference \
+# model="$model" \
+# task="$task" \
+# algorithm.training.curriculum_schedule="$schedule" \
+# algorithm.training.scheduler_params.mu_exp="$mu" \
+# algorithm.training.scheduler_params.sigma="$sigma" \
+# algorithm.training.max_steps="$max_steps" \
 
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} stopped ..."
