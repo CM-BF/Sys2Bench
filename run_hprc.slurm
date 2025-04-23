@@ -66,7 +66,9 @@ algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
 algorithm.training.report_to=\[tensorboard\] \
-algorithm.training.push_to_hub=false
+algorithm.training.push_to_hub=false \
+algorithm.training.save_strategy=no \
+algorithm.training.vllm_gpu_memory_utilization=0.8
 
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} stopped ..."
