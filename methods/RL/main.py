@@ -1279,13 +1279,49 @@ class ArithmeticTrainer(BaseTrainer):
                 return True
         return False
 
-    def arithmetic_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
+    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
+        """Reward function for gsm8k task"""
+        rewards = []
+
+        for completion, answer_i in zip(completions, answer):
+            try:
+                print('#########################')
+                completion = "<think>" + completion
+                print(completion)
+
+
+                if not self._is_formatted(completion):
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
+
+
+                # Use the GSM8KRewardModel class
+                reward_model = GSM8KRewardModel(answer_i)
+                reward = reward_model.compute_score(completion)
+                rewards.append(reward)
+                print('-----')
+                print(reward)
+                print('-----')
+                print('#########################')
+            except Exception as e:
+                print(e)
+                rewards.append(0.0)
+
+
+        return rewards
+    
+    def aqua_reward_fn(self, prompts, completions, correctness_reward=1.0, formatted_reward=0.1, **kwargs):
         rewards = []
         for completion, answer in zip(completions, kwargs['answer']):
             try:
                 completion = "<think>" + completion
 
                 is_formatted, reason_str = self._is_formatted(completion)
+                if not is_formatted:
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
                 is_correct = self._is_correct(completion, answer)
 
                 reward = 0.0
@@ -1333,12 +1369,18 @@ class ArithmeticTrainer(BaseTrainer):
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
 
+
+        if "gsm8k" in self.cfg.task.name:
+            arithmetic_reward_fn = self._gsm8k_reward_fn
+        else:
+            arithmetic_reward_fn = self.aqua_reward_fn
+
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
                 model=model,
-                reward_funcs=self.arithmetic_reward_fn,
+                reward_funcs=arithmetic_reward_fn,
                 args=training_args,
                 train_dataset=dataset,
                 processing_class=tokenizer,
