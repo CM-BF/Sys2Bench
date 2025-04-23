@@ -382,7 +382,7 @@ class BaseTrainer:
             "save_steps": training_cfg.save_steps,
             "seed": self.cfg.experiment.dataset_seed,
             "logging_dir": str(output_dir),
-            "accelerator_config":{'split_batches':True}
+            "accelerator_config": {'split_batches': True}
         }
 
         return common_args, output_dir
