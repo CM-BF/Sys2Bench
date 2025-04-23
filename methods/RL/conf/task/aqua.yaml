@@ -1,0 +1,11 @@
+name: "aqua"
+
+data_files:
+  - split_benchmarks/TEMH_splits/aqua_splits/aqua_trivial.jsonl
+  - split_benchmarks/TEMH_splits/aqua_splits/aqua_easy.jsonl
+  - split_benchmarks/TEMH_splits/aqua_splits/aqua_medium.jsonl
+  - split_benchmarks/TEMH_splits/aqua_splits/aqua_hard.jsonl
+
+training:
+  max_prompt_length: 400
+  max_completion_length: 512
