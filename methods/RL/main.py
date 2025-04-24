@@ -1271,14 +1271,6 @@ class ArithmeticTrainer(BaseTrainer):
 
         return True, 'Correctly Formatted'
 
-    @staticmethod
-    def _is_correct(response: str, answer: str):
-        answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
-        if len(answer_match) > 0:
-            if answer_match[0].strip() == answer:
-                return True
-        return False
-
     def _gsm8k_reward_fn(self, completions, answer, **kwargs):
         """Reward function for gsm8k task"""
         rewards = []
@@ -1307,28 +1299,29 @@ class ArithmeticTrainer(BaseTrainer):
             except Exception as e:
                 print(e)
                 rewards.append(0.0)
-
-
         return rewards
+
+    @staticmethod
+    def _is_correct(response: str, answer: str):
+        answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
+        if len(answer_match) > 0:
+            if answer_match[-1].strip() == answer:
+                return True
+        return False
     
-    def aqua_reward_fn(self, prompts, completions, correctness_reward=1.0, formatted_reward=0.1, **kwargs):
+    def aqua_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
         rewards = []
         for completion, answer in zip(completions, kwargs['answer']):
+            
             try:
-                completion = "<think>" + completion
+                completion = "<think>" + completion          
+                reward = 0.0
 
                 is_formatted, reason_str = self._is_formatted(completion)
-                if not is_formatted:
-                    print('Response Format Error')
-                    rewards.append(0.0)  # Penalty to avoid format errors
-                    continue
-                is_correct = self._is_correct(completion, answer)
-
-                reward = 0.0
                 if is_formatted:
                     reward += formatted_reward
-                if is_correct:
-                    reward += correctness_reward
+                    if self._is_correct(completion, answer):
+                        reward += correctness_reward
                 rewards.append(reward)
 
                 if self.last_log_time is None:
@@ -1340,6 +1333,7 @@ class ArithmeticTrainer(BaseTrainer):
             except Exception as e:
                 log_on_main(e)
                 rewards.append(0.0)
+
         return rewards
 
 
