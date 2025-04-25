@@ -90,7 +90,6 @@ def main(config):
 
         dataset = config['dataset_preprocess_func'](dataset)
         assert set(['question', 'solution', 'answer']).issubset(dataset.column_names), 'Every dataset needs to have question, solution, answer columns'
-        dataset = dataset.select(range(10))
 
         prompts = [
             tokenizer.apply_chat_template(
@@ -147,11 +146,13 @@ if __name__ == '__main__':
             'model' : 'Qwen/Qwen2.5-3B',
             'trust_remote_code' : True,
             'tensor_parallel_size' : 2,  # num gpus
-            'dtype' : 'bfloat16'
+            'dtype' : 'bfloat16',
+            'gpu_memory_utilization' : 0.9,
+            'max_model_len' : 1024,
         },
 
         'sampling_params' : {
-            'n' : 20,
+            'n' : 20,  # max difficulty level
             'temperature' : 0.8,
             'max_tokens' : 512,
             'min_tokens' : 1
