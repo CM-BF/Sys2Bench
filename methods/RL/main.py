@@ -1162,16 +1162,28 @@ class CountdownTrainer(BaseTrainer):
 class ArithmeticTrainer(BaseTrainer):
     """Class for training and inference on Arithmetic models"""
 
-    def _prepare_dataset(self):
+    def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
-        all_samples = []
-        for task_idx, file in enumerate(self.cfg.task.data_files):
-            file_dataset = load_dataset('json', data_files=file)['train']
-            # Annotate with difficulty
-            file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
-            all_samples.extend(file_dataset)
-        dataset = Dataset.from_list(all_samples)
-        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+
+        if "gsm8k" in self.cfg.task.name:
+            all_samples = []
+            for task_idx, file in enumerate(self.cfg.task.data_files):
+                file_dataset = load_dataset('json', data_files=file)['train']
+                # Annotate with difficulty
+                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
+                all_samples.extend(file_dataset)
+            dataset = Dataset.from_list(all_samples)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        
+        if "aqua" in self.cfg.task.name:
+            dataset = []
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                data = load_dataset('json', data_dir=data_dir, split=split)
+                data = data.add_column("task", [task_idx] * len(data))
+                dataset.append(data)
+            dataset = concatenate_datasets(dataset)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+
         return dataset
 
     def extract_answer(self, text):
@@ -1203,7 +1215,7 @@ class ArithmeticTrainer(BaseTrainer):
 
         elif 'aqua' in self.cfg.task.name:
             question = example["question"]
-            sft = example["rationale"]
+            sft = example["solution"]
             answer = example["answer"].strip()
             options = "  ".join(example["options"])
             instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
@@ -1326,7 +1338,7 @@ class ArithmeticTrainer(BaseTrainer):
 
                 if self.last_log_time is None:
                     self.last_log_time = time.time()
-                if time.time() - self.last_log_time > 10:
+                if time.time() - self.last_log_time > 5:
                     self.last_log_time = time.time()
                     log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
 
@@ -1339,6 +1351,9 @@ class ArithmeticTrainer(BaseTrainer):
 
     def train(self):
         """Train a model using the specified algorithm with configurations from Hydra"""
+
+        log_on_main('\n\n*****\ntrain\n*****\n\n')
+
         # Extract config values
         model_name = self.cfg.model.name
         output_model_name = self.cfg.output.run_name
@@ -1359,7 +1374,7 @@ class ArithmeticTrainer(BaseTrainer):
         peft_config = get_peft_config(model_config)
 
         # Prepare dataset
-        dataset = self._prepare_dataset()
+        dataset = self._prepare_dataset(split='train')
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
 
@@ -1410,8 +1425,72 @@ class ArithmeticTrainer(BaseTrainer):
     def inference(self):
         """Run inference using the trained model"""
         if self.cfg.task.name == "aqua":
-            pass
 
+            log_on_main('\n\n*****\ntest\n*****\n\n')
+
+            # Load Tokenizer & Model
+            tokenizer = AutoTokenizer.from_pretrained(
+                str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code
+            )
+            model = LLM(
+                model=str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code,
+                tensor_parallel_size=torch.cuda.device_count(),
+                dtype=self.cfg.model.torch_dtype,
+                gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+                max_model_len=self.cfg.task.inference.max_model_len,
+                seed=self.cfg.experiment.dataset_seed,
+                task='generate'
+            )
+            sampling_params = SamplingParams(
+                n=self.cfg.task.inference.n,
+                temperature=self.cfg.task.inference.temperature,
+                max_tokens=self.cfg.task.inference.max_tokens,
+                min_tokens=1,
+                seed=self.cfg.experiment.dataset_seed
+            )
+            
+            # Load and Preprocess Dataset
+            dataset = self._prepare_dataset(split='test')
+            dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+            dataset = dataset.remove_columns('sft')
+            log_on_main(dataset)
+
+            # Generate Completions
+            outputs = model.generate(dataset['prompt'], sampling_params)
+            outputs = [
+                completion_output.text
+                for request_output in outputs
+                for completion_output in request_output.outputs
+            ]
+            dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+            dataset = dataset.add_column('output', outputs)
+
+            # Calcuate Rewards
+            rewards = np.array(
+                self.aqua_reward_fn(
+                    prompts=None,
+                    completions=dataset['output'],
+                    answer=dataset['answer']
+                )
+            )
+            dataset = dataset.add_column('reward', rewards.tolist())
+            dataset.to_json(os.path.join(str(self.output_dir), 'outputs.jsonl'))
+
+            # Process Metrics
+            results = dict()
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+                task_rewards = np.array(task_outputs['reward'])
+                results[os.path.basename(os.path.normpath(data_dir))] = {
+                    'avg_reward': round(task_rewards.mean().item(), 3),
+                    'accuracy': round((task_rewards > 0.5).mean().item(), 3),
+                    'support': len(task_rewards)
+                }
+            log_on_main(json.dumps(results, indent=4))
+            with open(os.path.join(str(self.output_dir), 'results.json'), "w") as f:
+                json.dump(results, f, indent=4)           
 
         else:
             # Extract config values
@@ -1429,13 +1508,8 @@ class ArithmeticTrainer(BaseTrainer):
             )
 
             # Load test dataset
-            if "gsm8k" in self.cfg.task.name:
-                dataset = datasets.load_dataset("gsm8k", "main", split="test")
-                dataset = dataset.add_column("task", [0] * len(dataset))
-            else:
-                dataset = self._prepare_dataset()
-                train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-                dataset = train_test_split["test"]
+            dataset = datasets.load_dataset("gsm8k", "main", split="test")
+            dataset = dataset.add_column("task", [0] * len(dataset))
 
             test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
             # Custom model for inference

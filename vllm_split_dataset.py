@@ -1,6 +1,7 @@
 import os
 import re
 import numpy as np
+from tqdm import tqdm
 from datasets import load_dataset
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
@@ -99,24 +100,25 @@ def main(config):
             )
             for example in dataset
         ]
+
         outputs = model.generate(prompts, sampling_params)
-        outputs = [
-            [completion_output.text for completion_output in request_output.outputs]
-            for request_output in outputs
-        ]
 
-        is_correct = [
+        is_correct = np.array([
             [
-                config['correctness_func'](completion_output, dataset['answer'][request_idx]) 
-                for completion_output in request_output
+                config['correctness_func'](completion_output.text, dataset['answer'][request_idx]) 
+                for completion_output in request_output.outputs
             ]
-            for request_idx, request_output in enumerate(outputs)
-        ]
-        difficulty = [sampling_params.n-sum(item) for item in is_correct]
-        dataset = dataset.add_column('difficulty', difficulty)
+            for request_idx, request_output in tqdm(enumerate(outputs), desc='Checking Correctness')
+        ])
+        
+        difficulty = sampling_params.n - is_correct.sum(axis=1)
+        dataset = dataset.add_column('difficulty', difficulty.tolist())
 
-        for task_name, dataset in split_into_tasks(dataset, config['num_splits']).items():
-            dataset.to_json(os.path.join(config['save_path'], task_name, split+'.jsonl'))
+        if config['num_splits'] == 1:
+            dataset.to_json(os.path.join(config['save_path'], split+'.jsonl'))
+        else:
+            for task_name, dataset in split_into_tasks(dataset, config['num_splits']).items():
+                dataset.to_json(os.path.join(config['save_path'], task_name, split+'.jsonl'))
 
     
 if __name__ == '__main__':
@@ -145,7 +147,7 @@ if __name__ == '__main__':
         'model_params' : {
             'model' : 'Qwen/Qwen2.5-3B',
             'trust_remote_code' : True,
-            'tensor_parallel_size' : 2,  # num gpus
+            'tensor_parallel_size' : 2,  # num gpus 2/4/8
             'dtype' : 'bfloat16',
             'gpu_memory_utilization' : 0.9,
             'max_model_len' : 1024,
