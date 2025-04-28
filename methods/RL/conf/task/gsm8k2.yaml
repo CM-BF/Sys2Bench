@@ -1,0 +1,21 @@
+name: "gsm8k2"
+data_files:
+  - split_benchmarks/sc_splits/easymath_sc_splits/trivial.jsonl
+  - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_easy.jsonl
+  - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_medium.jsonl
+  - split_benchmarks/sc_splits/gsm8k_sc_splits/gsm8k_hard.jsonl
+  
+training:
+  max_prompt_length: 1600
+  max_completion_length: 1024
+
+inference:
+  checkpoint: 1200
+  steps: 4
+  temperature: 0.0
+  sc_num: 1
+  use_icl: false
+  icl_num: 2
+  num_shot: 4
+  resume: 0
+  max_new_tokens: 512
