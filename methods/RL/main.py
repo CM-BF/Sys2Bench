@@ -152,15 +152,20 @@ class TaskSampler(torch.utils.data.Sampler):
         self.max_dataset_len = len(self.dataset)
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
-        self.indices_by_task = {task_idx: (np.array(self.dataset['task']) == task_idx).nonzero()[0].tolist() for task_idx in range(num_tasks)}
-        schedule_funcs = {
+        self.rng = np.random.default_rng(seed)
+        task_col = np.array(self.dataset['task'])
+        self.indices_by_task = {
+            t: self.rng.permutation(np.where(task_col == t)[0])
+            for t in range(num_tasks)
+        }
+        self.schedule_funcs = {
             'balanced': self._balanced_schedule,
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule
         }
         print(f"Data Schedule: {data_schedule}")
-        self.schedule_func = schedule_funcs.get(data_schedule, self._balanced_schedule)
+        self.schedule_func = self.schedule_funcs.get(data_schedule, self._balanced_schedule)
     
     # Classical Curriculum Learning
     @staticmethod    
@@ -169,7 +174,9 @@ class TaskSampler(torch.utils.data.Sampler):
         return dict(enumerate(np.eye(num_tasks)[active_task].tolist()))
 
     def __iter__(self):
-
+        task_ptrs = {t: 0 for t in range(self.num_tasks)}
+        indices_by_task = {t: idx.copy() for t, idx in self.indices_by_task.items()}
+        
         for i in range(self.total_iterations):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
 
@@ -181,18 +188,24 @@ class TaskSampler(torch.utils.data.Sampler):
 
             for task in chosen_tasks:
                 indices = self.indices_by_task[task]
-
-                if len(indices) == 0:
-                    idx = random.randrange(len(self.dataset))
-                else:
-                    idx = random.choice(indices)
-                batch_indices.append(int(idx))
+                ptr = task_ptrs[task]
+                if ptr >= len(indices):
+                    # Once exhausted, reshuffle that task’s pool
+                    indices = self.rng.permutation(indices)
+                    indices_by_task[task] = indices
+                    ptr = 0
+                batch_indices.append(int(indices[ptr]))
+                task_ptrs[task] = ptr + 1
+                # if len(indices) == 0:
+                #     idx = random.randrange(len(self.dataset))
+                # else:
+                #     idx = random.choice(indices)
+                # batch_indices.append(int(idx))
             print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
             yield from batch_indices
 
     def __len__(self):
-        return self.total_iterations * self.batch_size
-
+        return self.total_iterations
     @staticmethod
     def _balanced_schedule(t, T, num_tasks):
         return {i: 1. / num_tasks for i in range(num_tasks)}
@@ -232,18 +245,6 @@ class TaskSampler(torch.utils.data.Sampler):
         
         # Mix with uniform floor to guarantee each probability is at least p_min.
         return {i: p_min + (1 - num_tasks * p_min) * q_i for i, q_i in enumerate(q)}
-
-        # Calculate unnormalized probabilities using Gaussian PDF
-        # unnormalized_probs = {}
-        # for i in range(num_tasks):
-        #     # Calculate PDF of Gaussian for task i
-        #     exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
-        #     unnormalized_probs[i] = math.exp(exponent)
-        #     unnormalized_probs[i] = max(unnormalized_probs[i], p_min)
-
-        # total = sum(unnormalized_probs.values())
-        # return {i: prob / total for i, prob in unnormalized_probs.items()}
-
 
 class CurriculumGRPOTrainer(GRPOTrainer):
     def __init__(self, num_tasks=4, total_iterations=1200, data_schedule='balanced', scheduler_params: dict=None, *args, **kwargs):

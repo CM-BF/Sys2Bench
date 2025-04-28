@@ -36,10 +36,7 @@ class BlocksWorldModel:
         If the name is numeric, return "block <num>"; otherwise, return "<name> block".
         (Note: Colored names will appear in lowercase.)
         """
-        if name.isdigit():
-            return f"block {name}"
-        else:
-            return f"{name} block"
+        return f"{name} block"
 
     # --- Parsing Functions ---
     @classmethod
@@ -401,14 +398,11 @@ class BlocksWorldModel:
         # If no valid actions were performed, set norm_factor to 0.
         if valid_actions_count == 0:
             norm_factor = 0.0
+        elif valid_actions_count <= num_true_actions:
+            norm_factor = 1.0
         else:
-            deviation_ratio = abs(valid_actions_count - num_true_actions) / num_true_actions
+            deviation_ratio = (valid_actions_count - num_true_actions) / num_true_actions
             norm_factor = 1.0 / (1.0 + deviation_ratio)
-        print(f"Valid actions: {valid_actions_count}, True actions: {num_true_actions}, Norm factor: {norm_factor}, IoU: {last_iou}")
-        # if last_iou == 1.0:
-        #     final_reward = last_iou + norm_factor
-        # else:
-        #     final_reward = last_iou
         final_reward = float(last_iou == 1.0) * (1 + norm_factor)
         print(f"Final reward: {final_reward}")
         return final_reward

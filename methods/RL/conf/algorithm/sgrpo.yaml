@@ -7,7 +7,7 @@ training:
   logging_steps: 10
   max_steps: 300
   curriculum: true
-  curriculum_schedule: "classic" # fixed in default, gaussian, cosine or classic
+  curriculum_schedule: "gaussian" # balanced in default, gaussian, cosine or classic
   scheduler_params:
     mu_exp: 0.5
     sigma: 0.5
