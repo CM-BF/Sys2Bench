@@ -16,8 +16,9 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from datasets import load_dataset, concatenate_datasets, Dataset
 from huggingface_hub import login
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
+import datasets
 
 # Task-specific imports
 from blocksworld_reward_model import BlocksWorldModel
@@ -30,8 +31,21 @@ import random
 from countdown_reward_model import CountdownRewardModel
 import math
 from functools import partial
+# For Arithmetic Tasks
+from gsm8k_reward_model import GSM8KRewardModel
+import logging
+from accelerate import Accelerator
+from vllm import LLM, SamplingParams
 
+log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
+
+
+accelerator = Accelerator()
+def log_on_main(text):
+    if accelerator.is_main_process:
+        log.info(text)
+
 
 def cosine_schedule(t, T, num_tasks):
     total = num_tasks * (num_tasks + 1) / 2.0
@@ -164,8 +178,8 @@ class TaskSampler(torch.utils.data.Sampler):
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule
         }
-        print(f"Data Schedule: {data_schedule}")
-        self.schedule_func = self.schedule_funcs.get(data_schedule, self._balanced_schedule)
+        log_on_main(f"Data Schedule: {data_schedule}")
+        self.schedule_func = schedule_funcs[data_schedule]
     
     # Classical Curriculum Learning
     @staticmethod    
@@ -181,7 +195,6 @@ class TaskSampler(torch.utils.data.Sampler):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
 
             probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
-            print(f'For iter {i}, probs = {probs}')
             # Sample a task for each slot in the batch using the probabilities.
             chosen_tasks = np.random.choice(np.arange(self.num_tasks), size=self.batch_size, p=probs, replace=True)
             batch_indices = []
@@ -201,7 +214,7 @@ class TaskSampler(torch.utils.data.Sampler):
                 # else:
                 #     idx = random.choice(indices)
                 # batch_indices.append(int(idx))
-            print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
+            log_on_main(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
             yield from batch_indices
 
     def __len__(self):
@@ -299,6 +312,8 @@ class BaseTrainer:
             print("Logging in to Hugging Face")
             login(token=hf_token, add_to_git_credential=True)
 
+        self.last_log_time = None
+
     def train(self):
         """Train a model"""
         raise NotImplementedError("Train method must be implemented by subclasses")
@@ -355,7 +370,6 @@ class BaseTrainer:
         output_dir = self.output_dir
 
         common_args = {
-            "output_dir": str(output_dir),
             "learning_rate": training_cfg.learning_rate,
             "lr_scheduler_type": training_cfg.lr_scheduler_type,
             "logging_steps": training_cfg.logging_steps,
@@ -364,13 +378,18 @@ class BaseTrainer:
             "gradient_accumulation_steps": training_cfg.gradient_accumulation_steps,
             "gradient_checkpointing": training_cfg.gradient_checkpointing,
             "bf16": training_cfg.bf16,
-            # Reporting
             "report_to": list(training_cfg.report_to),
-            "run_name": self.cfg.output.run_name,
             "push_to_hub": training_cfg.push_to_hub,
-            "hub_model_id": self.cfg.output.run_name,
             "save_strategy": training_cfg.save_strategy,
             "save_steps": training_cfg.save_steps,
+            "tf32": training_cfg.tf32,
+            "output_dir": str(output_dir),
+            "run_name": self.cfg.output.run_name,
+            "hub_model_id": self.cfg.output.run_name,
+            "seed": self.cfg.experiment.dataset_seed,
+            "logging_dir": str(output_dir),
+            "eval_strategy": "no",
+            "accelerator_config": {'split_batches': True}
         }
 
         return common_args, output_dir
@@ -608,11 +627,19 @@ class BlocksWorldTrainer(BaseTrainer):
             with open(self.cfg.task.icl_examples_file) as f:
                 icl_examples = json.load(f)
 
-        # Load tokenizer
+        # Load tokenizer and model
+        model_config = self._get_model_config()
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
         )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
 
         # Prepare dataset
         dataset = self._prepare_dataset()
@@ -633,23 +660,21 @@ class BlocksWorldTrainer(BaseTrainer):
         train_dataset = train_test_split["train"]
         test_dataset = train_test_split["test"]
 
-        # Setup Model config
-        model_config = self._get_model_config()
-
         # Setup training arguments based on algorithm
         if 'grpo' in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
+                model=model,
+                reward_funcs=self._blocksworld_reward_fn,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._blocksworld_reward_fn],
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
             )
 
         elif algorithm == "ppo":
@@ -975,11 +1000,19 @@ class CountdownTrainer(BaseTrainer):
         output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
 
-        # Load tokenizer
+        # Load tokenizer and model
+        model_config = self._get_model_config()
         tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
         )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
 
         # Prepare dataset
         train_dataset, test_dataset = self._prepare_dataset(self.cfg.task.data_files)
@@ -991,23 +1024,21 @@ class CountdownTrainer(BaseTrainer):
         # train_dataset = train_test_split["train"]
         # test_dataset = train_test_split["test"]
 
-        # Setup Model config
-        model_config = self._get_model_config()
-
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
-                model=model_config.model_name_or_path,
-                reward_funcs=[self._countdown_reward_fn],
+                model=model,
+                reward_funcs=self._countdown_reward_fn,
                 args=training_args,
                 train_dataset=train_dataset,
+                eval_dataset=test_dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
                 num_tasks=len(self.cfg.task.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-                eval_dataset=test_dataset,
-                peft_config=get_peft_config(model_config),
             )
 
         elif algorithm == "ppo":
@@ -1128,6 +1159,434 @@ class CountdownTrainer(BaseTrainer):
         return accuracy
 
 
+
+class ArithmeticTrainer(BaseTrainer):
+    """Class for training and inference on Arithmetic models"""
+
+    def _prepare_dataset(self, split='train'):
+        """Prepare dataset for training"""
+
+        if "gsm8k" in self.cfg.task.name:
+            all_samples = []
+            for task_idx, file in enumerate(self.cfg.task.data_files):
+                file_dataset = load_dataset('json', data_files=file)['train']
+                # Annotate with difficulty
+                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
+                all_samples.extend(file_dataset)
+            dataset = Dataset.from_list(all_samples)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        
+        if "aqua" in self.cfg.task.name:
+            dataset = []
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                data = load_dataset('json', data_dir=data_dir, split=split)
+                data = data.add_column("task", [task_idx] * len(data))
+                dataset.append(data)
+            dataset = concatenate_datasets(dataset)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+
+        return dataset
+
+    def extract_answer(self, text):
+        """Extract answer from raw gsm8k answer string"""
+        text = text.replace(",", "")
+        marker_pos = text.find('####')
+
+        if marker_pos == -1:
+            return None
+
+        answer_text = text[marker_pos + 4:].strip()
+        answer_text = answer_text.split()[0]
+
+        try:
+            return answer_text
+        except ValueError:
+            return None
+
+    def _generate_prompt(self, tokenizer, example):
+        """Generate prompt for the arithmetic model"""
+
+        if 'gsm8k' in self.cfg.task.name:
+            question = example["question"]
+            sft = example["answer"]
+            answer = self.extract_answer(sft)
+            if 'gsm8k2' in self.cfg.task.name and example.get("task") == 0:
+                answer = float(sft)
+            instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
+
+        elif 'aqua' in self.cfg.task.name:
+            question = example["question"]
+            sft = example["solution"]
+            answer = example["answer"].strip()
+            options = "  ".join(example["options"])
+            instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+            },
+            {
+                "role": "user",
+                "content": instruction
+            },
+            {
+                "role": "assistant",
+                "content": "Let me solve this step by step.\n<think>"
+            }
+        ]
+
+        return {
+            "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
+            "sft" : sft,
+            "answer": answer,
+            "task" : example["task"]
+        }
+
+    @staticmethod
+    def _is_formatted(response: str):
+        """Validate the response format"""
+        response = response.strip()
+
+        # Rule 1: Must start with <think> and end with </answer>
+        if not response.startswith("<think>") or not response.endswith("</answer>"):
+            return False, "Response does not start with <think> or end with </answer>"
+
+        # Rule 2: Must contain exactly one of each tag.
+        if response.count("<think>") != 1 or response.count("</think>") != 1:
+            return False, 'Response does not contain exactly one of each think tag'
+        if response.count("<answer>") != 1 or response.count("</answer>") != 1:
+            return False, 'Response does not contain exactly one of each answer tag'
+
+        # Find indices for each tag.
+        think_open = response.find("<think>")
+        think_close = response.find("</think>")
+        plan_open = response.find("<answer>")
+        plan_close = response.find("</answer>")
+
+        # Rule 3: The order should be: <think> ... </think> then <answer> ... </answer>
+        if think_open != 0:  # Should start with <think>
+            return False, 'Response does not start with <think>'
+        if think_close == -1 or plan_open == -1 or plan_close == -1:
+            return False, 'Response does not contain <answer> and </answer>, or </think>'
+        if think_close > plan_open:
+            return False, 'Response has closing think tag after opening answer tag'
+
+        # Rule 4: Check non-empty content between tags.
+        think_content = response[len("<think>"):think_close].strip()
+        plan_content = response[plan_open + len("<answer>"):plan_close].strip()
+        if not think_content or not plan_content:
+            return False, 'Empty content between tags'
+
+        # Rule 5: Check <answer> immedietly follows </think>
+        if not (response[think_close+len("</think>"):plan_open].strip() == ''):
+            return False, 'There is content between </think> and <answer>'
+
+        return True, 'Correctly Formatted'
+
+    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
+        """Reward function for gsm8k task"""
+        rewards = []
+
+        for completion, answer_i in zip(completions, answer):
+            try:
+                print('#########################')
+                completion = "<think>" + completion
+                print(completion)
+
+                is_formatted, reason_str = self._is_formatted(completion)
+                if not is_formatted:
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
+
+
+                # Use the GSM8KRewardModel class
+                reward_model = GSM8KRewardModel(answer_i)
+                reward = reward_model.compute_score(completion)
+                rewards.append(reward)
+                print('-----')
+                print(reward)
+                print('-----')
+                print('#########################')
+            except Exception as e:
+                print(e)
+                rewards.append(0.0)
+        return rewards
+
+    @staticmethod
+    def _is_correct(response: str, answer: str):
+        answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
+        if len(answer_match) > 0:
+            if answer_match[-1].strip() == answer:
+                return True
+        return False
+    
+    def aqua_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
+        rewards = []
+        for completion, answer in zip(completions, kwargs['answer']):
+            
+            try:
+                completion = "<think>" + completion          
+                reward = 0.0
+
+                is_formatted, reason_str = self._is_formatted(completion)
+                if is_formatted:
+                    reward += formatted_reward
+                    if self._is_correct(completion, answer):
+                        reward += correctness_reward
+                rewards.append(reward)
+
+                if self.last_log_time is None:
+                    self.last_log_time = time.time()
+                if time.time() - self.last_log_time > 5:
+                    self.last_log_time = time.time()
+                    log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
+
+            except Exception as e:
+                log_on_main(e)
+                rewards.append(0.0)
+
+        return rewards
+
+
+    def train(self):
+        """Train a model using the specified algorithm with configurations from Hydra"""
+
+        log_on_main('\n\n*****\ntrain\n*****\n\n')
+
+        # Extract config values
+        model_name = self.cfg.model.name
+        output_model_name = self.cfg.output.run_name
+        algorithm = self.cfg.algorithm.name
+
+        # Load tokenizer & model
+        model_config = self._get_model_config()
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
+
+        # Prepare dataset
+        dataset = self._prepare_dataset(split='train')
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        log_on_main(dataset)
+
+
+        if "gsm8k" in self.cfg.task.name:
+            arithmetic_reward_fn = self._gsm8k_reward_fn
+        else:
+            arithmetic_reward_fn = self.aqua_reward_fn
+
+        # Setup training arguments based on algorithm
+        if "grpo" in algorithm:
+            training_args = self._setup_grpo_training()
+            trainer = CurriculumGRPOTrainer(
+                model=model,
+                reward_funcs=arithmetic_reward_fn,
+                args=training_args,
+                train_dataset=dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
+                num_tasks=len(self.cfg.task.data_files),
+                total_iterations=training_args.max_steps,
+                data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                scheduler_params=self.cfg.algorithm.training.scheduler_params,
+            )
+        elif algorithm == "ppo":
+            training_args = self._setup_ppo_training()
+            trainer = PPOTrainer(
+                model=model,
+                ref_model=model_config.model_name_or_path,  # Same model as reference
+                tokenizer=tokenizer,
+                args=training_args,
+                reward_fn=self._reward_fn,
+                train_dataset=dataset['train'],
+                eval_dataset=dataset['test'],
+                peft_config=peft_config,
+            )
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+        # Train model
+        trainer.train()
+        trainer.save_model(training_args.output_dir)
+
+        if self.cfg.algorithm.training.push_to_hub:
+            trainer.push_to_hub(dataset_name='gsm8k-dataset')
+
+
+    def inference(self):
+        """Run inference using the trained model"""
+        if self.cfg.task.name == "aqua":
+
+            log_on_main('\n\n*****\ntest\n*****\n\n')
+
+            # Load Tokenizer & Model
+            tokenizer = AutoTokenizer.from_pretrained(
+                str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code
+            )
+            model = LLM(
+                model=str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code,
+                tensor_parallel_size=torch.cuda.device_count(),
+                dtype=self.cfg.model.torch_dtype,
+                gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+                max_model_len=self.cfg.task.inference.max_model_len,
+                seed=self.cfg.experiment.dataset_seed,
+                task='generate'
+            )
+            sampling_params = SamplingParams(
+                n=self.cfg.task.inference.n,
+                temperature=self.cfg.task.inference.temperature,
+                max_tokens=self.cfg.task.inference.max_tokens,
+                min_tokens=1,
+                seed=self.cfg.experiment.dataset_seed
+            )
+            
+            # Load and Preprocess Dataset
+            dataset = self._prepare_dataset(split='test')
+            dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+            dataset = dataset.remove_columns('sft')
+            log_on_main(dataset)
+
+            # Generate Completions
+            outputs = model.generate(dataset['prompt'], sampling_params)
+            outputs = [
+                completion_output.text
+                for request_output in outputs
+                for completion_output in request_output.outputs
+            ]
+            dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+            dataset = dataset.add_column('output', outputs)
+
+            # Calcuate Rewards
+            rewards = np.array(
+                self.aqua_reward_fn(
+                    prompts=None,
+                    completions=dataset['output'],
+                    answer=dataset['answer']
+                )
+            )
+            dataset = dataset.add_column('reward', rewards.tolist())
+            dataset.to_json(os.path.join(str(self.output_dir), 'outputs.jsonl'))
+
+            # Process Metrics
+            results = dict()
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+                task_rewards = np.array(task_outputs['reward'])
+                results[os.path.basename(os.path.normpath(data_dir))] = {
+                    'avg_reward': round(task_rewards.mean().item(), 3),
+                    'accuracy': round((task_rewards > 0.5).mean().item(), 3),
+                    'support': len(task_rewards)
+                }
+            log_on_main(json.dumps(results, indent=4))
+            with open(os.path.join(str(self.output_dir), 'results.json'), "w") as f:
+                json.dump(results, f, indent=4)           
+
+        else:
+            # Extract config values
+            model_checkpoint = self.cfg.task.inference.checkpoint
+            sc_num = self.cfg.task.inference.sc_num
+
+
+            # Generate checkpoint path
+            model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+
+            # Load model and tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_dir,
+                trust_remote_code=self.cfg.model.trust_remote_code
+            )
+
+            # Load test dataset
+            dataset = datasets.load_dataset("gsm8k", "main", split="test")
+            dataset = dataset.add_column("task", [0] * len(dataset))
+
+            test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+            # Custom model for inference
+            model = HFModel(
+                model_pth=model_dir,
+                tokenizer_pth=model_dir,
+                max_new_tokens=self.cfg.task.inference.max_new_tokens
+            )
+
+
+
+            correct = 0
+            rewards = 0
+            total = 0
+            resume = 0
+            batch_size = 16
+            results = []
+
+            pbar = tqdm(range(0, len(test_dataset), batch_size),
+                        initial=resume,
+                        desc=self.cfg.task.name)
+
+            for batch_start in pbar:
+            # Generate batched responses
+                batch = test_dataset[batch_start: batch_start + batch_size]
+                batch_examples = [dict(zip(batch, t)) for t in zip(*batch.values())]
+                inputs = [input["prompt"] for input in batch_examples]
+
+                outputs = model.generate(inputs,
+                                            hide_input=True,
+                                            do_sample=True,
+                                            skip_special_tokens=False,
+                                            temperature=0.0).text
+
+                for output_idx, output in enumerate(outputs):
+                    answer = test_dataset[batch_start + output_idx]["answer"]
+                    reward_model = GSM8KRewardModel(answer)
+                    score = reward_model.compute_score(output)
+
+                    # Record results
+                    results.append({
+                        "prompt": inputs[output_idx],
+                        "output": output,
+                        "solution": answer,
+                        "score": score
+                    })
+
+                    if score > 0.5:
+                        correct += 1
+                    total += 1
+                accuracy = correct / total if total > 0 else 0
+                print(accuracy)
+
+            # Calculate accuracy
+            accuracy = correct / total if total > 0 else 0
+            rewards /= total if total > 0 else 0
+            print(f'Accuracy: {accuracy}, Rewards: {rewards}')
+
+
+            # Save results to output directory
+            evaluation_results = {
+                "accuracy": accuracy,
+                "rewards": rewards,
+                "model_checkpoint": model_checkpoint,
+                "sc_num": sc_num,
+                "detailed_results": results,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            os.makedirs(model_dir, exist_ok=True)
+            with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+                json.dump(evaluation_results, f, indent=2)
+
+
+            return accuracy
+
 class RLReasoner:
     """Class for reasoning with RL models"""
 
@@ -1205,8 +1664,10 @@ def main(cfg: DictConfig):
         trainer = BlocksWorldTrainer(cfg)
     elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
+    elif "gsm8k" or "easymath" or "aqua" in task:
+        trainer = ArithmeticTrainer(cfg)
     else:
-        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld' or 'countdown'")
+        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
 
     # Check which mode to run
     if cfg.mode == "train":
