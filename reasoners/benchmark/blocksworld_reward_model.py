@@ -36,10 +36,7 @@ class BlocksWorldModel:
         If the name is numeric, return "block <num>"; otherwise, return "<name> block".
         (Note: Colored names will appear in lowercase.)
         """
-        if name.isdigit():
-            return f"block {name}"
-        else:
-            return f"{name} block"
+        return f"{name} block"
 
     # --- Parsing Functions ---
     @classmethod

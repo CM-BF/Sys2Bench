@@ -8,7 +8,7 @@ import sys
 import random
 from reasoners import Evaluator
 import copy
-from reasoners.benchmark.bw_augmentor import generate_augmentations
+# from reasoners.benchmark.bw_augmentor import generate_augmentations
 import reasoners.benchmark.bw_utils as bw_utils
 
 def rap_bw_extractor(algo_output):
@@ -65,13 +65,31 @@ class BWEvaluator(Evaluator):
                  disable_tqdm=False,
                  output_extractor=rap_bw_extractor,
                  answer_extractor=lambda x:x,
-                 sample_prompt_type="rap") -> None:
+                 sample_prompt_type="rap",
+                 is_step1=False,
+                 ) -> None:
         super().__init__()
         self.init_prompt = init_prompt
         self.output_extractor = output_extractor
         self.answer_extractor = answer_extractor
         self.input_processor = lambda x: x
-        self.full_dataset = bw_utils.load_blocksworld(config_file, domain_file, data_path)  # [{"goal": str, "init": str}]
+        if 'step_1' in data_path:
+            from blocksworld_reward_model import BlocksWorldModel
+            self.is_step1 = True
+            self.evaluator = BlocksWorldModel
+            question = "\n[STATEMENT]\nAs initial conditions I have that, the orange block is clear, the hand is empty, the blue block is on top of the red block, the orange block is on top of the blue block and the red block is on the table.\n\nMy plan is as follows:\n\n[PLAN]\n"
+            with open(data_path, 'r') as f:
+                data = json.load(f)
+            self.full_dataset = []
+            for i, d in enumerate(data):
+                question_obj = {}
+                question_obj['init'] = d['init']
+                question_obj['goal'] = d['goal']
+                question_obj['plan'] = d['plan']
+                question_obj['question'] = question
+                self.full_dataset.append(question_obj)
+        else:        
+            self.full_dataset = bw_utils.load_blocksworld(config_file, domain_file, data_path)  # [{"goal": str, "init": str}]
         self._dataset_name = 'blocksworld'
         self.disable_log = disable_log
         self.disable_tqdm = disable_tqdm
@@ -170,13 +188,21 @@ class BWEvaluator(Evaluator):
         return dataset
 
     def eval_output(self, answer, output):
+        if self.is_step1:
+            problem_evaluator = self.evaluator(answer['init'], answer['goal'], answer['plan'])
+            try:
+                final_state = problem_evaluator.simulate_plan(output)
+                ans = problem_evaluator.check_goal(final_state)[0]
+            except:
+                ans = False
+            return ans
         bw_utils.text_to_plan_blocksworld(output, answer["instance_file"], self.config_file, self.domain_file, self.lm_plan_file)
         correct = bw_utils.validate_plan(self.domain_file, answer["instance_file"], self.lm_plan_file)[0]
         return correct
     
 if __name__ == "__main__":
     config_file: str = "data/blocksworld/bw_config.yaml"
-    steps = 6
+    steps = 1
     domain_file: str = "data/blocksworld/generated_domain.pddl"
     data_path=f'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
     prompt_path='prompts/blocksworld/pool_prompt_v1.json'
