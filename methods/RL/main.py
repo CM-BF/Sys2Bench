@@ -809,7 +809,7 @@ class BlocksWorldTrainer(BaseTrainer):
             data_path=data_path,
             init_prompt=prompt,
             disable_log=False,
-            output_extractor=lambda x: sc_output_extractor(x, mode=mode)
+            output_extractor=lambda x: sc_output_extractor(x, mode=mode),
             mode=mode,
             sample_prompt_type="rap"  # rap prompt includes cot
         )
