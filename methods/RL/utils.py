@@ -2,7 +2,7 @@ import random
 import re
 from collections import Counter
 
-def sc_output_extractor(algo_output):
+def sc_output_extractor(algo_output, mode = "majority"):
     """
     If algo_output is a flat list, returns the majority extract_plan().
     If algo_output is a list of lists, performs majority vote per index
@@ -11,6 +11,10 @@ def sc_output_extractor(algo_output):
     if not algo_output:
         return None
 
+    if mode == "pass":
+        answers = [extract_plan(x) for x in algo_output]
+        return answers
+    
     # Helper to get the top-voted plan from a list of raw outputs
     def majority_plan(raw_outputs):
         answers = [extract_plan(x) for x in raw_outputs]
