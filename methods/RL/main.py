@@ -179,7 +179,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'classic': self._step_schedule
         }
         log_on_main(f"Data Schedule: {data_schedule}")
-        self.schedule_func = schedule_funcs[data_schedule]
+        self.schedule_func = self.schedule_funcs[data_schedule]
     
     # Classical Curriculum Learning
     @staticmethod    
