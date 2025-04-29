@@ -466,31 +466,6 @@ class BlocksWorldTrainer(BaseTrainer):
             all_samples.extend(file_dataset)
         dataset = Dataset.from_list(all_samples)
 
-        # if self.cfg.experiment.dataset_size > 0:
-        #     data_files = self.cfg.task.data_files
-        #     num_files = len(data_files)
-        #     samples_per_file = self.cfg.experiment.dataset_size // num_files
-
-        #     all_samples = []
-        #     for file in data_files:
-        #         # Load and shuffle the dataset for this file
-        #         file_dataset = load_dataset('json', data_files=file)['train']
-        #         file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        #         # Select up to samples_per_file from this file (or all if fewer available)
-        #         num_samples = min(len(file_dataset), samples_per_file)
-        #         file_samples = file_dataset.select(range(num_samples))
-        #         all_samples.extend(file_samples)
-            
-        #     # Convert the collected samples into a HuggingFace Dataset and shuffle the final list
-        #     dataset = Dataset.from_list(all_samples)
-        #     # dataset = Dataset.from_list(all_samples)
-        #     # dataset = Dataset.from_list(all_samples)
-        # else:
-        #     # Load the entire dataset and shuffle if no size limit is provided
-        #     dataset = load_dataset('json', data_files=self.cfg.task.data_files)['train']
-        #     dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        
-        # Final shuffle for randomness
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         print(f"Dataset prepared with {len(dataset)} samples")
         return dataset
@@ -783,13 +758,14 @@ class BlocksWorldTrainer(BaseTrainer):
         steps = self.cfg.task.inference.steps
         temperature = self.cfg.task.inference.temperature
         sc_num = self.cfg.task.inference.sc_num
+        pass_at_k = self.cfg.task.inference.pass_at_k
         use_icl = self.cfg.task.inference.use_icl
         prompt_path = self.cfg.task.inference.prompt_path
         resume = self.cfg.task.inference.resume
-
+        mode = 'pass' if pass_at_k == 1 else 'majority'
         # Generate checkpoint path
         model_dir = self._get_checkpoint_path(model_checkpoint)
-
+        max_batch_size = self.cfg.algorithm.inference.max_batch_size
         # Setup data path
         data_path = self.cfg.task.inference.data_path.format(steps=steps)
 
@@ -813,7 +789,8 @@ class BlocksWorldTrainer(BaseTrainer):
         base_model = HFModel(
             model_pth=model_dir,
             tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens
+            max_new_tokens=self.cfg.task.inference.max_new_tokens,
+            max_batch_size=max_batch_size
         )
 
         # Create reasoner
@@ -821,7 +798,8 @@ class BlocksWorldTrainer(BaseTrainer):
             base_model,
             temperature=temperature,
             sc_num=sc_num,
-            icl_example=icl
+            icl_example=icl,
+            pass_at_k=pass_at_k,
         )
 
         # Setup evaluator
@@ -831,18 +809,13 @@ class BlocksWorldTrainer(BaseTrainer):
             data_path=data_path,
             init_prompt=prompt,
             disable_log=False,
-            output_extractor=sc_output_extractor,
+            output_extractor=lambda x: sc_output_extractor(x, mode=mode)
+            mode=mode,
             sample_prompt_type="rap"  # rap prompt includes cot
         )
 
         # Run evaluation
-        accuracy = evaluator.evaluate(
-            reasoner,
-            shuffle_prompt=True,
-            num_shot=self.cfg.task.inference.num_shot,
-            resume=resume,
-            log_dir=log_dir
-        )
+        accuracy = evaluator.batched_evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir, batch_size=max_batch_size)
 
         print(f'Accuracy: {accuracy}')
 
@@ -1587,25 +1560,27 @@ class ArithmeticTrainer(BaseTrainer):
 
             return accuracy
 
-class RLReasoner:
-    """Class for reasoning with RL models"""
-
-    def __init__(self, base_model, temperature=0.8, sc_num=1, model_type="completion", icl_example=""):
+class RLReasoner():
+    def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
         self.base_model = base_model
         self.temperature = temperature
         self.model_type = model_type
-        self.sc_num = sc_num
+        assert not (sc_num > 1 and pass_at_k > 1), "sc_num > 1 and pass_at_k > 1 is not supported"
+        if sc_num > 1:
+            self.num_generations = sc_num
+        else:
+            self.num_generations = pass_at_k
         self.tokenizer = base_model.tokenizer
         self.icl_example = icl_example
-
+    
     def get_r1_prompt(self, example):
         r1_prefix = [{
-            "role": "system",
-            "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
-        },
-            {
+                "role": "system",
+                "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+            },
+            { 
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <answer> </answer> tags.\n"
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n" # , Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n for example: <plan>\npick up the blue block\nstack the blue block on top of the yellow block\nunstack the orange block from on top of the black block\nstack the orange block on top of the red block</plan>
             },
             {
                 "role": "assistant",
@@ -1613,17 +1588,25 @@ class RLReasoner:
             }
         ]
         return self.tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True)
-
+        # return {"prompt": tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True), "plan": plan, "init": init, "goal": goal}
+    
     def __call__(self, example, prompt=None):
-        inputs = self.get_r1_prompt(example)
+        # inputs = prompt["icl"].replace("<init_state>", example["init"])\
+        #     .replace("<goals>", example["goal"]).replace("<action>", "")
+        if isinstance(example, list):
+            inputs = [self.get_r1_prompt(ex) for ex in example]
+        else:
+            inputs = [self.get_r1_prompt(example)]
         outputs = []
-        for _ in range(self.sc_num):
-            if self.model_type == "completion":
-                outputs.append(self.base_model.generate([inputs],
-                                                        hide_input=True,
-                                                        do_sample=True,
-                                                        temperature=self.temperature).text[0].strip())
-        return outputs
+        for _ in range(self.num_generations):
+          if self.model_type == "completion":   
+              outputs.append(self.base_model.generate(inputs,
+                                            hide_input=True,
+                                            do_sample=True,
+                                            skip_special_tokens=False,
+                                            temperature=0.0).text) 
+        outputs = [list(group) for group in zip(*outputs)]
+        return outputs  
 
 
 def occupy_gpu_memory(gb=75, device="cuda:0"):

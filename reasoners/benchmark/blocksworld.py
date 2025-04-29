@@ -67,6 +67,7 @@ class BWEvaluator(Evaluator):
                  answer_extractor=lambda x:x,
                  sample_prompt_type="rap",
                  is_step1=False,
+                 mode="majority"
                  ) -> None:
         super().__init__()
         self.init_prompt = init_prompt
@@ -94,10 +95,11 @@ class BWEvaluator(Evaluator):
         self.disable_log = disable_log
         self.disable_tqdm = disable_tqdm
         self.sample_prompt_type = sample_prompt_type
-
+        self.mode = mode
         self.lm_plan_file = "tmp_plan.txt"
         self.config_file = config_file
         self.domain_file = domain_file
+        print(self.mode)
 
     def sample_prompt(self,
                       shuffle_prompt=True,
@@ -186,19 +188,43 @@ class BWEvaluator(Evaluator):
         dataset = [{'init': init[i], 'goal': goal[i], 'plan': plan[i]} for i in range(len(init))]
 
         return dataset
+    def eval_output(self, answer, outputs):
+        if isinstance(outputs, str):
+            outputs = [outputs]
+        # else assume it's already a list of strings
 
-    def eval_output(self, answer, output):
-        if self.is_step1:
-            problem_evaluator = self.evaluator(answer['init'], answer['goal'], answer['plan'])
-            try:
-                final_state = problem_evaluator.simulate_plan(output)
-                ans = problem_evaluator.check_goal(final_state)[0]
-            except:
-                ans = False
-            return ans
-        bw_utils.text_to_plan_blocksworld(output, answer["instance_file"], self.config_file, self.domain_file, self.lm_plan_file)
-        correct = bw_utils.validate_plan(self.domain_file, answer["instance_file"], self.lm_plan_file)[0]
-        return correct
+        def check_one(output):
+            if self.is_step1:
+                evaluator = self.evaluator(answer['init'], answer['goal'], answer['plan'])
+                try:
+                    final_state = evaluator.simulate_plan(output)
+                    return evaluator.check_goal(final_state)[0]
+                except Exception:
+                    return False
+            else:
+                bw_utils.text_to_plan_blocksworld(
+                    output,
+                    answer["instance_file"],
+                    self.config_file,
+                    self.domain_file,
+                    self.lm_plan_file
+                )
+                return bw_utils.validate_plan(
+                    self.domain_file,
+                    answer["instance_file"],
+                    self.lm_plan_file
+                )[0]
+
+        if self.mode == 'pass':
+                # Return a list of booleans, one per candidate
+            return any(check_one(o) for o in outputs)
+
+        elif self.mode == 'majority':
+                # Only one collapsed output expected—evaluate and return its correctness
+            return bool(check_one(outputs[0]))
+
+        else:
+            raise ValueError(f"Unknown eval mode: {self.mode}")
     
 if __name__ == "__main__":
     config_file: str = "data/blocksworld/bw_config.yaml"
