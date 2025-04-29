@@ -1094,27 +1094,24 @@ class CountdownTrainer(BaseTrainer):
         total = 0
         results = []
 
-        for example in tqdm(test_dataset):
+        batch_size = 32
+        for i in tqdm(range(0, len(test_dataset), batch_size), desc="Testing batches"):
+            prompt_data = [self._generate_prompt(tokenizer, test_dataset[k]) for k in range(i, i + batch_size)]
             # Generate prompt
-            prompt_data = self._generate_prompt(tokenizer, example)
-            prompt = prompt_data["prompt"]
+            numbers_list = [item["numbers"] for item in prompt_data]
+            target_list = [item["target"] for item in prompt_data]
+            prompt_list = [item["prompt"] for item in prompt_data]
 
             # Generate responses
             outputs = []
             for _ in range(sc_num):
-                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
-                outputs.append(output)
+                outputs += model.generate(prompt_list, do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text
 
             # Evaluate responses
-            for output in outputs:
-                # Prepare ground truth for scoring
-                ground_truth = {
-                    "target": prompt_data["target"],
-                    "numbers": prompt_data["numbers"]
-                }
+            for output, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
 
                 # Use the CountdownRewardModel for evaluation
-                reward_model = CountdownRewardModel(prompt_data["target"], prompt_data["numbers"])
+                reward_model = CountdownRewardModel(target, numbers)
 
                 # Calculate score
                 score = reward_model.compute_score(output)
@@ -1127,8 +1124,8 @@ class CountdownTrainer(BaseTrainer):
                     "prompt": prompt,
                     "output": output,
                     "solution": solution,
-                    "target": prompt_data["target"],
-                    "numbers": prompt_data["numbers"],
+                    "target": target,
+                    "numbers": numbers,
                     "score": score
                 })
 
