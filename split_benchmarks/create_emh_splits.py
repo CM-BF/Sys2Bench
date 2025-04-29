@@ -45,8 +45,7 @@ def normalize_keys(data):
 
 def main():
     data = []
-    data.extend(load_data("sc_splits/gsm8k_sc_splits", "gsm8k"))
-    data.extend(load_data("sc_splits/aqua_sc_splits", "aqua"))
+    data.extend(load_data("/mnt/data/shared/blakeo/LM-Reasoning/Reasoning/split_benchmarks/GSM8K_FULL", "gsm8k"))
     print(f"Total combined examples: {len(data)}")
     data = normalize_keys(data)
 
@@ -71,7 +70,7 @@ def main():
 
     print(f"New split sizes: Easy={len(easy)}, Medium={len(medium)}, Hard={len(hard)}")
 
-    output_dir = "EMH_splits/gsm8k_aqua"  # Updated directory name
+    output_dir = "/mnt/data/shared/blakeo/LM-Reasoning/Reasoning/split_benchmarks/GSM8K_FULL/TEMH"
     os.makedirs(output_dir, exist_ok=True)
 
     print("Saving new splits...")
