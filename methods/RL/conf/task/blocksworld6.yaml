@@ -4,7 +4,7 @@ data_files:
   # - data/blocksworld/train_set-1-all.json
   # - data/blocksworld/train_set-2-all.json
   # - data/blocksworld/train_set-4-all.json
-  - data/blocksworld/train_set-6-all.json
+  - data/blocksworld/train_set-6-complete-correct.json
 icl_examples_file: data/blocksworld/train_set-2-more_with_trace.json
 use_icl_examples: false
 

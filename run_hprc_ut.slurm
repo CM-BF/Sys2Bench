@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --partition=gpu-a100
-#SBATCH --time=0-8:00:00
+#SBATCH --time=0-12:00:00
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
 
@@ -67,20 +67,28 @@ algorithm.training.curriculum_schedule="$schedule" \
 algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
+algorithm.training.vllm_gpu_memory_utilization=0.8 \
 algorithm.training.report_to=\[tensorboard\] \
 algorithm.training.push_to_hub=false \
-algorithm.training.save_strategy=no \
+algorithm.training.save_strategy=no
+
+
+ROOT_PATH="$WORK/projects/Sys2Bench" \
+accelerate launch \
+--mixed_precision bf16 \
+--num_processes 1 \
+--num_machines 1 \
+--gpu_ids 0,1 \
+--dynamo_backend no \
+methods/RL/main.py \
+mode=inference \
+model="$model" \
+task="$task" \
+algorithm.training.curriculum_schedule="$schedule" \
+algorithm.training.scheduler_params.mu_exp="$mu" \
+algorithm.training.scheduler_params.sigma="$sigma" \
+algorithm.training.max_steps="$max_steps" \
 algorithm.training.vllm_gpu_memory_utilization=0.8
-
-
-# methods/RL/main.py \
-# mode=inference \
-# model="$model" \
-# task="$task" \
-# algorithm.training.curriculum_schedule="$schedule" \
-# algorithm.training.scheduler_params.mu_exp="$mu" \
-# algorithm.training.scheduler_params.sigma="$sigma" \
-# algorithm.training.max_steps="$max_steps" \
 
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} stopped ..."

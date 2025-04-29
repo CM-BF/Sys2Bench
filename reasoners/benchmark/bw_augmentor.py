@@ -1,143 +1,256 @@
 import random
 import re
+from typing import List, Dict, Any, Optional
+from blocksworld_reward_model import BlocksWorldModel  # assumes your BlocksWorldModel lives here
 
-def ordinal(n):
-    """
-    Convert an integer n to its ordinal representation as a string.
-    For example, 1 -> '1st', 2 -> '2nd', 3 -> '3rd', 4 -> '4th', etc.
-    """
+# --- Name‐augmentation helpers ---
+
+def ordinal(n: int) -> str:
     if 10 <= n % 100 <= 20:
         suffix = "th"
     else:
         suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
 
-def generate_mapping(original_names, candidate_list):
-    """
-    Generate a one-to-one mapping from original_names to a randomly selected set
-    of candidate_list values, ensuring no duplicate assignments.
-    
-    For candidate lists identical to original_names (used for a shuffled mapping),
-    this function will re-shuffle until the resulting mapping differs from the original order.
-    """
+def generate_mapping(original_names: List[str], candidate_list: List[str]) -> Dict[str, str]:
     if candidate_list == original_names:
-        if len(original_names) == 1:
-            mapping = original_names.copy()
-        else:
-            mapping = original_names.copy()
+        mapping = original_names.copy()
+        if len(original_names) > 1:
             while mapping == original_names:
                 random.shuffle(mapping)
     else:
         mapping = random.sample(candidate_list, len(original_names))
     return dict(zip(original_names, mapping))
 
-def apply_mapping(text, mapping):
-    """
-    Replace all occurrences of any original name with its mapped value in one pass.
-    
-    A single regular-expression pattern is compiled that matches any of the original names,
-    and a callback function is used to replace each match with its mapped value.
-    This avoids cyclic dependency issues that can occur with sequential replacements.
-    """
+def apply_mapping(text: str, mapping: Dict[str, str]) -> str:
     pattern = r'\b(' + '|'.join(map(re.escape, mapping.keys())) + r')\b'
-    return re.sub(pattern, lambda match: mapping[match.group(0).lower()], text, flags=re.IGNORECASE)
+    return re.sub(pattern, lambda m: mapping[m.group(1)], text, flags=re.IGNORECASE)
 
-def adjust_number_format(text):
-    """
-    Adjust text for number mappings so that occurrences like '1 block' become 'block 1'.
-    """
+def adjust_number_format(text: str) -> str:
     return re.sub(r'\b(\d+)\s+block\b', r'block \1', text)
 
-def extract_original_names(text):
-    """
-    Extract unique block names from the given text.
-    
-    Searches for words immediately preceding 'block' (case-insensitive) and returns
-    them in order of appearance.
-    """
-    pattern = r'\b(\w+)\s+block\b'
-    matches = re.findall(pattern, text, flags=re.IGNORECASE)
+def extract_original_names(text: str) -> List[str]:
+    matches = re.findall(r'\b(\w+)\s+block\b', text, flags=re.IGNORECASE)
     seen = []
-    for name in matches:
-        if name.lower() not in [s.lower() for s in seen]:
-            seen.append(name.lower())
+    for m in matches:
+        lm = m.lower()
+        if lm not in seen:
+            seen.append(lm)
     return seen
 
-def generate_augmentations(init_text, goal_text, plan_text, num_augmentations=3, max_attempts=100):
-    """
-    Given init, goal, and plan texts, automatically extract the block names,
-    then generate multiple augmentations using different candidate domains.
-    
-    Each augmentation mapping is ensured to be unique within its candidate type.
-    Returns a dictionary with augmentation types as keys and lists of augmentations.
-    Each augmentation includes transformed init, goal, and plan texts.
-    """
-    # Combine texts for extracting all block names.
-    combined_text = init_text + " " + goal_text + " " + plan_text
-    original_names = extract_original_names(combined_text)
-    print(len(original_names))
-    # Define candidate lists for various augmentation types.
-    aug_candidates = {
-        "colors": ["magenta", "cyan", "violet", "turquoise", "indigo", "gold",
-                   "silver", "emerald", "ruby", "sapphire"],
-        "numbers": [f"{ordinal(i)}" for i in range(1, len(original_names) + 1)],
-        "greek": ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", 
-                  "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", 
-                  "tau", "upsilon", "phi", "chi", "psi", "omega"],
-        "alphabets": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-        "shuffled": original_names.copy()
+# --- Candidate pools for augmentation ---
+COLOR_PALETTE = [
+    "red", "blue", "green", "yellow", "orange", "purple",
+    "pink", "brown", "gray", "cyan", "magenta", "emerald"
+]
+AUG_CANDIDATES = {
+    "colors": COLOR_PALETTE,
+    "ordinal": None,
+    "greek": ["alpha","beta","gamma","delta","epsilon","zeta","eta","theta",
+              "iota","kappa","lambda","mu","nu","xi","omicron","pi",
+              "rho","sigma","tau","upsilon","phi","chi","psi","omega"],
+    "alphabets": list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+}
+
+# --- Single‐try problem generator (returns None on failure) ---
+def try_generate_problem(num_blocks: int, num_actions: int) -> Optional[Dict[str, Any]]:
+    blocks = [str(i+1) for i in range(num_blocks)]
+    state, order = {}, []
+    for b in blocks:
+        clear = [x for x in order if x not in state.values()]
+        support = random.choice(clear) if clear and random.random() < 0.5 else "table"
+        state[b] = support; order.append(b)
+    initial_map = state.copy()
+    hand = None
+    if random.random() < 1/num_blocks:
+        clear = [b for b in order if b not in state.values()]
+        if clear:
+            hand = random.choice(clear)
+            state[hand] = "hand"
+    init_str = BlocksWorldModel.generate_state_string(state.copy(), hand, order)
+    curr = init_str
+    seen = {curr}
+    plan_actions = []
+    moved = set()
+
+    for _ in range(num_actions):
+        poss = BlocksWorldModel.get_possible_actions(curr)
+        valid = []
+        for a in poss:
+            try:
+                nxt = BlocksWorldModel.simulate_step(curr, a)
+                if any(BlocksWorldModel.states_equal(nxt, s)[0] for s in seen):
+                    continue
+                valid.append((a, nxt))
+            except:
+                pass
+        if not valid:
+            return None
+        by_type = {"unstack":[],"pickup":[],"stack":[],"putdown":[]}
+        for a,nxt in valid:
+            t = a.split()[0]
+            key = {"unstack":"unstack","pick":"pickup","stack":"stack","put":"putdown"}[t]
+            by_type[key].append((a,nxt))
+        types = [t for t,lst in by_type.items() if lst]
+        a,nxt = random.choice(by_type[random.choice(types)])
+        prev_map,_,_ = BlocksWorldModel.parse_initial_state(curr)
+        next_map,_,_ = BlocksWorldModel.parse_initial_state(nxt)
+        moved.update(b for b in blocks if prev_map[b] != next_map[b])
+        plan_actions.append(a)
+        curr = nxt
+        seen.add(curr)
+
+    if len(plan_actions) != num_actions:
+        return None
+    goal_str = BlocksWorldModel.simplify_state_given_reference(init_str, curr)
+    final_map,_,_ = BlocksWorldModel.parse_initial_state(curr)
+    if any(final_map[b] == initial_map[b] for b in moved):
+        return None
+
+    # Name augmentation
+    combined = f"{init_str}\n" + "\n".join(plan_actions) + f"\n{goal_str}"
+    names = extract_original_names(combined)
+    aug_type = random.choice(list(AUG_CANDIDATES.keys()))
+    if aug_type == "ordinal":
+        candidates = [ordinal(i+1) for i in range(len(names))]
+    elif aug_type == "shuffled":
+        candidates = names.copy()
+    else:
+        candidates = AUG_CANDIDATES[aug_type]
+    mapping = generate_mapping(names, candidates)
+    return {
+        "init": adjust_number_format(apply_mapping(init_str, mapping)),
+        "plan": adjust_number_format(apply_mapping("\n".join(plan_actions), mapping)),
+        "goal": adjust_number_format(apply_mapping(goal_str, mapping)),
+        "mapping": mapping,
+        "augmentation_type": aug_type
     }
-    
-    augmentations = {}
-    
-    for aug_type, candidate_list in aug_candidates.items():
-        augmentations[aug_type] = []
-        seen_mappings = set()
-        for _ in range(num_augmentations):
-            attempts = 0
-            while attempts < max_attempts:
-                mapping = generate_mapping(original_names, candidate_list)
-                # Use the order of original_names to create a tuple key.
-                mapping_tuple = tuple(mapping[name] for name in original_names)
-                if mapping_tuple not in seen_mappings:
-                    seen_mappings.add(mapping_tuple)
-                    break
-                attempts += 1
-            if attempts == max_attempts:
-                print(f"Warning: Could not generate a unique mapping for {aug_type} after {max_attempts} attempts.")
+
+# --- Detector for redundancy ---
+def detect_redundant_problems(dataset: List[Dict[str, Any]], new_probs = None) -> List[int]:
+    bad = []
+    for idx, prob in enumerate(dataset):
+        init_map, _, _ = BlocksWorldModel.parse_initial_state(prob["init"])
+        curr = prob["init"]
+        moved = set()
+        for a in prob["plan"].splitlines():
+            if not a.strip(): continue
+            nxt = BlocksWorldModel.simulate_step(curr, a)
+            pm,_,_ = BlocksWorldModel.parse_initial_state(curr)
+            nm,_,_ = BlocksWorldModel.parse_initial_state(nxt)
+            moved.update(b for b in init_map if pm[b] != nm[b])
+            curr = nxt
+        fm,_,_ = BlocksWorldModel.parse_initial_state(curr)
+        if any(fm[b] == init_map[b] for b in moved):
+            bad.append(idx)
+    return bad
+
+# --- Batch generator with prints and retry ---
+def generate_random_problem_batch(num_instances: int,
+                                  num_actions: int,
+                                  min_blocks: int = 2,
+                                  max_blocks: Optional[int] = None,
+                                  max_attempts: int = 10000
+                                 ) -> List[Dict[str, Any]]:
+    if max_blocks is None:
+        max_blocks = len(AUG_CANDIDATES["colors"])
+    batch = []
+    attempts = 0
+    while len(batch) < num_instances and attempts < max_attempts:
+        attempts += 1
+        n = random.randint(min_blocks, max_blocks)
+        prob = try_generate_problem(n, num_actions)
+        if prob is None:
+            # print(f"Attempt {attempts}: failed to generate a valid {num_actions}-step problem; retrying...")
+            continue
+        batch.append(prob)
+        print(f"Created problem {len(batch)}/{num_instances} after {attempts} attempts")
+    if len(batch) < num_instances:
+        print(f"Warning: only created {len(batch)}/{num_instances} problems after {attempts} attempts")
+    return batch
+from collections import deque
+def find_optimal_plan(init_str: str, goal_str: str) -> Optional[List[str]]:
+    """
+    Run a BFS from init_str to goal_str, returning the first (i.e. shortest)
+    sequence of actions that reaches the goal, or None if no solution.
+    """
+    seen = {init_str}
+    queue = deque([(init_str, [])])             # pairs of (state, actions so far)
+
+    while queue:
+        state, actions = queue.popleft()
+        # goal‐test
+        if BlocksWorldModel.states_equal(state, goal_str)[0]:
+            return actions
+
+        # expand
+        for a in BlocksWorldModel.get_possible_actions(state):
+            try:
+                nxt = BlocksWorldModel.simulate_step(state, a)
+            except Exception:
                 continue
-            aug_init = apply_mapping(init_text, mapping)
-            aug_goal = apply_mapping(goal_text, mapping)
-            aug_plan = apply_mapping(plan_text, mapping)
-                
-            augmentation_data = {
-                "mapping": mapping,
-                "init": aug_init,
-                "goal": aug_goal,
-                "plan": aug_plan
-            }
-            augmentations[aug_type].append(augmentation_data)
-    
-    return augmentations
+            if nxt in seen:
+                continue
+            seen.add(nxt)
+            queue.append((nxt, actions + [a]))
+    return None
 
-# ---------------------------
-# Example usage:
-init_example = '''the red block is clear, the orange block is clear, the hand is empty, the red block is on top of the yellow block, the yellow block is on top of the blue block, the blue block is on the table and the orange block is on the table the red block is on top of the orange block'''
 
-goal_example = '''the blue block is clear, the orange block is clear, the hand is empty, the blue block is on top of the red block, the red block is on the table and the orange block is on the table the orange block is on top of the blue block'''
-plan_example = '''pick up the orange block
-stack the orange block on top of the blue block
-[PLAN END]'''
+def is_plan_optimal_length(problem: dict) -> bool:
+    """
+    Given a problem dict with keys 'init', 'plan', 'goal', returns True
+    if the length of the provided plan exactly matches the optimal length.
+    """
+    # parse the user‐provided plan
+    user_plan = [line for line in problem["plan"].splitlines() if line.strip()]
+    # compute the optimal plan
+    optimal = find_optimal_plan(problem["init"], problem["goal"])
+    if optimal is None:
+        raise RuntimeError("No solution found from init to goal!")
+    # compare lengths
+    return len(user_plan) == len(optimal)
 
-# augmented_data = generate_augmentations(init_example, goal_example, plan_example, num_augmentations=3)
+def check_all_plans(batch):
+    indices = []
+    import time
+    start = time.time()
+    for idx, prob in enumerate(batch):
+        if not is_plan_optimal_length(prob):
+            print(f'Bad Problem -  {idx} -  total {len(indices)+1}')
+            indices.append(idx)
+    print(f'Time: {time.time() - start}')
+    return indices
 
-# for aug_type, aug_list in augmented_data.items():
-#     print(f"Augmentation Type: {aug_type}")
-#     for idx, data in enumerate(aug_list, 1):
-#         print(f"Augmentation {idx}:")
-#         print("Mapping:", data["mapping"])
-#         print("Transformed Init:", data["init"])
-#         print("Transformed Goal:", data["goal"])
-#         print("Transformed Plan:", data["plan"])
-#         print("-" * 40)
-#     print("=" * 80)
+if __name__ == "__main__":
+    import json
+    NUM_INSTANCES = 50
+    # with open('train_set-8-complete-correct.json', 'r') as f:
+    #     data = json.load(f)
+    # print(len(detect_redundant_problems(data)))
+    for na in [1]:
+        # print(f"\nGenerating {NUM_INSTANCES} problems with plan length {na}")
+        batch = generate_random_problem_batch(NUM_INSTANCES, na, min_blocks=2, max_blocks=6)
+        # with open(f'train_set-{na}-complete-correct.json', 'r') as f:
+        #     data = json.load(f)
+        bad_indices = detect_redundant_problems(batch)
+        # bad_indices = check_all_plans(data)
+        # batch = data
+        while bad_indices:
+            print(f"Detected {len(bad_indices)} redundant problem(s); regenerating those...")
+            # regenerate exactly as many problems as needed
+            new_probs = generate_random_problem_batch(len(bad_indices), na, min_blocks=2, max_blocks=6)
+            # replace bad ones
+            for idx, new_prob in zip(bad_indices, new_probs):
+                batch[idx] = new_prob
+            # recheck
+            bad_indices = detect_redundant_problems(batch)
+            non_optimal_indices = check_all_plans(data)
+            if bad_indices and non_optimal_indices:
+                bad_indices = list(set(bad_indices).union(set(non_optimal_indices)))
+                print(f'combined length - {len(bad_indices)}')
+            elif non_optimal_indices:
+                bad_indices = non_optimal_indices
+        filename = f"train_set-{na}-test.json"
+        with open(filename, "w") as f:
+            json.dump(batch, f, indent=2)
+        print(f"Wrote {len(batch)} problems to {filename}")

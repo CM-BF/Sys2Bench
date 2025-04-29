@@ -7,11 +7,15 @@ from utils import sc_output_extractor, generate_icl
 
 
 class RLReasoner():
-    def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example=""):
+    def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
         self.base_model = base_model
         self.temperature = temperature
         self.model_type = model_type
-        self.sc_num = sc_num
+        assert not (sc_num > 1 and pass_at_k > 1), "sc_num > 1 and pass_at_k > 1 is not supported"
+        if sc_num > 1:
+            self.num_generations = sc_num
+        else:
+            self.num_generations = pass_at_k
         self.tokenizer = base_model.tokenizer
         self.icl_example = icl_example
     
@@ -40,16 +44,15 @@ class RLReasoner():
         else:
             inputs = [self.get_r1_prompt(example)]
         outputs = []
-        for _ in range(self.sc_num):
+        print('Total Number of Generations:', self.num_generations)
+        for _ in range(self.num_generations):
           if self.model_type == "completion":   
               outputs.append(self.base_model.generate(inputs,
                                             hide_input=True,
                                             do_sample=True,
                                             skip_special_tokens=False,
-                                            temperature=0.0).text) 
-        print(len(outputs), len(outputs[0]))
+                                            temperature=self.temperature).text) 
         outputs = [list(group) for group in zip(*outputs)]
-        # quit()
         return outputs    
 
 def main(model_checkpoint=300,
@@ -64,7 +67,8 @@ def main(model_checkpoint=300,
          sc_num=1,
          use_icl = False,
          use_vllm = False,
-         max_batch_size=64,
+         max_batch_size=128,
+         pass_at_k=1
          ):
     print('Running BW inference...')
     model_dir = model_dir.format(num=model_checkpoint)
@@ -84,9 +88,10 @@ def main(model_checkpoint=300,
     if use_icl:
         icl = generate_icl(icl_examples, provide_think_icl=False, num_icl = 2)
     print(icl)
+    mode="majority" if pass_at_k == 1 else "pass"
     base_model = HFModel(model_pth=model_dir, tokenizer_pth=model_dir, max_new_tokens=512, max_batch_size=max_batch_size)
-    reasoner = RLReasoner(base_model, temperature=temperature, sc_num=sc_num, icl_example=icl)
-    evaluator = BWEvaluator(config_file=config_file, domain_file=domain_file, data_path=data_path, init_prompt=prompt, disable_log=False, output_extractor=sc_output_extractor, sample_prompt_type="rap") # rap prompt includes cot
+    reasoner = RLReasoner(base_model, temperature=temperature, sc_num=sc_num, icl_example=icl, pass_at_k=pass_at_k)
+    evaluator = BWEvaluator(config_file=config_file, domain_file=domain_file, data_path=data_path, init_prompt=prompt, disable_log=False, output_extractor=lambda x: sc_output_extractor(x, mode=mode), sample_prompt_type="rap", mode=mode) # rap prompt includes cot
     # accuracy = evaluator.evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir)
     accuracy = evaluator.batched_evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir, batch_size=max_batch_size)
     print('Accuracy: ', accuracy)
