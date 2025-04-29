@@ -14,7 +14,7 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 import torch
 from omegaconf import DictConfig, OmegaConf
-from datasets import load_dataset, concatenate_datasets, Dataset
+from datasets import load_dataset, concatenate_datasets, Dataset, disable_caching
 from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
@@ -1150,6 +1150,7 @@ class ArithmeticTrainer(BaseTrainer):
             dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         
         if "aqua" in self.cfg.task.name:
+            disable_caching()
             dataset = []
             for task_idx, data_dir in enumerate(self.cfg.task.data_files):
                 data = load_dataset('json', data_dir=data_dir, split=split)
