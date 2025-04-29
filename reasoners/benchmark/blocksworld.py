@@ -8,7 +8,7 @@ import sys
 import random
 from reasoners import Evaluator
 import copy
-from reasoners.benchmark.bw_augmentor import generate_augmentations
+# from reasoners.benchmark.bw_augmentor import generate_augmentations
 import reasoners.benchmark.bw_utils as bw_utils
 
 def rap_bw_extractor(algo_output):
@@ -65,21 +65,41 @@ class BWEvaluator(Evaluator):
                  disable_tqdm=False,
                  output_extractor=rap_bw_extractor,
                  answer_extractor=lambda x:x,
-                 sample_prompt_type="rap") -> None:
+                 sample_prompt_type="rap",
+                 is_step1=False,
+                 mode="majority"
+                 ) -> None:
         super().__init__()
         self.init_prompt = init_prompt
         self.output_extractor = output_extractor
         self.answer_extractor = answer_extractor
         self.input_processor = lambda x: x
-        self.full_dataset = bw_utils.load_blocksworld(config_file, domain_file, data_path)  # [{"goal": str, "init": str}]
+        if 'step_1' in data_path:
+            from blocksworld_reward_model import BlocksWorldModel
+            self.is_step1 = True
+            self.evaluator = BlocksWorldModel
+            question = "\n[STATEMENT]\nAs initial conditions I have that, the orange block is clear, the hand is empty, the blue block is on top of the red block, the orange block is on top of the blue block and the red block is on the table.\n\nMy plan is as follows:\n\n[PLAN]\n"
+            with open(data_path, 'r') as f:
+                data = json.load(f)
+            self.full_dataset = []
+            for i, d in enumerate(data):
+                question_obj = {}
+                question_obj['init'] = d['init']
+                question_obj['goal'] = d['goal']
+                question_obj['plan'] = d['plan']
+                question_obj['question'] = question
+                self.full_dataset.append(question_obj)
+        else:        
+            self.full_dataset = bw_utils.load_blocksworld(config_file, domain_file, data_path)  # [{"goal": str, "init": str}]
         self._dataset_name = 'blocksworld'
         self.disable_log = disable_log
         self.disable_tqdm = disable_tqdm
         self.sample_prompt_type = sample_prompt_type
-
+        self.mode = mode
         self.lm_plan_file = "tmp_plan.txt"
         self.config_file = config_file
         self.domain_file = domain_file
+        print(self.mode)
 
     def sample_prompt(self,
                       shuffle_prompt=True,
@@ -168,15 +188,47 @@ class BWEvaluator(Evaluator):
         dataset = [{'init': init[i], 'goal': goal[i], 'plan': plan[i]} for i in range(len(init))]
 
         return dataset
+    def eval_output(self, answer, outputs):
+        if isinstance(outputs, str):
+            outputs = [outputs]
+        # else assume it's already a list of strings
 
-    def eval_output(self, answer, output):
-        bw_utils.text_to_plan_blocksworld(output, answer["instance_file"], self.config_file, self.domain_file, self.lm_plan_file)
-        correct = bw_utils.validate_plan(self.domain_file, answer["instance_file"], self.lm_plan_file)[0]
-        return correct
+        def check_one(output):
+            if self.is_step1:
+                evaluator = self.evaluator(answer['init'], answer['goal'], answer['plan'])
+                try:
+                    final_state = evaluator.simulate_plan(output)
+                    return evaluator.check_goal(final_state)[0]
+                except Exception:
+                    return False
+            else:
+                bw_utils.text_to_plan_blocksworld(
+                    output,
+                    answer["instance_file"],
+                    self.config_file,
+                    self.domain_file,
+                    self.lm_plan_file
+                )
+                return bw_utils.validate_plan(
+                    self.domain_file,
+                    answer["instance_file"],
+                    self.lm_plan_file
+                )[0]
+
+        if self.mode == 'pass':
+                # Return a list of booleans, one per candidate
+            return any(check_one(o) for o in outputs)
+
+        elif self.mode == 'majority':
+                # Only one collapsed output expected—evaluate and return its correctness
+            return bool(check_one(outputs[0]))
+
+        else:
+            raise ValueError(f"Unknown eval mode: {self.mode}")
     
 if __name__ == "__main__":
     config_file: str = "data/blocksworld/bw_config.yaml"
-    steps = 6
+    steps = 1
     domain_file: str = "data/blocksworld/generated_domain.pddl"
     data_path=f'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
     prompt_path='prompts/blocksworld/pool_prompt_v1.json'

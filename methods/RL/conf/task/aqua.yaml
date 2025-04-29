@@ -1,11 +1,17 @@
 name: "aqua"
 
 data_files:
-  - split_benchmarks/TEMH_splits/aqua_splits/aqua_trivial.jsonl
-  - split_benchmarks/TEMH_splits/aqua_splits/aqua_easy.jsonl
-  - split_benchmarks/TEMH_splits/aqua_splits/aqua_medium.jsonl
-  - split_benchmarks/TEMH_splits/aqua_splits/aqua_hard.jsonl
+  - datasets/aqua/trivial
+  - datasets/aqua/easy
+  - datasets/aqua/medium
+  - datasets/aqua/hard
 
 training:
-  max_prompt_length: 400
+  max_prompt_length: 512
   max_completion_length: 512
+
+inference:
+  max_model_len: 1024
+  n: 1
+  temperature: 0
+  max_tokens: 512

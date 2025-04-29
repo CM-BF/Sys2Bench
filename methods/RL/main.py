@@ -14,7 +14,7 @@ import hydra
 from hydra.core.hydra_config import HydraConfig
 import torch
 from omegaconf import DictConfig, OmegaConf
-from datasets import load_dataset, concatenate_datasets, Dataset
+from datasets import load_dataset, concatenate_datasets, Dataset, disable_caching
 from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
@@ -166,15 +166,20 @@ class TaskSampler(torch.utils.data.Sampler):
         self.max_dataset_len = len(self.dataset)
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
-        self.indices_by_task = {task_idx: (np.array(self.dataset['task']) == task_idx).nonzero()[0].tolist() for task_idx in range(num_tasks)}
-        schedule_funcs = {
+        self.rng = np.random.default_rng(seed)
+        task_col = np.array(self.dataset['task'])
+        self.indices_by_task = {
+            t: self.rng.permutation(np.where(task_col == t)[0])
+            for t in range(num_tasks)
+        }
+        self.schedule_funcs = {
             'balanced': self._balanced_schedule,
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule
         }
         log_on_main(f"Data Schedule: {data_schedule}")
-        self.schedule_func = schedule_funcs[data_schedule]
+        self.schedule_func = self.schedule_funcs[data_schedule]
     
     # Classical Curriculum Learning
     @staticmethod    
@@ -183,7 +188,9 @@ class TaskSampler(torch.utils.data.Sampler):
         return dict(enumerate(np.eye(num_tasks)[active_task].tolist()))
 
     def __iter__(self):
-
+        task_ptrs = {t: 0 for t in range(self.num_tasks)}
+        indices_by_task = {t: idx.copy() for t, idx in self.indices_by_task.items()}
+        
         for i in range(self.total_iterations):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
 
@@ -194,18 +201,24 @@ class TaskSampler(torch.utils.data.Sampler):
 
             for task in chosen_tasks:
                 indices = self.indices_by_task[task]
-
-                if len(indices) == 0:
-                    idx = random.randrange(len(self.dataset))
-                else:
-                    idx = random.choice(indices)
-                batch_indices.append(int(idx))
-            log_on_main(f"Iteration {i}: Probs = {probs} Batch indices = {batch_indices} Task Difficulties = {chosen_tasks}")
+                ptr = task_ptrs[task]
+                if ptr >= len(indices):
+                    # Once exhausted, reshuffle that task’s pool
+                    indices = self.rng.permutation(indices)
+                    indices_by_task[task] = indices
+                    ptr = 0
+                batch_indices.append(int(indices[ptr]))
+                task_ptrs[task] = ptr + 1
+                # if len(indices) == 0:
+                #     idx = random.randrange(len(self.dataset))
+                # else:
+                #     idx = random.choice(indices)
+                # batch_indices.append(int(idx))
+            log_on_main(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
             yield from batch_indices
 
     def __len__(self):
-        return self.total_iterations * self.batch_size
-
+        return self.total_iterations
     @staticmethod
     def _balanced_schedule(t, T, num_tasks):
         return {i: 1. / num_tasks for i in range(num_tasks)}
@@ -245,18 +258,6 @@ class TaskSampler(torch.utils.data.Sampler):
         
         # Mix with uniform floor to guarantee each probability is at least p_min.
         return {i: p_min + (1 - num_tasks * p_min) * q_i for i, q_i in enumerate(q)}
-
-        # Calculate unnormalized probabilities using Gaussian PDF
-        # unnormalized_probs = {}
-        # for i in range(num_tasks):
-        #     # Calculate PDF of Gaussian for task i
-        #     exponent = -((i - mu) ** 2) / (2 * sigma ** 2)
-        #     unnormalized_probs[i] = math.exp(exponent)
-        #     unnormalized_probs[i] = max(unnormalized_probs[i], p_min)
-
-        # total = sum(unnormalized_probs.values())
-        # return {i: prob / total for i, prob in unnormalized_probs.items()}
-
 
 class CurriculumGRPOTrainer(GRPOTrainer):
     def __init__(self, num_tasks=4, total_iterations=1200, data_schedule='balanced', scheduler_params: dict=None, *args, **kwargs):
@@ -465,31 +466,6 @@ class BlocksWorldTrainer(BaseTrainer):
             all_samples.extend(file_dataset)
         dataset = Dataset.from_list(all_samples)
 
-        # if self.cfg.experiment.dataset_size > 0:
-        #     data_files = self.cfg.task.data_files
-        #     num_files = len(data_files)
-        #     samples_per_file = self.cfg.experiment.dataset_size // num_files
-
-        #     all_samples = []
-        #     for file in data_files:
-        #         # Load and shuffle the dataset for this file
-        #         file_dataset = load_dataset('json', data_files=file)['train']
-        #         file_dataset = file_dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        #         # Select up to samples_per_file from this file (or all if fewer available)
-        #         num_samples = min(len(file_dataset), samples_per_file)
-        #         file_samples = file_dataset.select(range(num_samples))
-        #         all_samples.extend(file_samples)
-            
-        #     # Convert the collected samples into a HuggingFace Dataset and shuffle the final list
-        #     dataset = Dataset.from_list(all_samples)
-        #     # dataset = Dataset.from_list(all_samples)
-        #     # dataset = Dataset.from_list(all_samples)
-        # else:
-        #     # Load the entire dataset and shuffle if no size limit is provided
-        #     dataset = load_dataset('json', data_files=self.cfg.task.data_files)['train']
-        #     dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        
-        # Final shuffle for randomness
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         print(f"Dataset prepared with {len(dataset)} samples")
         return dataset
@@ -782,13 +758,14 @@ class BlocksWorldTrainer(BaseTrainer):
         steps = self.cfg.task.inference.steps
         temperature = self.cfg.task.inference.temperature
         sc_num = self.cfg.task.inference.sc_num
+        pass_at_k = self.cfg.task.inference.pass_at_k
         use_icl = self.cfg.task.inference.use_icl
         prompt_path = self.cfg.task.inference.prompt_path
         resume = self.cfg.task.inference.resume
-
+        mode = 'pass' if pass_at_k == 1 else 'majority'
         # Generate checkpoint path
         model_dir = self._get_checkpoint_path(model_checkpoint)
-
+        max_batch_size = self.cfg.algorithm.inference.max_batch_size
         # Setup data path
         data_path = self.cfg.task.inference.data_path.format(steps=steps)
 
@@ -812,7 +789,8 @@ class BlocksWorldTrainer(BaseTrainer):
         base_model = HFModel(
             model_pth=model_dir,
             tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens
+            max_new_tokens=self.cfg.task.inference.max_new_tokens,
+            max_batch_size=max_batch_size
         )
 
         # Create reasoner
@@ -820,7 +798,8 @@ class BlocksWorldTrainer(BaseTrainer):
             base_model,
             temperature=temperature,
             sc_num=sc_num,
-            icl_example=icl
+            icl_example=icl,
+            pass_at_k=pass_at_k,
         )
 
         # Setup evaluator
@@ -830,18 +809,13 @@ class BlocksWorldTrainer(BaseTrainer):
             data_path=data_path,
             init_prompt=prompt,
             disable_log=False,
-            output_extractor=sc_output_extractor,
+            output_extractor=lambda x: sc_output_extractor(x, mode=mode),
+            mode=mode,
             sample_prompt_type="rap"  # rap prompt includes cot
         )
 
         # Run evaluation
-        accuracy = evaluator.evaluate(
-            reasoner,
-            shuffle_prompt=True,
-            num_shot=self.cfg.task.inference.num_shot,
-            resume=resume,
-            log_dir=log_dir
-        )
+        accuracy = evaluator.batched_evaluate(reasoner, shuffle_prompt=True, num_shot=4, resume=resume, log_dir=log_dir, batch_size=max_batch_size)
 
         print(f'Accuracy: {accuracy}')
 
@@ -1159,16 +1133,29 @@ class CountdownTrainer(BaseTrainer):
 class ArithmeticTrainer(BaseTrainer):
     """Class for training and inference on Arithmetic models"""
 
-    def _prepare_dataset(self):
+    def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
-        all_samples = []
-        for task_idx, file in enumerate(self.cfg.task.data_files):
-            file_dataset = load_dataset('json', data_files=file)['train']
-            # Annotate with difficulty
-            file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
-            all_samples.extend(file_dataset)
-        dataset = Dataset.from_list(all_samples)
-        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+
+        if "gsm8k" in self.cfg.task.name:
+            all_samples = []
+            for task_idx, file in enumerate(self.cfg.task.data_files):
+                file_dataset = load_dataset('json', data_files=file)['train']
+                # Annotate with difficulty
+                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
+                all_samples.extend(file_dataset)
+            dataset = Dataset.from_list(all_samples)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        
+        if "aqua" in self.cfg.task.name:
+            disable_caching()
+            dataset = []
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                data = load_dataset('json', data_dir=data_dir, split=split)
+                data = data.add_column("task", [task_idx] * len(data))
+                dataset.append(data)
+            dataset = concatenate_datasets(dataset)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+
         return dataset
 
     def extract_answer(self, text):
@@ -1200,7 +1187,7 @@ class ArithmeticTrainer(BaseTrainer):
 
         elif 'aqua' in self.cfg.task.name:
             question = example["question"]
-            sft = example["rationale"]
+            sft = example["solution"]
             answer = example["answer"].strip()
             options = "  ".join(example["options"])
             instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
@@ -1268,44 +1255,77 @@ class ArithmeticTrainer(BaseTrainer):
 
         return True, 'Correctly Formatted'
 
+    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
+        """Reward function for gsm8k task"""
+        rewards = []
+
+        for completion, answer_i in zip(completions, answer):
+            try:
+                print('#########################')
+                completion = "<think>" + completion
+                print(completion)
+
+                is_formatted, reason_str = self._is_formatted(completion)
+                if not is_formatted:
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
+
+
+                # Use the GSM8KRewardModel class
+                reward_model = GSM8KRewardModel(answer_i)
+                reward = reward_model.compute_score(completion)
+                rewards.append(reward)
+                print('-----')
+                print(reward)
+                print('-----')
+                print('#########################')
+            except Exception as e:
+                print(e)
+                rewards.append(0.0)
+        return rewards
+
     @staticmethod
     def _is_correct(response: str, answer: str):
         answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
         if len(answer_match) > 0:
-            if answer_match[0].strip() == answer:
+            if answer_match[-1].strip() == answer:
                 return True
         return False
-
-    def arithmetic_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
+    
+    def aqua_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
         rewards = []
         for completion, answer in zip(completions, kwargs['answer']):
+            
             try:
-                completion = "<think>" + completion
+                completion = "<think>" + completion          
+                reward = 0.0
 
                 is_formatted, reason_str = self._is_formatted(completion)
-                is_correct = self._is_correct(completion, answer)
-
-                reward = 0.0
                 if is_formatted:
                     reward += formatted_reward
-                if is_correct:
-                    reward += correctness_reward
+                    if self._is_correct(completion, answer):
+                        reward += correctness_reward
                 rewards.append(reward)
 
                 if self.last_log_time is None:
                     self.last_log_time = time.time()
-                if time.time() - self.last_log_time > 10:
+                if time.time() - self.last_log_time > 5:
                     self.last_log_time = time.time()
                     log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
 
             except Exception as e:
                 log_on_main(e)
                 rewards.append(0.0)
+
         return rewards
 
 
     def train(self):
         """Train a model using the specified algorithm with configurations from Hydra"""
+
+        log_on_main('\n\n*****\ntrain\n*****\n\n')
+
         # Extract config values
         model_name = self.cfg.model.name
         output_model_name = self.cfg.output.run_name
@@ -1326,16 +1346,22 @@ class ArithmeticTrainer(BaseTrainer):
         peft_config = get_peft_config(model_config)
 
         # Prepare dataset
-        dataset = self._prepare_dataset()
+        dataset = self._prepare_dataset(split='train')
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
+
+
+        if "gsm8k" in self.cfg.task.name:
+            arithmetic_reward_fn = self._gsm8k_reward_fn
+        else:
+            arithmetic_reward_fn = self.aqua_reward_fn
 
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
             trainer = CurriculumGRPOTrainer(
                 model=model,
-                reward_funcs=self.arithmetic_reward_fn,
+                reward_funcs=arithmetic_reward_fn,
                 args=training_args,
                 train_dataset=dataset,
                 processing_class=tokenizer,
@@ -1371,8 +1397,72 @@ class ArithmeticTrainer(BaseTrainer):
     def inference(self):
         """Run inference using the trained model"""
         if self.cfg.task.name == "aqua":
-            pass
 
+            log_on_main('\n\n*****\ntest\n*****\n\n')
+
+            # Load Tokenizer & Model
+            tokenizer = AutoTokenizer.from_pretrained(
+                str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code
+            )
+            model = LLM(
+                model=str(self.output_dir),
+                trust_remote_code=self.cfg.model.trust_remote_code,
+                tensor_parallel_size=torch.cuda.device_count(),
+                dtype=self.cfg.model.torch_dtype,
+                gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+                max_model_len=self.cfg.task.inference.max_model_len,
+                seed=self.cfg.experiment.dataset_seed,
+                task='generate'
+            )
+            sampling_params = SamplingParams(
+                n=self.cfg.task.inference.n,
+                temperature=self.cfg.task.inference.temperature,
+                max_tokens=self.cfg.task.inference.max_tokens,
+                min_tokens=1,
+                seed=self.cfg.experiment.dataset_seed
+            )
+            
+            # Load and Preprocess Dataset
+            dataset = self._prepare_dataset(split='test')
+            dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+            dataset = dataset.remove_columns('sft')
+            log_on_main(dataset)
+
+            # Generate Completions
+            outputs = model.generate(dataset['prompt'], sampling_params)
+            outputs = [
+                completion_output.text
+                for request_output in outputs
+                for completion_output in request_output.outputs
+            ]
+            dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+            dataset = dataset.add_column('output', outputs)
+
+            # Calcuate Rewards
+            rewards = np.array(
+                self.aqua_reward_fn(
+                    prompts=None,
+                    completions=dataset['output'],
+                    answer=dataset['answer']
+                )
+            )
+            dataset = dataset.add_column('reward', rewards.tolist())
+            dataset.to_json(os.path.join(str(self.output_dir), 'outputs.jsonl'))
+
+            # Process Metrics
+            results = dict()
+            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+                task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+                task_rewards = np.array(task_outputs['reward'])
+                results[os.path.basename(os.path.normpath(data_dir))] = {
+                    'avg_reward': round(task_rewards.mean().item(), 3),
+                    'accuracy': round((task_rewards > 0.5).mean().item(), 3),
+                    'support': len(task_rewards)
+                }
+            log_on_main(json.dumps(results, indent=4))
+            with open(os.path.join(str(self.output_dir), 'results.json'), "w") as f:
+                json.dump(results, f, indent=4)           
 
         else:
             # Extract config values
@@ -1390,13 +1480,8 @@ class ArithmeticTrainer(BaseTrainer):
             )
 
             # Load test dataset
-            if "gsm8k" in self.cfg.task.name:
-                dataset = datasets.load_dataset("gsm8k", "main", split="test")
-                dataset = dataset.add_column("task", [0] * len(dataset))
-            else:
-                dataset = self._prepare_dataset()
-                train_test_split = dataset.train_test_split(test_size=self.cfg.experiment.test_size)
-                dataset = train_test_split["test"]
+            dataset = datasets.load_dataset("gsm8k", "main", split="test")
+            dataset = dataset.add_column("task", [0] * len(dataset))
 
             test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
             # Custom model for inference
@@ -1473,25 +1558,27 @@ class ArithmeticTrainer(BaseTrainer):
 
             return accuracy
 
-class RLReasoner:
-    """Class for reasoning with RL models"""
-
-    def __init__(self, base_model, temperature=0.8, sc_num=1, model_type="completion", icl_example=""):
+class RLReasoner():
+    def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
         self.base_model = base_model
         self.temperature = temperature
         self.model_type = model_type
-        self.sc_num = sc_num
+        assert not (sc_num > 1 and pass_at_k > 1), "sc_num > 1 and pass_at_k > 1 is not supported"
+        if sc_num > 1:
+            self.num_generations = sc_num
+        else:
+            self.num_generations = pass_at_k
         self.tokenizer = base_model.tokenizer
         self.icl_example = icl_example
-
+    
     def get_r1_prompt(self, example):
         r1_prefix = [{
-            "role": "system",
-            "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
-        },
-            {
+                "role": "system",
+                "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+            },
+            { 
                 "role": "user",
-                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in the <think> </think> tags. Return the final sequence of actions as the plan in the <answer> </answer> tags.\n"
+                "content": f"I am playing with a set of blocks where I need to arrange the blocks into stacks. Here are the actions I can do\n\nPick up a block\nUnstack a block from on top of another block\nPut down a block\nStack a block on top of another block\n\nI have the following restrictions on my actions:\nI can only pick up or unstack one block at a time.\nI can only pick up or unstack a block if my hand is empty.\nI can only pick up a block if the block is on the table and the block is clear. A block is clear if the block has no other blocks on top of it and if the block is not picked up.\nI can only unstack a block from on top of another block if the block I am unstacking was really on top of the other block.\nI can only unstack a block from on top of another block if the block I am unstacking is clear.\nOnce I pick up or unstack a block, I am holding the block.\nI can only put down a block that I am holding.\nI can only stack a block on top of another block if I am holding the block being stacked.\nI can only stack a block on top of another block if the block onto which I am stacking the block is clear.\nOnce I put down or stack a block, my hand becomes empty.\nHere is the format of the actions: \n\npick up the [block_name] block # for example: pick up the blue block\nunstack the [block_name] block from on top of the [another_block_name] block # for example: unstack the orange block from on top of the black block\nput down the [block_name] block # for example put down the red block\nstack the [block_name] block on top of the [another_block_name] block # for example: stack the yellow block on top of the red block \n\n{self.icl_example}\n\nHere is the initial state of the blocks: {example['init']}\n\nHere is the goal state of the blocks: {example['goal']}.\nShow your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n" # , Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer>\nunstack the cyan block from on top of the emerald block\nput down the cyan block</answer>\n for example: <plan>\npick up the blue block\nstack the blue block on top of the yellow block\nunstack the orange block from on top of the black block\nstack the orange block on top of the red block</plan>
             },
             {
                 "role": "assistant",
@@ -1499,17 +1586,25 @@ class RLReasoner:
             }
         ]
         return self.tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True)
-
+        # return {"prompt": tokenizer.apply_chat_template(r1_prefix, tokenize=False, continue_final_message=True), "plan": plan, "init": init, "goal": goal}
+    
     def __call__(self, example, prompt=None):
-        inputs = self.get_r1_prompt(example)
+        # inputs = prompt["icl"].replace("<init_state>", example["init"])\
+        #     .replace("<goals>", example["goal"]).replace("<action>", "")
+        if isinstance(example, list):
+            inputs = [self.get_r1_prompt(ex) for ex in example]
+        else:
+            inputs = [self.get_r1_prompt(example)]
         outputs = []
-        for _ in range(self.sc_num):
-            if self.model_type == "completion":
-                outputs.append(self.base_model.generate([inputs],
-                                                        hide_input=True,
-                                                        do_sample=True,
-                                                        temperature=self.temperature).text[0].strip())
-        return outputs
+        for _ in range(self.num_generations):
+          if self.model_type == "completion":   
+              outputs.append(self.base_model.generate(inputs,
+                                            hide_input=True,
+                                            do_sample=True,
+                                            skip_special_tokens=False,
+                                            temperature=0.0).text) 
+        outputs = [list(group) for group in zip(*outputs)]
+        return outputs  
 
 
 def occupy_gpu_memory(gb=75, device="cuda:0"):

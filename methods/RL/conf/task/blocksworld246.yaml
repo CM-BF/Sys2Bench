@@ -1,10 +1,10 @@
 # conf/task/blocksworld.yaml
-name: "blocksworld1246"
+name: "blocksworld246"
 data_files:
-  - data/blocksworld/train_set-1-complete-correct.json
-  - data/blocksworld/train_set-2-complete-correct.json
-  - data/blocksworld/train_set-4-complete-correct.json
-  - data/blocksworld/train_set-6-complete-correct.json
+  # - data/blocksworld/train_set-1-complete.json
+  - data/blocksworld/train_set-2-complete.json
+  - data/blocksworld/train_set-4-complete.json
+  - data/blocksworld/train_set-6-complete.json
 icl_examples_file: data/blocksworld/train_set-2-more_with_trace.json
 use_icl_examples: false
 
@@ -23,8 +23,6 @@ inference:
   data_path: 'data/blocksworld/split_v1/split_v1_step_{steps}_data.json'
   config_file: "data/blocksworld/bw_config.yaml"
   domain_file: "data/blocksworld/generated_domain.pddl"
-  pass_at_k: 1
   num_shot: 4
   resume: 0
   max_new_tokens: 512
-  max_batch_size: 64
