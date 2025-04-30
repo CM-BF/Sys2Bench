@@ -44,6 +44,7 @@ reasoners/benchmark/__pycache__/__init__.cpython-310.pyc
 models/
 planner_tools/
 logs/*
+data/codeforces/*
 LLMs-Planning/
 qwen-bw-r1-aha-moment
 qwen3

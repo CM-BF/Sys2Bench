@@ -16,7 +16,8 @@ experiment:
 
 output:
   root_path: ${oc.env:ROOT_PATH}
-  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum_schedule}_${d2s:${algorithm.training.scheduler_params.mu_exp},_}_${d2s:${algorithm.training.scheduler_params.sigma},_}_${d2s:${algorithm.training.scheduler_params.min_prob},_}_${algorithm.training.max_steps}  # This will dynamically set the model name based on task and algorithm  # This will dynamically set the model name based on task and algorithm
+  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum_schedule}_${algorithm.training.scheduler_params.mu_exp}_${algorithm.training.scheduler_params.sigma}_${algorithm.training.scheduler_params.min_prob}_${algorithm.training.max_steps}  # This will dynamically set the model name based on task and algorithm  # This will dynamically set the model name based on task and algorithm
+
 lora:
   r: 32
   alpha: 64
@@ -33,7 +34,7 @@ gpu_device: "cuda:0"
 
 hydra:
   run:
-    dir: ${output.root_path}/outputs/${output.run_name} #_${now:%Y%m%d%H%M%S}
+    dir: ${output.root_path}/outputs/${mode2name:${mode},${output.run_name},${model.trim}} #_${now:%Y%m%d%H%M%S}
   sweep:
     dir: ${output.root_path}/multirun/${now:%Y%m%d}
     subdir: ${hydra.job.override_dirname}
