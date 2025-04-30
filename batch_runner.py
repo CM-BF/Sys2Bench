@@ -30,6 +30,28 @@ run_dict = {
                     },
                 ]
             },
+        ],
+
+        'qwen15_base' : [
+            'balanced',
+            'cosine',
+            'classic',
+            {
+                'gaussian' : [
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
+                    {
+                        'mu' : 0.5,
+                        'sigma' : 0.5
+                    },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
+                ]
+            },
         ]
 
     }
