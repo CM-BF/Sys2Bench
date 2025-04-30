@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Union
+from typing import Union, TypedDict, List
 
 import pandas as pd
 
@@ -38,6 +38,8 @@ from gsm8k_reward_model import GSM8KRewardModel
 import logging
 from accelerate import Accelerator
 from vllm import LLM, SamplingParams
+# For Coding Tasks
+from coding_reward_model import CodingRewardModel
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
@@ -1630,8 +1632,10 @@ def main(cfg: DictConfig):
         trainer = BlocksWorldTrainer(cfg)
     elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
-    elif "gsm8k" or "easymath" or "aqua" in task:
+    elif any(x in task for x in ["gsm8k", "easymath", "aqua"]):
         trainer = ArithmeticTrainer(cfg)
+    elif "code" in task:
+        trainer = CodeTrainer(cfg)
     else:
         raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
 
@@ -1646,6 +1650,331 @@ def main(cfg: DictConfig):
     # Optional: Occupy GPU memory after training (useful for server environments)
     if cfg.get("occupy_gpu_memory", False):
         occupy_gpu_memory(gb=cfg.occupy_gpu_memory_gb, device=cfg.gpu_device)
+
+class CodeTrainer(BaseTrainer):
+    """Class for training and inference on code models"""
+
+
+    def _prepare_dataset(self):
+        """Prepare dataset for training"""
+        all_samples = []
+        for task_idx, file in enumerate(self.cfg.task.data_files):
+            file_dataset = load_dataset('json', data_files=file)['train']
+            # Annotate with difficulty
+            file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
+            all_samples.extend(file_dataset)
+        dataset = Dataset.from_list(all_samples)
+        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        return dataset
+
+    def _get_info(self, example):
+            question = f"""
+            {example.get('description')}
+            Input format:
+            {example.get('input_format')}
+            Output format:
+            {example.get('output_format')}
+            Examples:
+            {example.get('examples')}
+            Notes:
+            {example.get('note')}
+            """
+            
+            verification = example.get('official_tests')
+            
+            id = example.get('id')
+            
+            prompt = f"Solve the following coding problem\n{question}\n\n Show your work in <think> </think> tags. And return the final code in <code> </code> tags. Read from the stdin and write to the stdout. For example <code> ```python\nprint(1)\n``` </code>."
+            
+            return prompt, verification, id
+
+    class PromptOutput(TypedDict):
+        prompt: str
+        question: str
+        test_cases: List
+        question_id: str
+        task: int
+
+    def _generate_prompt(self, tokenizer, example) -> PromptOutput:
+        """Generate prompt for the coding model"""
+        # Extract target and numbers from the example
+
+
+        # data = example.get("reward_model", {}).get("ground_truth", {})
+        # target = data.get("target")
+        # numbers = data.get("numbers")
+        # # expression = data.get("expression") # e.g., (((76 - 80) - 28) + 43), (((65 * 12) + 60) / 28)
+        question, verification, id = self._get_info(example)
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful python coding assistant. You first think about the reasoning process in the mind and then provides the user with the code to solve the problem.\n"
+            },
+            {
+                "role": "user",
+                "content": question
+            },
+            {
+                "role": "assistant",
+                "content": "Let me solve this step by step.\n<think>"
+            }
+        ]
+
+        # tokens = tokenizer.apply_chat_template(messages, tokenize=True, continue_final_message=True)
+        # print("Number of tokens in the prompt:", len(tokens))
+        return {
+            "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
+            "question": question,
+            "test_cases": verification,
+            "question_id": id,
+            "task" : example["task"]
+        }
+
+    def _validate_coding_response_format(self, response: str):
+        """Validate the coding response format"""
+        # Remove leading/trailing whitespace
+        response = response.strip()
+
+        # Must contain <think> and </think> tags
+        if "<think>" not in response or "</think>" not in response:
+            print('Response does not contain think tags')
+            return False
+
+        # Must contain <code> and </code> tags
+        if "<code>" not in response or "</code>" not in response:
+            print('Response does not contain code tags')
+            return False
+        
+        if not any(sub in response for sub in ("input()", "sys.stdin")):
+            print("Response doesn't read from stdin")
+            return False
+            
+
+        # Check that tags are in correct order
+        think_open = response.find("<think>")
+        think_close = response.find("</think>")
+        code_open = response.find("<code>")
+        code_close = response.find("</code>")
+
+        if think_close < think_open or code_close < code_open:
+            return False
+
+        if code_open < think_close:
+            return False
+
+        if (response.count("<think>")   != 1 or
+                response.count("</think>")  != 1 or
+                response.count("<code>")    != 1 or
+                response.count("</code>")   != 1):
+                return False
+
+        return True
+
+    def _coding_reward_fn(self, completions, question, test_cases, question_id, **kwargs):
+        """Reward function for coding task"""
+        rewards = []
+        for completion, test_case, id in zip(completions, test_cases, question_id):
+            try:
+                print('#########################')
+                completion = "<think>" + completion
+                print(completion)
+
+                if not self._validate_coding_response_format(completion):
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
+
+                reward_model = CodingRewardModel(test_case) #TODO Set this to be test_cases
+                reward = reward_model.compute_score(completion)
+                rewards.append(reward)
+                print('-----')
+                print(reward)
+                print('-----')
+                print('#########################')
+            except Exception as e:
+                print(e)
+                rewards.append(0.0)
+
+        return rewards
+
+    def train(self):
+        """Train a model using the specified algorithm with configurations from Hydra"""
+        # Extract config values
+        model_name = self.cfg.model.name
+        output_model_name = self.cfg.output.run_name
+        algorithm = self.cfg.algorithm.name
+
+        # Load tokenizer and model
+        model_config = self._get_model_config()
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_config.model_name_or_path,
+            trust_remote_code=model_config.trust_remote_code
+        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_config.model_name_or_path,
+            torch_dtype=model_config.torch_dtype,
+            trust_remote_code=model_config.trust_remote_code,
+            attn_implementation=model_config.attn_implementation
+        )
+        peft_config = get_peft_config(model_config)
+
+        # Prepare dataset
+        # train_dataset, test_dataset = self._prepare_dataset(self.cfg.task.data_files)
+        # train_dataset = train_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+        # test_dataset = test_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
+
+        dataset = self._prepare_dataset()
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        log_on_main(dataset)
+        # Split dataset
+        # train_test_split = dataset.train_test_split(test_size=self.cfg.task.test_size)
+        # train_dataset = train_test_split["train"]
+        # test_dataset = train_test_split["test"]
+
+        # Setup training arguments based on algorithm
+
+        if "grpo" in algorithm:
+            training_args = self._setup_grpo_training()
+            trainer = CurriculumGRPOTrainer(
+                model=model,
+                reward_funcs=self._coding_reward_fn,
+                args=training_args,
+                train_dataset=dataset,
+                processing_class=tokenizer,
+                peft_config=peft_config,
+                num_tasks=len(self.cfg.task.data_files),
+                total_iterations=training_args.max_steps,
+                data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+                scheduler_params=self.cfg.algorithm.training.scheduler_params,
+            )
+        # if "grpo" in algorithm:
+        #     training_args = self._setup_grpo_training()
+        #     trainer = CurriculumGRPOTrainer(
+        #         model=model,
+        #         reward_funcs=self._coding_reward_fn,
+        #         args=training_args,
+        #         train_dataset=train_dataset,
+        #         eval_dataset=test_dataset,
+        #         processing_class=tokenizer,
+        #         peft_config=peft_config,
+        #         num_tasks=len(self.cfg.task.data_files),
+        #         total_iterations=training_args.max_steps,
+        #         data_schedule=self.cfg.algorithm.training.curriculum_schedule,
+        #         scheduler_params=self.cfg.algorithm.training.scheduler_params,
+        #     )
+        # elif algorithm == "ppo":
+        #     training_args = self._setup_ppo_training()
+        #     trainer = PPOTrainer(
+        #         model=model_config.model_name_or_path,
+        #         ref_model=model_config.model_name_or_path,  # Same model as reference
+        #         tokenizer=tokenizer,
+        #         args=training_args,
+        #         reward_fn=self._coding_reward_fn,
+        #         train_dataset=train_dataset,
+        #         eval_dataset=test_dataset,
+        #         peft_config=get_peft_config(model_config),
+        #     )
+
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+        # Train model
+        trainer.train()
+        trainer.save_model(training_args.output_dir)
+
+        if self.cfg.algorithm.training.push_to_hub:
+            trainer.push_to_hub(dataset_name='coding-dataset')
+
+    def inference(self):
+        """Run inference using the trained model"""
+        # Extract config values
+        model_checkpoint = self.cfg.task.inference.checkpoint
+        sc_num = self.cfg.task.inference.sc_num
+
+        # Generate checkpoint path
+        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+
+        # Load test dataset
+        _, test_dataset = self._prepare_dataset([self.cfg.task.test_file])
+
+        # Load model and tokenizer
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_dir,
+            trust_remote_code=self.cfg.model.trust_remote_code
+        )
+
+        # Custom model for inference
+        model = HFModel(
+            model_pth=model_dir,
+            tokenizer_pth=model_dir,
+            max_new_tokens=self.cfg.task.inference.max_new_tokens
+        )
+
+        # Run inference on test dataset
+        correct = 0
+        rewards = 0
+        total = 0
+        results = []
+
+        for example in tqdm(test_dataset):
+            # Generate prompt
+            prompt_data = self._generate_prompt(tokenizer, example)
+            prompt = prompt_data["prompt"]
+
+            # Generate responses
+            outputs = []
+            for _ in range(sc_num):
+                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
+                outputs.append(output)
+
+            # Evaluate responses
+            for output in outputs:
+                # Prepare ground truth for scoring
+                test_cases = prompt_data.get("test_cases", [])
+                
+                # Use the CodingRewardModel for evaluation
+                reward_model = CodingRewardModel(test_cases=test_cases)
+
+                # Calculate score
+                score = reward_model.compute_score(output)
+
+                # Extract solution
+                solution = reward_model.extract_solution(output)
+
+                # Record results
+                results.append({
+                    "prompt": prompt,
+                    "output": output,
+                    "solution": solution,
+                    "test_cases": test_cases,
+                    "score": score
+                })
+
+                rewards += score
+                if score > 0.5:  # We are doing binary scoring so over 0.5 will always be correct
+                    correct += 1
+                total += 1
+
+        # Calculate accuracy
+        accuracy = correct / total if total > 0 else 0
+        rewards /= total if total > 0 else 0
+        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
+
+        # Save results to output directory
+        evaluation_results = {
+            "accuracy": accuracy,
+            "rewards": rewards,
+            "model_checkpoint": model_checkpoint,
+            "sc_num": sc_num,
+            "detailed_results": results,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+        #     json.dump(evaluation_results, f, indent=2)
+
+        return accuracy
 
 
 if __name__ == "__main__":
