@@ -1516,7 +1516,7 @@ class ArithmeticTrainer(BaseTrainer):
                 )
             )
             dataset = dataset.add_column('reward', rewards.tolist())
-            dataset.to_json(os.path.join(str(self.output_dir), 'outputs.jsonl'))
+            dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
 
             # Process Metrics
             results = dict()
@@ -1529,7 +1529,7 @@ class ArithmeticTrainer(BaseTrainer):
                     'support': len(task_rewards)
                 }
             log_on_main(json.dumps(results, indent=4))
-            with open(os.path.join(str(self.output_dir), 'results.json'), "w") as f:
+            with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
                 json.dump(results, f, indent=4)           
 
         else:
