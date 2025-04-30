@@ -2,6 +2,8 @@ import os
 import sys
 from typing import Union
 
+import pandas as pd
+
 sys.path.append(os.environ['ROOT_PATH'])
 import re
 import time
@@ -39,6 +41,7 @@ from vllm import LLM, SamplingParams
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
+OmegaConf.register_new_resolver("mode2name", lambda mode, sub1, sub2: sub1 if mode == "train" else sub2)
 
 
 accelerator = Accelerator()
@@ -979,6 +982,12 @@ class CountdownTrainer(BaseTrainer):
             model_config.model_name_or_path,
             trust_remote_code=model_config.trust_remote_code
         )
+        # Ensure we have a pad_token
+        if tokenizer.pad_token is None:
+            # Option A: alias EOS → PAD
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+
         model = AutoModelForCausalLM.from_pretrained(
             model_config.model_name_or_path,
             torch_dtype=model_config.torch_dtype,
@@ -1042,6 +1051,10 @@ class CountdownTrainer(BaseTrainer):
         # Extract config values
         model_checkpoint = self.cfg.task.inference.checkpoint
         sc_num = self.cfg.task.inference.sc_num
+        pass_at_k = self.cfg.task.inference.pass_at_k
+        assert not (sc_num > 1 and pass_at_k > 1), "sc_num > 1 and pass_at_k > 1 is not supported"
+        num_generations = pass_at_k if pass_at_k > 1 else sc_num
+        batch_size = self.cfg.task.inference.batch_size
 
         # Generate checkpoint path
         model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
@@ -1055,11 +1068,17 @@ class CountdownTrainer(BaseTrainer):
             trust_remote_code=self.cfg.model.trust_remote_code
         )
 
+        if tokenizer.pad_token is None:
+            # Option A: alias EOS → PAD
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+
         # Custom model for inference
         model = HFModel(
             model_pth=model_dir,
             tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens
+            max_new_tokens=self.cfg.task.inference.max_new_tokens,
+            max_batch_size=batch_size
         )
 
         # Run inference on test dataset
@@ -1068,9 +1087,12 @@ class CountdownTrainer(BaseTrainer):
         total = 0
         results = []
 
-        batch_size = 32
+        if pass_at_k > 1:
+            split_train_eval_dataset = test_dataset.train_test_split(train_size=100, seed=123, shuffle=False)
+            test_dataset = split_train_eval_dataset["train"]
+
         for i in tqdm(range(0, len(test_dataset), batch_size), desc="Testing batches"):
-            prompt_data = [self._generate_prompt(tokenizer, test_dataset[k]) for k in range(i, i + batch_size)]
+            prompt_data = [self._generate_prompt(tokenizer, test_dataset[k]) for k in range(i, min(i + batch_size, len(test_dataset)))]
             # Generate prompt
             numbers_list = [item["numbers"] for item in prompt_data]
             target_list = [item["target"] for item in prompt_data]
@@ -1078,55 +1100,101 @@ class CountdownTrainer(BaseTrainer):
 
             # Generate responses
             outputs = []
-            for _ in range(sc_num):
-                outputs += model.generate(prompt_list, do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text
+            for _ in range(num_generations):
+                outputs.append(model.generate(prompt_list, do_sample=True, temperature=self.cfg.task.inference.temperature, verbose=False, skip_special_tokens=False).text)
+            if num_generations > 1:
+                outputs = list(zip(*outputs))
+            else:
+                outputs = outputs[0]
 
-            # Evaluate responses
-            for output, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
+            if pass_at_k > 1:
+                for k_outputs, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
 
-                # Use the CountdownRewardModel for evaluation
-                reward_model = CountdownRewardModel(target, numbers)
+                    # Use the CountdownRewardModel for evaluation
+                    reward_model = CountdownRewardModel(target, numbers)
+                    pass_once = False
+                    reward_per_sample = 0
+                    result_per_sample = []
+                    for output in k_outputs:
+                        # Calculate score
+                        score = reward_model.compute_score(output)
 
-                # Calculate score
-                score = reward_model.compute_score(output)
+                        # Extract solution
+                        solution = reward_model.extract_equation(output)
 
-                # Extract solution
-                solution = reward_model.extract_equation(output)
+                        # Record results
+                        # results.append({
+                        #     "prompt": prompt,
+                        #     "output": output,
+                        #     "solution": solution,
+                        #     "target": target,
+                        #     "numbers": numbers,
+                        #     "score": score
+                        # })
 
-                # Record results
-                results.append({
-                    "prompt": prompt,
-                    "output": output,
-                    "solution": solution,
-                    "target": target,
-                    "numbers": numbers,
-                    "score": score
-                })
+                        if score > 0.5:  # Assuming score > 0.5 means correct answer
+                            pass_once = True
+                            result_per_sample.append(1)
+                        else:
+                            result_per_sample.append(0)
+                        reward_per_sample += score
+                    results.append(result_per_sample)
+                    rewards += reward_per_sample / len(k_outputs)
+                    correct += int(pass_once)
+                    total += 1
+            else:
+                for output, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
 
-                rewards += score
-                if score > 0.5:  # Assuming score > 0.5 means correct answer
-                    correct += 1
-                total += 1
+                    # Use the CountdownRewardModel for evaluation
+                    reward_model = CountdownRewardModel(target, numbers)
 
-        # Calculate accuracy
-        accuracy = correct / total if total > 0 else 0
-        rewards /= total if total > 0 else 0
-        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
+                    # Calculate score
+                    score = reward_model.compute_score(output)
 
-        # Save results to output directory
-        evaluation_results = {
-            "accuracy": accuracy,
-            "rewards": rewards,
-            "model_checkpoint": model_checkpoint,
-            "sc_num": sc_num,
-            "detailed_results": results,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+                    # Extract solution
+                    solution = reward_model.extract_equation(output)
 
-        # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-        #     json.dump(evaluation_results, f, indent=2)
+                    # Record results
+                    results.append({
+                        "prompt": prompt,
+                        "output": output,
+                        "solution": solution,
+                        "target": target,
+                        "numbers": numbers,
+                        "score": score
+                    })
 
-        return accuracy
+                    rewards += score
+                    if score > 0.5:  # Assuming score > 0.5 means correct answer
+                        correct += 1
+                    total += 1
+
+        if pass_at_k > 1:
+            pd.DataFrame(results).to_csv(os.path.join(self.output_dir, f"pass_at_k_results_{self.cfg.task.test_file.split('/')[-1]}.csv"), index=False)
+            # df_result = pd.DataFrame(results).transpose()
+            # all_sample_pass_at_k_df = df_result.cummax(axis=0)
+            # pass_at_k_df = df_result.mean(axis=1)
+            # df_result.plot
+        else:
+            # Calculate accuracy
+            accuracy = correct / total if total > 0 else 0
+            rewards /= total if total > 0 else 0
+            print(f'Accuracy: {accuracy}, Rewards: {rewards}')
+
+            # Save results to output directory
+            evaluation_results = {
+                "accuracy": accuracy,
+                "rewards": rewards,
+                "model_checkpoint": model_checkpoint,
+                "sc_num": sc_num,
+                "detailed_results": results,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
+            # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
+            #     json.dump(evaluation_results, f, indent=2)
+
+            return accuracy
 
 
 
