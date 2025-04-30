@@ -1,9 +1,0 @@
-Dataset Distribution by Difficulty Split:
-
-Split      | GSM8K | AQUA | OTHER
-
------------|-------|------|--------
-Trivial       |  1836 |    0 |       0
-Easy       |  2047 |    0 |       0
-Medium     |  2681 |    0 |       0
-Hard       |  2228 |    0 |       0

@@ -1136,25 +1136,14 @@ class ArithmeticTrainer(BaseTrainer):
     def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
 
-        if "gsm8k" in self.cfg.task.name:
-            all_samples = []
-            for task_idx, file in enumerate(self.cfg.task.data_files):
-                file_dataset = load_dataset('json', data_files=file)['train']
-                # Annotate with difficulty
-                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
-                all_samples.extend(file_dataset)
-            dataset = Dataset.from_list(all_samples)
-            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        
-        if "aqua" in self.cfg.task.name:
-            disable_caching()
-            dataset = []
-            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
-                data = load_dataset('json', data_dir=data_dir, split=split)
-                data = data.add_column("task", [task_idx] * len(data))
-                dataset.append(data)
-            dataset = concatenate_datasets(dataset)
-            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        disable_caching()
+        dataset = []
+        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+            data = load_dataset('json', data_dir=data_dir, split=split)
+            data = data.add_column("task", [task_idx] * len(data))
+            dataset.append(data)
+        dataset = concatenate_datasets(dataset)
+        dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
         return dataset
 
@@ -1181,8 +1170,6 @@ class ArithmeticTrainer(BaseTrainer):
             question = example["question"]
             sft = example["answer"]
             answer = self.extract_answer(sft)
-            if 'gsm8k2' in self.cfg.task.name and example.get("task") == 0:
-                answer = float(sft)
             instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
 
         elif 'aqua' in self.cfg.task.name:
@@ -1396,167 +1383,97 @@ class ArithmeticTrainer(BaseTrainer):
 
     def inference(self):
         """Run inference using the trained model"""
-        if self.cfg.task.name == "aqua":
+        log_on_main('\n\n*****\ntest\n*****\n\n')
 
-            log_on_main('\n\n*****\ntest\n*****\n\n')
+        # Load Tokenizer & Model
+        model_dir = str(self.output_dir)
 
-            # Load Tokenizer & Model
-            tokenizer = AutoTokenizer.from_pretrained(
-                str(self.output_dir),
-                trust_remote_code=self.cfg.model.trust_remote_code
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_dir,
+            trust_remote_code=self.cfg.model.trust_remote_code
+        )
+        model = LLM(
+            model=model_dir,
+            trust_remote_code=self.cfg.model.trust_remote_code,
+            tensor_parallel_size=torch.cuda.device_count(),
+            dtype=self.cfg.model.torch_dtype,
+            gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+            max_model_len=self.cfg.task.inference.max_model_len,
+            seed=self.cfg.experiment.dataset_seed,
+            task='generate'
+        )
+        sampling_params = SamplingParams(
+            n=self.cfg.task.inference.n,
+            temperature=self.cfg.task.inference.temperature,
+            max_tokens=self.cfg.task.inference.max_tokens,
+            min_tokens=1,
+            seed=self.cfg.experiment.dataset_seed
+        )
+        
+        # Load and Preprocess Dataset  
+        dataset = self._prepare_dataset(split='test')
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        dataset = dataset.remove_columns('sft')
+        log_on_main(dataset)
+
+        # Generate Completions
+        outputs = model.generate(dataset['prompt'], sampling_params)
+        outputs = [
+            completion_output.text
+            for request_output in outputs
+            for completion_output in request_output.outputs
+        ]
+        dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+        dataset = dataset.add_column('output', outputs)
+
+        # Calcuate Rewards
+        reward_fn = self._gsm8k_reward_fn
+        if "aqua" in self.cfg.task.name:
+            reward_fn = self.aqua_reward_fn
+
+        rewards = np.array(
+            reward_fn(
+                prompts=None,
+                completions=dataset['output'],
+                answer=dataset['answer']
             )
-            model = LLM(
-                model=str(self.output_dir),
-                trust_remote_code=self.cfg.model.trust_remote_code,
-                tensor_parallel_size=torch.cuda.device_count(),
-                dtype=self.cfg.model.torch_dtype,
-                gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
-                max_model_len=self.cfg.task.inference.max_model_len,
-                seed=self.cfg.experiment.dataset_seed,
-                task='generate'
-            )
-            sampling_params = SamplingParams(
-                n=self.cfg.task.inference.n,
-                temperature=self.cfg.task.inference.temperature,
-                max_tokens=self.cfg.task.inference.max_tokens,
-                min_tokens=1,
-                seed=self.cfg.experiment.dataset_seed
-            )
-            
-            # Load and Preprocess Dataset
-            dataset = self._prepare_dataset(split='test')
-            dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
-            dataset = dataset.remove_columns('sft')
-            log_on_main(dataset)
+        )
+        dataset = dataset.add_column('reward', rewards.tolist())
+        dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
 
-            # Generate Completions
-            outputs = model.generate(dataset['prompt'], sampling_params)
-            outputs = [
-                completion_output.text
-                for request_output in outputs
-                for completion_output in request_output.outputs
-            ]
-            dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
-            dataset = dataset.add_column('output', outputs)
+        # Process Metrics
+        results = dict()
+        total_reward = 0.0
+        total_accuracy = 0.0
+        total_support = 0
 
-            # Calcuate Rewards
-            rewards = np.array(
-                self.aqua_reward_fn(
-                    prompts=None,
-                    completions=dataset['output'],
-                    answer=dataset['answer']
-                )
-            )
-            dataset = dataset.add_column('reward', rewards.tolist())
-            dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
+        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+            task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+            task_rewards = np.array(task_outputs['reward'])
 
-            # Process Metrics
-            results = dict()
-            for task_idx, data_dir in enumerate(self.cfg.task.data_files):
-                task_outputs = dataset.filter(lambda example: example['task']==task_idx)
-                task_rewards = np.array(task_outputs['reward'])
-                results[os.path.basename(os.path.normpath(data_dir))] = {
-                    'avg_reward': round(task_rewards.mean().item(), 3),
-                    'accuracy': round((task_rewards > 0.5).mean().item(), 3),
-                    'support': len(task_rewards)
-                }
-            log_on_main(json.dumps(results, indent=4))
-            with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
-                json.dump(results, f, indent=4)           
+            support = len(task_rewards)
+            avg_reward = task_rewards.mean().item()
+            accuracy = (task_rewards > 0.5).mean().item()
 
-        else:
-            # Extract config values
-            model_checkpoint = self.cfg.task.inference.checkpoint
-            sc_num = self.cfg.task.inference.sc_num
+            total_reward += avg_reward * support
+            total_accuracy += accuracy * support
+            total_support += support
 
-
-            # Generate checkpoint path
-            model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
-
-            # Load model and tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(
-                model_dir,
-                trust_remote_code=self.cfg.model.trust_remote_code
-            )
-
-            # Load test dataset
-            dataset = datasets.load_dataset("gsm8k", "main", split="test")
-            dataset = dataset.add_column("task", [0] * len(dataset))
-
-            test_dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-            # Custom model for inference
-            model = HFModel(
-                model_pth=model_dir,
-                tokenizer_pth=model_dir,
-                max_new_tokens=self.cfg.task.inference.max_new_tokens
-            )
-
-
-
-            correct = 0
-            rewards = 0
-            total = 0
-            resume = 0
-            batch_size = 16
-            results = []
-
-            pbar = tqdm(range(0, len(test_dataset), batch_size),
-                        initial=resume,
-                        desc=self.cfg.task.name)
-
-            for batch_start in pbar:
-            # Generate batched responses
-                batch = test_dataset[batch_start: batch_start + batch_size]
-                batch_examples = [dict(zip(batch, t)) for t in zip(*batch.values())]
-                inputs = [input["prompt"] for input in batch_examples]
-
-                outputs = model.generate(inputs,
-                                            hide_input=True,
-                                            do_sample=True,
-                                            skip_special_tokens=False,
-                                            temperature=0.0).text
-
-                for output_idx, output in enumerate(outputs):
-                    answer = test_dataset[batch_start + output_idx]["answer"]
-                    reward_model = GSM8KRewardModel(answer)
-                    score = reward_model.compute_score(output)
-
-                    # Record results
-                    results.append({
-                        "prompt": inputs[output_idx],
-                        "output": output,
-                        "solution": answer,
-                        "score": score
-                    })
-
-                    if score > 0.5:
-                        correct += 1
-                    total += 1
-                accuracy = correct / total if total > 0 else 0
-                print(accuracy)
-
-            # Calculate accuracy
-            accuracy = correct / total if total > 0 else 0
-            rewards /= total if total > 0 else 0
-            print(f'Accuracy: {accuracy}, Rewards: {rewards}')
-
-
-            # Save results to output directory
-            evaluation_results = {
-                "accuracy": accuracy,
-                "rewards": rewards,
-                "model_checkpoint": model_checkpoint,
-                "sc_num": sc_num,
-                "detailed_results": results,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results[os.path.basename(os.path.normpath(data_dir))] = {
+                'avg_reward': avg_reward,
+                'accuracy': accuracy,
+                'support': support
             }
 
-            os.makedirs(model_dir, exist_ok=True)
-            with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-                json.dump(evaluation_results, f, indent=2)
-
-
-            return accuracy
+        if total_support > 0:
+            results['overall'] = {
+                'avg_reward': total_reward / total_support,
+                'accuracy': total_accuracy / total_support,
+                'support': total_support
+            }
+        log_on_main(json.dumps(results, indent=4))
+        with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
+            json.dump(results, f, indent=4)           
 
 class RLReasoner():
     def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
