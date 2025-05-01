@@ -33,8 +33,7 @@ def count_sources(split):
     
 def main():
     data = []
-    data.extend(load_data("sc_splits/gsm8k_sc_splits", source="gsm8k"))
-    data.extend(load_data("sc_splits/aqua_sc_splits", source="aqua"))
+    data.extend(load_data("split_benchmarks/GSM8K_FULL", source="gsm8k"))
     print(f"Total combined examples: {len(data)}")
 
     # Extract difficulty scores
@@ -61,7 +60,7 @@ def main():
 
     print(f"New split sizes: Trivial={len(trivial)} Easy={len(easy)}, Medium={len(medium)}, Hard={len(hard)}")
 
-    output_dir = "TEMH_splits/aqua_gsm8k_splits"
+    output_dir = "split_benchmarks/GSM8K_FULL/TEMH"
     os.makedirs(output_dir, exist_ok=True)
 
     print("Saving new splits...")

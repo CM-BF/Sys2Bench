@@ -1,10 +1,10 @@
 # conf/task/blocksworld.yaml
 name: "gsm8k"
 data_files:
-  - split_benchmarks/TEMH_splits/gsm8k_splits/gsm8k_trivial.jsonl
-  - split_benchmarks/TEMH_splits/gsm8k_splits/gsm8k_easy.jsonl
-  - split_benchmarks/TEMH_splits/gsm8k_splits/gsm8k_medium.jsonl
-  - split_benchmarks/TEMH_splits/gsm8k_splits/gsm8k_hard.jsonl
+  - datasets/gsm8k/trivial
+  - datasets/gsm8k/easy
+  - datasets/gsm8k/medium
+  - datasets/gsm8k/hard
 
 training:
   max_prompt_length: 1600
@@ -12,11 +12,7 @@ training:
 
 inference:
   checkpoint: 1600
-  steps: 4
-  temperature: 0.0
-  sc_num: 1
-  use_icl: false
-  icl_num: 2
-  num_shot: 4
-  resume: 0
-  max_new_tokens: 512
+  max_model_len: 1024
+  n: 1
+  temperature: 0
+  max_tokens: 512
