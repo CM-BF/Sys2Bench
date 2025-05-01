@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --partition=gpu-a100
-#SBATCH --time=0-8:00:00
+#SBATCH --time=0-08:00:00
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
 
@@ -40,25 +40,25 @@ for i in "$@"; do
 done
 
 
-source $WORK/miniconda3/etc/profile.d/conda.sh
+source $SCRATCH/miniconda3/etc/profile.d/conda.sh
 conda activate sys2bench_env
-cd $WORK/projects/Sys2Bench
+cd $SCRATCH/projects/Sys2Bench
 
 
-ROOT_PATH="$WORK/projects/Sys2Bench" \
+ROOT_PATH="$SCRATCH/projects/Sys2Bench" \
 accelerate launch \
 --mixed_precision bf16 \
 --num_processes 2 \
 --num_machines 1 \
+--gpu_ids 0,1,2 \
+--dynamo_backend no \
 --use_deepspeed \
---gpu_ids all \
 --zero_stage 3 \
 --offload_optimizer_device none \
 --offload_param_device none \
 --gradient_accumulation_steps 4 \
 --zero3_init_flag true \
 --zero3_save_16bit_model true \
---dynamo_backend no \
 methods/RL/main.py \
 mode=train \
 model="$model" \
@@ -67,13 +67,14 @@ algorithm.training.curriculum_schedule="$schedule" \
 algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
+algorithm.training.curriculum=false \
 algorithm.training.vllm_gpu_memory_utilization=0.8 \
 algorithm.training.report_to=\[tensorboard\] \
 algorithm.training.push_to_hub=false \
 algorithm.training.save_strategy=no
 
 
-ROOT_PATH="$WORK/projects/Sys2Bench" \
+ROOT_PATH="$SCRATCH/projects/Sys2Bench" \
 accelerate launch \
 --mixed_precision bf16 \
 --num_processes 1 \
@@ -88,7 +89,11 @@ algorithm.training.curriculum_schedule="$schedule" \
 algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
-algorithm.training.vllm_gpu_memory_utilization=0.8
+algorithm.training.curriculum=false \
+algorithm.training.vllm_gpu_memory_utilization=0.8 \
+algorithm.training.report_to=\[tensorboard\] \
+algorithm.training.push_to_hub=false \
+algorithm.training.save_strategy=no
 
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} stopped ..."
