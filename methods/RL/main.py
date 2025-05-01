@@ -1513,27 +1513,18 @@ class ArithmeticTrainer(BaseTrainer):
         # Process Metrics
         results = dict()
         results['overall'] = {
-            'avg_reward': np.array(dataset['reward']).mean().item(),
-            'accuracy': (np.array(dataset['reward']) > 0.5).mean().item(),
+            'avg_reward': rewards.mean().item(),
+            'accuracy': (rewards > 0.5).mean().item(),
             'support': len(dataset)
         }
         
         for task_idx, data_dir in enumerate(self.cfg.task.data_files):
             task_outputs = dataset.filter(lambda example: example['task']==task_idx)
             task_rewards = np.array(task_outputs['reward'])
-
-            support = len(task_rewards)
-            avg_reward = task_rewards.mean().item()
-            accuracy = (task_rewards > 0.5).mean().item()
-
-            total_reward += avg_reward * support
-            total_accuracy += accuracy * support
-            total_support += support
-
             results[os.path.basename(os.path.normpath(data_dir))] = {
-                'avg_reward': avg_reward,
-                'accuracy': accuracy,
-                'support': support
+                'avg_reward': task_rewards.mean().item(),
+                'accuracy': (task_rewards > 0.5).mean().item(),
+                'support': len(task_rewards)
             }
 
         log_on_main(json.dumps(results, indent=4))
