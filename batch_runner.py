@@ -9,7 +9,6 @@ args = parser.parse_args()
 run_dict = {
 
     'aqua' : {
-
         'qwen15' : [
             'balanced',
             'cosine',
@@ -31,7 +30,6 @@ run_dict = {
                 ]
             },
         ],
-
         'qwen15_base' : [
             'balanced',
             'cosine',
@@ -53,8 +51,100 @@ run_dict = {
                 ]
             },
         ]
+    },
 
-    }
+    'gsm8k' : {
+        'qwen15' : [
+            'balanced',
+            'cosine',
+            'classic',
+            {
+                'gaussian' : [
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
+                    {
+                        'mu' : 0.5,
+                        'sigma' : 0.5
+                    },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
+                ]
+            },
+        ],
+        'qwen15_base' : [
+            'balanced',
+            'cosine',
+            'classic',
+            {
+                'gaussian' : [
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
+                    {
+                        'mu' : 0.5,
+                        'sigma' : 0.5
+                    },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
+                ]
+            },
+        ]
+    },
+
+    # 'codeforcestrivial' : {
+    #     'qwen15' : [
+    #         'balanced',
+    #         'cosine',
+    #         'classic',
+    #         {
+    #             'gaussian' : [
+    #                 {
+    #                     'mu' : 0.25,
+    #                     'sigma' : 0.75
+    #                 },
+    #                 {
+    #                     'mu' : 0.5,
+    #                     'sigma' : 0.5
+    #                 },
+    #                 {
+    #                     'mu' : 0.75,
+    #                     'sigma' : 0.25
+    #                 },
+    #             ]
+    #         },
+    #     ],
+    # },
+
+    # 'math' : {
+    #     'qwen15' : [
+    #         'balanced',
+    #         'cosine',
+    #         'classic',
+    #         {
+    #             'gaussian' : [
+    #                 {
+    #                     'mu' : 0.25,
+    #                     'sigma' : 0.75
+    #                 },
+    #                 {
+    #                     'mu' : 0.5,
+    #                     'sigma' : 0.5
+    #                 },
+    #                 {
+    #                     'mu' : 0.75,
+    #                     'sigma' : 0.25
+    #                 },
+    #             ]
+    #         },
+    #     ],
+    # }
 
 }
 

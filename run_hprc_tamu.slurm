@@ -57,7 +57,7 @@ accelerate launch \
 --mixed_precision bf16 \
 --num_processes 2 \
 --num_machines 1 \
---gpu_ids all \
+--gpu_ids 0,1,2 \
 --dynamo_backend no \
 --use_deepspeed \
 --zero_stage 3 \
