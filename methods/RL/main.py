@@ -45,7 +45,7 @@ log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
 OmegaConf.register_new_resolver("mode2name", lambda mode, sub1, sub2: sub1 if mode == "train" else sub2)
 
-
+disable_caching()
 accelerator = Accelerator()
 def log_on_main(text):
     if accelerator.is_main_process:
@@ -1206,7 +1206,6 @@ class ArithmeticTrainer(BaseTrainer):
     def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
 
-        disable_caching()
         dataset = []
         for task_idx, data_dir in enumerate(self.cfg.task.data_files):
             data = load_dataset('json', data_dir=data_dir, split=split)
@@ -1513,10 +1512,12 @@ class ArithmeticTrainer(BaseTrainer):
 
         # Process Metrics
         results = dict()
-        total_reward = 0.0
-        total_accuracy = 0.0
-        total_support = 0
-
+        results['overall'] = {
+            'avg_reward': np.array(dataset['reward']).mean().item(),
+            'accuracy': (np.array(dataset['reward']) > 0.5).mean().item(),
+            'support': len(dataset)
+        }
+        
         for task_idx, data_dir in enumerate(self.cfg.task.data_files):
             task_outputs = dataset.filter(lambda example: example['task']==task_idx)
             task_rewards = np.array(task_outputs['reward'])
@@ -1535,12 +1536,6 @@ class ArithmeticTrainer(BaseTrainer):
                 'support': support
             }
 
-        if total_support > 0:
-            results['overall'] = {
-                'avg_reward': total_reward / total_support,
-                'accuracy': total_accuracy / total_support,
-                'support': total_support
-            }
         log_on_main(json.dumps(results, indent=4))
         with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
             json.dump(results, f, indent=4)           
