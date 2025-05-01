@@ -348,7 +348,6 @@ class BaseTrainer:
         """Generate the path to the checkpoint based on configuration"""
         # Get the base output directory for models from config
         base_output_dir = self.cfg.output.root_path
-
         # Use the model name from output config
         model_name = self.cfg.output.run_name if model_name is None else model_name
 
@@ -361,11 +360,14 @@ class BaseTrainer:
             checkpoint_path = checkpoint
 
         # Ensure the checkpoint exists
-        if not os.path.exists(checkpoint_path):
+        if os.path.exists(checkpoint_path):
+            return checkpoint_path
+        else:
             import warnings
 
             checkpoint_path = f'{self.cfg.model.family}/{model_name}'
             warnings.warn(f"Checkpoint not found at {checkpoint_path}. Will attempt to use the model in huggingface: {checkpoint_path}.")
+    
 
         return checkpoint_path
 
@@ -1230,14 +1232,6 @@ class ArithmeticTrainer(BaseTrainer):
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
         
         if "math" in self.cfg.task.name:
-            all_samples = []
-            for task_idx, file in enumerate(self.cfg.task.data_files):
-                file_dataset = load_dataset('json', data_files=file)['train']
-                # Annotate with difficulty
-                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
-                all_samples.extend(file_dataset)
-            dataset = Dataset.from_list(all_samples)
-            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
             dataset = process_docs(dataset)
 
         return dataset
@@ -1258,7 +1252,7 @@ class ArithmeticTrainer(BaseTrainer):
         except ValueError:
             return None
 
-    def _generate_prompt(self, tokenizer, example):
+    def _generate_prompt(self, tokenizer, example, use_icl = False):
         """Generate prompt for the arithmetic model"""
 
         if 'gsm8k' in self.cfg.task.name:
@@ -1278,7 +1272,8 @@ class ArithmeticTrainer(BaseTrainer):
             question = example["problem"]
             sft = example["solution"]
             answer = example["answer"].strip()
-            instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in \\boxed{{}}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{{500}}</answer>."
+            instruction = "Solve the following math problem\n<question>\n\nShow your work in <think> </think> tags. And return the final answer in \\boxed{}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{500}</answer>."
+            instruction = instruction.replace('<question>', question)
         
         messages = [
             {
@@ -1512,13 +1507,16 @@ class ArithmeticTrainer(BaseTrainer):
     def inference(self):
         """Run inference using the trained model"""
         log_on_main('\n\n*****\ntest\n*****\n\n')
+        
+        model_checkpoint = self.cfg.task.inference.checkpoint
+        sc_num = self.cfg.task.inference.sc_num
 
-        # Load Tokenizer & Model
-        model_dir = str(self.output_dir)
+        # Generate checkpoint path
+        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
 
         tokenizer = AutoTokenizer.from_pretrained(
             model_dir,
-            trust_remote_code=self.cfg.model.trust_remote_code
+            trust_remote_code=self.cfg.model.trust_remote_code,
         )
         model = LLM(
             model=model_dir,
@@ -1535,7 +1533,8 @@ class ArithmeticTrainer(BaseTrainer):
             temperature=self.cfg.task.inference.temperature,
             max_tokens=self.cfg.task.inference.max_tokens,
             min_tokens=1,
-            seed=self.cfg.experiment.dataset_seed
+            seed=self.cfg.experiment.dataset_seed,
+            stop=["</answer>"]
         )
         
         # Load and Preprocess Dataset  
@@ -1545,6 +1544,19 @@ class ArithmeticTrainer(BaseTrainer):
         log_on_main(dataset)
 
         # Generate Completions
+        # outputs = []
+        # for i in range(0, len(dataset['prompt']), 8):
+        #     batch_prompts = dataset['prompt'][i:i + 8]
+        #     print(batch_prompts)
+        #     quit()
+        #     batch_outputs = model.generate(batch_prompts, sampling_params)
+        #     prcessed_outputs = [
+        #         completion_output.text
+        #         for request_output in batch_outputs
+        #         for completion_output in request_output.outputs
+        #     ]
+        #     print(prcessed_outputs)
+        #     outputs.extend(prcessed_outputs)
         outputs = model.generate(dataset['prompt'], sampling_params)
         outputs = [
             completion_output.text
@@ -1555,9 +1567,7 @@ class ArithmeticTrainer(BaseTrainer):
         dataset = dataset.add_column('output', outputs)
 
         # Calcuate Rewards
-        reward_fn = self._gsm8k_reward_fn
-        if "aqua" in self.cfg.task.name:
-            reward_fn = self.aqua_reward_fn
+        reward_fn = self.reward_functions[self.cfg.task.name]
 
         rewards = np.array(
             reward_fn(
@@ -1588,7 +1598,10 @@ class ArithmeticTrainer(BaseTrainer):
 
         log_on_main(json.dumps(results, indent=4))
         with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
-            json.dump(results, f, indent=4)           
+            json.dump(results, f, indent=4)  
+            
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()        
 
 class RLReasoner():
     def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
@@ -1677,7 +1690,7 @@ def main(cfg: DictConfig):
         trainer = BlocksWorldTrainer(cfg)
     elif "countdown" in task:
         trainer = CountdownTrainer(cfg)
-    elif any(x in task for x in ["gsm8k", "easymath", "aqua"]):
+    elif any(x in task for x in ["gsm8k", "math", "aqua"]):
         trainer = ArithmeticTrainer(cfg)
     elif "code" in task:
         trainer = CodeTrainer(cfg)
@@ -1893,34 +1906,6 @@ class CodeTrainer(BaseTrainer):
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
             )
-        # if "grpo" in algorithm:
-        #     training_args = self._setup_grpo_training()
-        #     trainer = CurriculumGRPOTrainer(
-        #         model=model,
-        #         reward_funcs=self._coding_reward_fn,
-        #         args=training_args,
-        #         train_dataset=train_dataset,
-        #         eval_dataset=test_dataset,
-        #         processing_class=tokenizer,
-        #         peft_config=peft_config,
-        #         num_tasks=len(self.cfg.task.data_files),
-        #         total_iterations=training_args.max_steps,
-        #         data_schedule=self.cfg.algorithm.training.curriculum_schedule,
-        #         scheduler_params=self.cfg.algorithm.training.scheduler_params,
-        #     )
-        # elif algorithm == "ppo":
-        #     training_args = self._setup_ppo_training()
-        #     trainer = PPOTrainer(
-        #         model=model_config.model_name_or_path,
-        #         ref_model=model_config.model_name_or_path,  # Same model as reference
-        #         tokenizer=tokenizer,
-        #         args=training_args,
-        #         reward_fn=self._coding_reward_fn,
-        #         train_dataset=train_dataset,
-        #         eval_dataset=test_dataset,
-        #         peft_config=get_peft_config(model_config),
-        #     )
-
         else:
             raise ValueError(f"Unsupported algorithm: {algorithm}")
 
