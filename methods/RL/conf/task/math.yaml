@@ -1,0 +1,22 @@
+# conf/task/blocksworld.yaml
+name: "math"
+data_files:
+  - data/math/train/Level_1.json
+  - data/math/train/Level_2.json
+  - data/math/train/Level_3.json
+  - data/math/train/Level_4.json
+
+training:
+  max_prompt_length: 1600
+  max_completion_length: 1600
+
+inference:
+  checkpoint: 1600
+  steps: 4
+  temperature: 0.0
+  sc_num: 1
+  use_icl: false
+  icl_num: 2
+  num_shot: 4
+  resume: 0
+  max_new_tokens: 1600
