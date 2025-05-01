@@ -19,7 +19,7 @@ from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from trl import GRPOConfig, GRPOTrainer, PPOConfig, PPOTrainer, get_peft_config, ModelConfig
 import datasets
-
+from math_utils import process_docs, process_result_v1
 # Task-specific imports
 from blocksworld_reward_model import BlocksWorldModel
 from utils import generate_icl, sc_output_extractor
@@ -218,7 +218,7 @@ class TaskSampler(torch.utils.data.Sampler):
             yield from batch_indices
 
     def __len__(self):
-        return self.total_iterations
+        return len(self.dataset)
     @staticmethod
     def _balanced_schedule(t, T, num_tasks):
         return {i: 1. / num_tasks for i in range(num_tasks)}
@@ -608,6 +608,13 @@ class BlocksWorldTrainer(BaseTrainer):
             model_config.model_name_or_path,
             trust_remote_code=model_config.trust_remote_code
         )
+
+        # Ensure we have a pad_token
+        if tokenizer.pad_token is None:
+            # Option A: alias EOS → PAD
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+
         model = AutoModelForCausalLM.from_pretrained(
             model_config.model_name_or_path,
             torch_dtype=model_config.torch_dtype,
@@ -1135,7 +1142,15 @@ class CountdownTrainer(BaseTrainer):
 
 class ArithmeticTrainer(BaseTrainer):
     """Class for training and inference on Arithmetic models"""
-
+    def __init__(self, cfg: DictConfig):
+        super().__init__(cfg)
+        self.reward_functions = {
+            'gsm8k': self._gsm8k_reward_fn,
+            'aqua': self.aqua_reward_fn,
+            'math': self._math_reward_fn
+        }
+        
+        
     def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
 
@@ -1157,6 +1172,17 @@ class ArithmeticTrainer(BaseTrainer):
                 dataset.append(data)
             dataset = concatenate_datasets(dataset)
             dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+        
+        if "math" in self.cfg.task.name:
+            all_samples = []
+            for task_idx, file in enumerate(self.cfg.task.data_files):
+                file_dataset = load_dataset('json', data_files=file)['train']
+                # Annotate with difficulty
+                file_dataset = file_dataset.add_column("task", [task_idx] * len(file_dataset))
+                all_samples.extend(file_dataset)
+            dataset = Dataset.from_list(all_samples)
+            dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
+            dataset = process_docs(dataset)
 
         return dataset
 
@@ -1194,6 +1220,12 @@ class ArithmeticTrainer(BaseTrainer):
             options = "  ".join(example["options"])
             instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
 
+        elif 'math' in self.cfg.task.name:
+            question = example["problem"]
+            sft = example["solution"]
+            answer = example["answer"].strip()
+            instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in \\boxed{{}}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{{500}}</answer>."
+        
         messages = [
             {
                 "role": "system",
@@ -1257,6 +1289,38 @@ class ArithmeticTrainer(BaseTrainer):
 
         return True, 'Correctly Formatted'
 
+    def _math_reward_fn(self, completions, answer, **kwargs):
+        rewards = []
+        
+        def ans_extract(output):
+            answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', output, re.DOTALL)
+            if len(answer_match) > 0:
+                print(f'Answer Extracted - {answer_match[-1].strip()}')
+                return answer_match[-1].strip()
+            return None
+        
+        for completion, answer_i in zip(completions, answer):
+            try:
+                log_on_main('#########################')
+                completion = "<think>" + completion
+                log_on_main(completion)
+
+                is_formatted, reason_str = self._is_formatted(completion)
+                if not is_formatted:
+                    print('Response Format Error')
+                    rewards.append(0.0)  # Penalty to avoid format errors
+                    continue
+                accuracy_reward = process_result_v1(answer_i, completion, ans_extract)
+                rewards.append(accuracy_reward)
+                log_on_main('-----')
+                log_on_main(accuracy_reward)
+                log_on_main('-----')
+                log_on_main('#########################')
+            except Exception as e:
+                log_on_main(e)
+                rewards.append(0.0)
+        return rewards
+    
     def _gsm8k_reward_fn(self, completions, answer, **kwargs):
         """Reward function for gsm8k task"""
         rewards = []
@@ -1272,7 +1336,6 @@ class ArithmeticTrainer(BaseTrainer):
                     print('Response Format Error')
                     rewards.append(0.0)  # Penalty to avoid format errors
                     continue
-
 
                 # Use the GSM8KRewardModel class
                 reward_model = GSM8KRewardModel(answer_i)
@@ -1352,11 +1415,7 @@ class ArithmeticTrainer(BaseTrainer):
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
 
-
-        if "gsm8k" in self.cfg.task.name:
-            arithmetic_reward_fn = self._gsm8k_reward_fn
-        else:
-            arithmetic_reward_fn = self.aqua_reward_fn
+        arithmetic_reward_fn = self.reward_functions[self.cfg.task.name]
 
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
