@@ -1717,36 +1717,6 @@ def occupy_gpu_memory(gb=75, device="cuda:0"):
         time.sleep(60)
 
 
-@hydra.main(config_path="conf", config_name="config", version_base="1.3")
-def main(cfg: DictConfig):
-    """Main entry point for training and inference with Hydra configuration"""
-    print(OmegaConf.to_yaml(cfg))
-
-    # Select the appropriate trainer based on the task
-    task = cfg.task.name
-    if "blocksworld" in task:
-        trainer = BlocksWorldTrainer(cfg)
-    elif "countdown" in task:
-        trainer = CountdownTrainer(cfg)
-    elif any(x in task for x in ["gsm8k", "math", "aqua"]):
-        trainer = ArithmeticTrainer(cfg)
-    elif "code" in task:
-        trainer = CodeTrainer(cfg)
-    else:
-        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
-
-    # Check which mode to run
-    if cfg.mode == "train":
-        trainer.train()
-    elif cfg.mode == "inference":
-        trainer.inference()
-    else:
-        raise ValueError(f"Unknown mode: {cfg.mode}. Choose either 'train' or 'inference'")
-
-    # Optional: Occupy GPU memory after training (useful for server environments)
-    if cfg.get("occupy_gpu_memory", False):
-        occupy_gpu_memory(gb=cfg.occupy_gpu_memory_gb, device=cfg.gpu_device)
-
 class CodeTrainer(BaseTrainer):
     """Class for training and inference on code models"""
 
@@ -2043,6 +2013,36 @@ class CodeTrainer(BaseTrainer):
         #     json.dump(evaluation_results, f, indent=2)
 
         return accuracy
+
+@hydra.main(config_path="conf", config_name="config", version_base="1.3")
+def main(cfg: DictConfig):
+    """Main entry point for training and inference with Hydra configuration"""
+    print(OmegaConf.to_yaml(cfg))
+
+    # Select the appropriate trainer based on the task
+    task = cfg.task.name
+    if "blocksworld" in task:
+        trainer = BlocksWorldTrainer(cfg)
+    elif "countdown" in task:
+        trainer = CountdownTrainer(cfg)
+    elif any(x in task for x in ["gsm8k", "math", "aqua"]):
+        trainer = ArithmeticTrainer(cfg)
+    elif "code" in task:
+        trainer = CodeTrainer(cfg)
+    else:
+        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
+
+    # Check which mode to run
+    if cfg.mode == "train":
+        trainer.train()
+    elif cfg.mode == "inference":
+        trainer.inference()
+    else:
+        raise ValueError(f"Unknown mode: {cfg.mode}. Choose either 'train' or 'inference'")
+
+    # Optional: Occupy GPU memory after training (useful for server environments)
+    if cfg.get("occupy_gpu_memory", False):
+        occupy_gpu_memory(gb=cfg.occupy_gpu_memory_gb, device=cfg.gpu_device)
 
 
 if __name__ == "__main__":
