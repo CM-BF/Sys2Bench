@@ -66,7 +66,6 @@ class BWEvaluator(Evaluator):
                  output_extractor=rap_bw_extractor,
                  answer_extractor=lambda x:x,
                  sample_prompt_type="rap",
-                 is_step1=False,
                  mode="majority"
                  ) -> None:
         super().__init__()
@@ -89,7 +88,8 @@ class BWEvaluator(Evaluator):
                 question_obj['plan'] = d['plan']
                 question_obj['question'] = question
                 self.full_dataset.append(question_obj)
-        else:        
+        else:
+            self.is_step1 = False        
             self.full_dataset = bw_utils.load_blocksworld(config_file, domain_file, data_path)  # [{"goal": str, "init": str}]
         self._dataset_name = 'blocksworld'
         self.disable_log = disable_log

@@ -21,7 +21,7 @@ for model in "${MODELS[@]}"; do
   # Construct the local output directory
 #   model_dir="outputs/${model_basename}_blocksworld1246_sgrpo_balanced_0.5_0.5_True_300"
 
-  for steps in 1 2 4 6 8; do
+  for steps in 2 4 6 8; do
     for k in 4 16 64 256; do
       echo "Running: model=${model}, steps=${steps}, pass_at_k=${k}"
 
