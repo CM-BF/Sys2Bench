@@ -62,12 +62,12 @@ def main(model_checkpoint=300,
          domain_file: str = "data/blocksworld/generated_domain.pddl", 
          resume=0, 
          log_dir=None,
-         temperature=0.7,
+         temperature=0.0,
          prompt_path='prompts/blocksworld/pool_prompt_v1.json',
          sc_num=1,
          use_icl = False,
          use_vllm = False,
-         max_batch_size=128,
+         max_batch_size=64,
          pass_at_k=1
          ):
     print('Running BW inference...')
