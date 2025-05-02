@@ -5,7 +5,7 @@ data_files:
   - data/math/level_2
   - data/math/level_3
   - data/math/level_4
-  - data/math/level_5
+  # - data/math/level_5
 
 training:
   max_prompt_length: 1600
