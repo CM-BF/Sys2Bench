@@ -1463,12 +1463,15 @@ class ArithmeticTrainer(BaseTrainer):
         dataset = self._prepare_dataset(split='train')
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
-
         arithmetic_reward_fn = self.reward_functions[self.cfg.task.name]
 
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
+            batch_size = int(training_args.gradient_accumulation_steps * training_args.per_device_train_batch_size)
+            # GRPO doesn't train more than an epoch. Except for epoch override, when learning hard task or maybe?
+            print(f'Setting Correct Max Steps - {training_args.max_steps} - {len(dataset)//batch_size}')
+            training_args.max_steps = min(training_args.max_steps, len(dataset)//batch_size)
             trainer = CurriculumGRPOTrainer(
                 model=model,
                 reward_funcs=arithmetic_reward_fn,
@@ -1534,7 +1537,8 @@ class ArithmeticTrainer(BaseTrainer):
             max_tokens=self.cfg.task.inference.max_tokens,
             min_tokens=1,
             seed=self.cfg.experiment.dataset_seed,
-            stop=["</answer>"]
+            stop=["</answer>"],
+            include_stop_str_in_output=True
         )
         
         # Load and Preprocess Dataset  
@@ -1563,6 +1567,8 @@ class ArithmeticTrainer(BaseTrainer):
             for request_output in outputs
             for completion_output in request_output.outputs
         ]
+        # print(outputs)
+        # quit()
         dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
         dataset = dataset.add_column('output', outputs)
 
