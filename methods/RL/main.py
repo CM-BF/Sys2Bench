@@ -223,7 +223,8 @@ class TaskSampler(torch.utils.data.Sampler):
             yield from batch_indices
 
     def __len__(self):
-        return len(self.dataset)
+        return self.total_iterations * self.batch_size
+        # return len(self.dataset) # Can be self.total_iterations * self.batch_size also, this depends on what we want to be doing.
     @staticmethod
     def _balanced_schedule(t, T, num_tasks):
         return {i: 1. / num_tasks for i in range(num_tasks)}
@@ -1468,10 +1469,10 @@ class ArithmeticTrainer(BaseTrainer):
         # Setup training arguments based on algorithm
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
-            batch_size = int(training_args.gradient_accumulation_steps * training_args.per_device_train_batch_size)
+            # batch_size = int(training_args.gradient_accumulation_steps * training_args.per_device_train_batch_size)
             # GRPO doesn't train more than an epoch. Except for epoch override, when learning hard task or maybe?
-            print(f'Setting Correct Max Steps - {training_args.max_steps} - {len(dataset)//batch_size}')
-            training_args.max_steps = min(training_args.max_steps, len(dataset)//batch_size)
+            # print(f'Setting Correct Max Steps - {training_args.max_steps} - {len(dataset)//batch_size}')
+            # training_args.max_steps = min(training_args.max_steps, len(dataset)//batch_size)
             trainer = CurriculumGRPOTrainer(
                 model=model,
                 reward_funcs=arithmetic_reward_fn,
