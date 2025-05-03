@@ -368,7 +368,7 @@ class BaseTrainer:
 
             checkpoint_path = f'{self.cfg.model.family}/{model_name}'
             warnings.warn(f"Checkpoint not found at {checkpoint_path}. Will attempt to use the model in huggingface: {checkpoint_path}.")
-    
+
 
         return checkpoint_path
 
@@ -1080,17 +1080,40 @@ class CountdownTrainer(BaseTrainer):
             trust_remote_code=self.cfg.model.trust_remote_code
         )
 
+        # Custom model for inference
+        # model = HFModel(
+        #     model_pth=model_dir,
+        #     tokenizer_pth=model_dir,
+        #     max_new_tokens=self.cfg.task.inference.max_new_tokens,
+        #     max_batch_size=batch_size
+        # )
+        model = LLM(
+            model=model_dir,
+            # tokenizer=tokenizer,
+            trust_remote_code=self.cfg.model.trust_remote_code,
+            tensor_parallel_size=torch.cuda.device_count(),
+            dtype=self.cfg.model.torch_dtype,
+            gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+            max_model_len=2048,
+            seed=self.cfg.experiment.dataset_seed,
+            task='generate'
+        )
+
+        tokenizer = model.get_tokenizer()
         if tokenizer.pad_token is None:
             # Option A: alias EOS → PAD
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        # Custom model for inference
-        model = HFModel(
-            model_pth=model_dir,
-            tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens,
-            max_batch_size=batch_size
+        sampling_params = SamplingParams(
+            n=num_generations,
+            temperature=self.cfg.task.inference.temperature,
+            max_tokens=self.cfg.task.inference.max_new_tokens,
+            min_tokens=1,
+            seed=self.cfg.experiment.dataset_seed,
+            skip_special_tokens=False,
+            top_p=0.9,
+            top_k=50
         )
 
         # Run inference on test dataset
@@ -1112,12 +1135,18 @@ class CountdownTrainer(BaseTrainer):
 
             # Generate responses
             outputs = []
-            for _ in range(num_generations):
-                outputs.append(model.generate(prompt_list, do_sample=True, temperature=self.cfg.task.inference.temperature, verbose=False, skip_special_tokens=False).text)
-            if num_generations > 1:
-                outputs = list(zip(*outputs))
-            else:
-                outputs = outputs[0]
+            output = model.generate(prompt_list, sampling_params)
+            for i in range(len(prompt_list)):
+                outputs.append([out.text for out in output[i].outputs])
+            print(outputs)
+            # print(outputs) # Qwen2.5-1.5B-Instruct_countdown2345_grpo_gaussian_0.25_0.75_True_1200
+            # for _ in range(num_generations):
+            #     outputs.append(model.generate(prompt_list, do_sample=True, temperature=self.cfg.task.inference.temperature, verbose=False, skip_special_tokens=False).text)
+            # if num_generations > 1:
+            #     # outputs = list(zip(*outputs)) # For old generation code
+            #     pass
+            # else:
+            #     outputs = outputs[0]
 
             if pass_at_k > 1:
                 for k_outputs, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
@@ -1155,7 +1184,10 @@ class CountdownTrainer(BaseTrainer):
                     correct += int(pass_once)
                     total += 1
             else:
-                for output, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
+                for k_outputs, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
+
+                    # k = 1
+                    output = k_outputs[0]
 
                     # Use the CountdownRewardModel for evaluation
                     reward_model = CountdownRewardModel(target, numbers)
@@ -1219,8 +1251,8 @@ class ArithmeticTrainer(BaseTrainer):
             'aqua': self.aqua_reward_fn,
             'math': self._math_reward_fn
         }
-        
-        
+
+
     def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
 
@@ -1231,7 +1263,7 @@ class ArithmeticTrainer(BaseTrainer):
             dataset.append(data)
         dataset = concatenate_datasets(dataset)
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
-        
+
         if "math" in self.cfg.task.name:
             dataset = process_docs(dataset)
 
@@ -1275,7 +1307,7 @@ class ArithmeticTrainer(BaseTrainer):
             answer = example["answer"].strip()
             instruction = "Solve the following math problem\n<question>\n\nShow your work in <think> </think> tags. And return the final answer in \\boxed{}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{500}</answer>."
             instruction = instruction.replace('<question>', question)
-        
+
         messages = [
             {
                 "role": "system",
@@ -1341,14 +1373,14 @@ class ArithmeticTrainer(BaseTrainer):
 
     def _math_reward_fn(self, completions, answer, **kwargs):
         rewards = []
-        
+
         def ans_extract(output):
             answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', output, re.DOTALL)
             if len(answer_match) > 0:
                 print(f'Answer Extracted - {answer_match[-1].strip()}')
                 return answer_match[-1].strip()
             return None
-        
+
         for completion, answer_i in zip(completions, answer):
             try:
                 log_on_main('#########################')
@@ -1370,7 +1402,7 @@ class ArithmeticTrainer(BaseTrainer):
                 log_on_main(e)
                 rewards.append(0.0)
         return rewards
-    
+
     def _gsm8k_reward_fn(self, completions, answer, **kwargs):
         """Reward function for gsm8k task"""
         rewards = []
@@ -1511,7 +1543,7 @@ class ArithmeticTrainer(BaseTrainer):
     def inference(self):
         """Run inference using the trained model"""
         log_on_main('\n\n*****\ntest\n*****\n\n')
-        
+
         model_checkpoint = self.cfg.task.inference.checkpoint
         sc_num = self.cfg.task.inference.sc_num
 
@@ -1605,10 +1637,10 @@ class ArithmeticTrainer(BaseTrainer):
 
         log_on_main(json.dumps(results, indent=4))
         with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
-            json.dump(results, f, indent=4)  
-            
+            json.dump(results, f, indent=4)
+
         if torch.distributed.is_initialized():
-            torch.distributed.destroy_process_group()        
+            torch.distributed.destroy_process_group()
 
 class RLReasoner():
     def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
@@ -1685,36 +1717,6 @@ def occupy_gpu_memory(gb=75, device="cuda:0"):
         print("Holding memory...")
         time.sleep(60)
 
-
-@hydra.main(config_path="conf", config_name="config", version_base="1.3")
-def main(cfg: DictConfig):
-    """Main entry point for training and inference with Hydra configuration"""
-    print(OmegaConf.to_yaml(cfg))
-
-    # Select the appropriate trainer based on the task
-    task = cfg.task.name
-    if "blocksworld" in task:
-        trainer = BlocksWorldTrainer(cfg)
-    elif "countdown" in task:
-        trainer = CountdownTrainer(cfg)
-    elif any(x in task for x in ["gsm8k", "math", "aqua"]):
-        trainer = ArithmeticTrainer(cfg)
-    elif "code" in task:
-        trainer = CodeTrainer(cfg)
-    else:
-        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
-
-    # Check which mode to run
-    if cfg.mode == "train":
-        trainer.train()
-    elif cfg.mode == "inference":
-        trainer.inference()
-    else:
-        raise ValueError(f"Unknown mode: {cfg.mode}. Choose either 'train' or 'inference'")
-
-    # Optional: Occupy GPU memory after training (useful for server environments)
-    if cfg.get("occupy_gpu_memory", False):
-        occupy_gpu_memory(gb=cfg.occupy_gpu_memory_gb, device=cfg.gpu_device)
 
 class CodeTrainer(BaseTrainer):
     """Class for training and inference on code models"""
@@ -2012,6 +2014,36 @@ class CodeTrainer(BaseTrainer):
         #     json.dump(evaluation_results, f, indent=2)
 
         return accuracy
+
+@hydra.main(config_path="conf", config_name="config", version_base="1.3")
+def main(cfg: DictConfig):
+    """Main entry point for training and inference with Hydra configuration"""
+    print(OmegaConf.to_yaml(cfg))
+
+    # Select the appropriate trainer based on the task
+    task = cfg.task.name
+    if "blocksworld" in task:
+        trainer = BlocksWorldTrainer(cfg)
+    elif "countdown" in task:
+        trainer = CountdownTrainer(cfg)
+    elif any(x in task for x in ["gsm8k", "math", "aqua"]):
+        trainer = ArithmeticTrainer(cfg)
+    elif "code" in task:
+        trainer = CodeTrainer(cfg)
+    else:
+        raise ValueError(f"Unknown task: {task}. Choose either 'blocksworld', 'countdown', or 'gsm8k'")
+
+    # Check which mode to run
+    if cfg.mode == "train":
+        trainer.train()
+    elif cfg.mode == "inference":
+        trainer.inference()
+    else:
+        raise ValueError(f"Unknown mode: {cfg.mode}. Choose either 'train' or 'inference'")
+
+    # Optional: Occupy GPU memory after training (useful for server environments)
+    if cfg.get("occupy_gpu_memory", False):
+        occupy_gpu_memory(gb=cfg.occupy_gpu_memory_gb, device=cfg.gpu_device)
 
 
 if __name__ == "__main__":
