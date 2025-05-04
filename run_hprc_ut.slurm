@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --partition=gpu-a100
-#SBATCH --time=0-08:00:00
+#SBATCH --time=0-12:00:00
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
 
@@ -15,7 +15,6 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} started ..."
 
 mu="0.5"
 sigma="0.5"
-max_steps="1600"
 for i in "$@"; do
   case "$i" in
     --model=*)
@@ -33,11 +32,18 @@ for i in "$@"; do
     --sigma=*)
       sigma="${i#*=}"
       ;;
-    --max_steps=*)
-      max_steps="${i#*=}"
-      ;;
   esac
 done
+
+if [ $task == "math" ]; then
+  max_steps="1200"
+if [ $task == "aqua" ]; then
+  max_steps="1600"
+if [ $task == "gsm8k" ]; then
+  max_steps="1600"
+else
+  max_steps=1600
+fi
 
 
 source $SCRATCH/miniconda3/etc/profile.d/conda.sh
