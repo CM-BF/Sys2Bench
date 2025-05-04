@@ -32,7 +32,7 @@ import numpy as np
 import random
 from countdown_reward_model import CountdownRewardModel
 import math
-from functools import partial
+from functools import partial, update_wrapper
 # For Arithmetic Tasks
 from gsm8k_reward_model import GSM8KRewardModel
 import logging
@@ -43,7 +43,7 @@ from coding_reward_model import CodingRewardModel
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
-OmegaConf.register_new_resolver("mode2name", lambda mode, sub1, sub2: sub1 if mode == "train" else sub2)
+OmegaConf.register_new_resolver("mode2name", lambda mode, sub1, sub2: sub1)
 
 disable_caching()
 accelerator = Accelerator()
@@ -301,8 +301,8 @@ class BaseTrainer:
 
         root_path = Path(os.environ['ROOT_PATH'])
         os.chdir(root_path)
-        print(f"Working directory: {root_path}")
-        print(f"Output directory: {self.output_dir}")
+        log_on_main(f"Working directory: {root_path}")
+        log_on_main(f"Output directory: {self.output_dir}")
 
         # Setup HuggingFace authentication
         # Setup HuggingFace authentication
@@ -313,9 +313,9 @@ class BaseTrainer:
             # Try to get user info which will fail if not logged in
             api = HfApi()
             user_info = api.whoami()
-            print(f"Already logged in to Hugging Face as {user_info['name']}")
+            log_on_main(f"Already logged in to Hugging Face as {user_info['name']}")
         except Exception as e:
-            print("Logging in to Hugging Face")
+            log_on_main("Logging in to Hugging Face")
             login(token=hf_token, add_to_git_credential=True)
 
         self.last_log_time = None
@@ -1243,70 +1243,49 @@ class CountdownTrainer(BaseTrainer):
 
 
 class ArithmeticTrainer(BaseTrainer):
-    """Class for training and inference on Arithmetic models"""
+    """
+    Class for training and inference on Arithmetic models
+    """
+
     def __init__(self, cfg: DictConfig):
         super().__init__(cfg)
-        self.reward_functions = {
-            'gsm8k': self._gsm8k_reward_fn,
-            'aqua': self.aqua_reward_fn,
-            'math': self._math_reward_fn
+        self.is_correct_fn = {
+            'gsm8k': GSM8KRewardModel.is_correct,
+            'aqua': lambda extracted_answer, answer: extracted_answer==answer,
+            'math': process_result_v1
         }
 
 
-    def _prepare_dataset(self, split='train'):
+    def prepare_dataset(self):
         """Prepare dataset for training"""
 
+        if self.cfg.mode == "train":
+            data_files = self.cfg.task.training.data_files
+            split='train'
+        elif self.cfg.mode == "inference":
+            data_files = self.cfg.task.inference.data_files
+            split='test'
+
         dataset = []
-        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+        for task_idx, data_dir in enumerate(data_files):
             data = load_dataset('json', data_dir=data_dir, split=split)
             data = data.add_column("task", [task_idx] * len(data))
             dataset.append(data)
         dataset = concatenate_datasets(dataset)
         dataset = dataset.shuffle(seed=self.cfg.experiment.dataset_seed)
 
-        if "math" in self.cfg.task.name:
-            dataset = process_docs(dataset)
-
         return dataset
 
-    def extract_answer(self, text):
-        """Extract answer from raw gsm8k answer string"""
-        text = text.replace(",", "")
-        marker_pos = text.find('####')
 
-        if marker_pos == -1:
-            return None
-
-        answer_text = text[marker_pos + 4:].strip()
-        answer_text = answer_text.split()[0]
-
-        try:
-            return answer_text
-        except ValueError:
-            return None
-
-    def _generate_prompt(self, tokenizer, example, use_icl = False):
+    def generate_prompt(self, row, tokenizer):
         """Generate prompt for the arithmetic model"""
 
         if 'gsm8k' in self.cfg.task.name:
-            question = example["question"]
-            sft = example["answer"]
-            answer = self.extract_answer(sft)
-            instruction = f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
-
+            instruction = f"Solve the following math problem\n{row['question']}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
         elif 'aqua' in self.cfg.task.name:
-            question = example["question"]
-            sft = example["solution"]
-            answer = example["answer"].strip()
-            options = "  ".join(example["options"])
-            instruction = f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
-
+            instruction = f"Solve the following math problem and choose an answer from the given options\n{row['question']}\n{row['options']}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
         elif 'math' in self.cfg.task.name:
-            question = example["problem"]
-            sft = example["solution"]
-            answer = example["answer"].strip()
-            instruction = "Solve the following math problem\n<question>\n\nShow your work in <think> </think> tags. And return the final answer in \\boxed{}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{500}</answer>."
-            instruction = instruction.replace('<question>', question)
+            instruction = f"Solve the following math problem\n{row['question']}\n\nShow your work in <think> </think> tags. And return the final answer in \\boxed{{}}, wrapped in <answer> </answer> tags, for example <answer>\\boxed{{500}}</answer>."
 
         messages = [
             {
@@ -1325,13 +1304,13 @@ class ArithmeticTrainer(BaseTrainer):
 
         return {
             "prompt": tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True),
-            "sft" : sft,
-            "answer": answer,
-            "task" : example["task"]
+            "answer": row['answer'],
+            "task" : row["task"]
         }
 
+
     @staticmethod
-    def _is_formatted(response: str):
+    def is_formatted_fn(response: str):
         """Validate the response format"""
         response = response.strip()
 
@@ -1354,7 +1333,7 @@ class ArithmeticTrainer(BaseTrainer):
         # Rule 3: The order should be: <think> ... </think> then <answer> ... </answer>
         if think_open != 0:  # Should start with <think>
             return False, 'Response does not start with <think>'
-        if think_close == -1 or plan_open == -1 or plan_close == -1:
+        if (think_close==-1) or (plan_open==-1) or (plan_close==-1):
             return False, 'Response does not contain <answer> and </answer>, or </think>'
         if think_close > plan_open:
             return False, 'Response has closing think tag after opening answer tag'
@@ -1371,95 +1350,28 @@ class ArithmeticTrainer(BaseTrainer):
 
         return True, 'Correctly Formatted'
 
-    def _math_reward_fn(self, completions, answer, **kwargs):
+
+    def arithmetic_reward_fn(self, is_correct_fn, correctness_reward, is_formatted_fn, formatted_reward, **kwargs):
         rewards = []
+        for completion, answer in zip(kwargs['completions'], kwargs['answer']):
 
-        def ans_extract(output):
-            answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', output, re.DOTALL)
-            if len(answer_match) > 0:
-                print(f'Answer Extracted - {answer_match[-1].strip()}')
-                return answer_match[-1].strip()
-            return None
-
-        for completion, answer_i in zip(completions, answer):
             try:
-                log_on_main('#########################')
                 completion = "<think>" + completion
-                log_on_main(completion)
-
-                is_formatted, reason_str = self._is_formatted(completion)
-                if not is_formatted:
-                    print('Response Format Error')
-                    rewards.append(0.0)  # Penalty to avoid format errors
-                    continue
-                accuracy_reward = process_result_v1(answer_i, completion, ans_extract)
-                rewards.append(accuracy_reward)
-                log_on_main('-----')
-                log_on_main(accuracy_reward)
-                log_on_main('-----')
-                log_on_main('#########################')
-            except Exception as e:
-                log_on_main(e)
-                rewards.append(0.0)
-        return rewards
-
-    def _gsm8k_reward_fn(self, completions, answer, **kwargs):
-        """Reward function for gsm8k task"""
-        rewards = []
-
-        for completion, answer_i in zip(completions, answer):
-            try:
-                print('#########################')
-                completion = "<think>" + completion
-                print(completion)
-
-                is_formatted, reason_str = self._is_formatted(completion)
-                if not is_formatted:
-                    print('Response Format Error')
-                    rewards.append(0.0)  # Penalty to avoid format errors
-                    continue
-
-                # Use the GSM8KRewardModel class
-                reward_model = GSM8KRewardModel(answer_i)
-                reward = reward_model.compute_score(completion)
-                rewards.append(reward)
-                print('-----')
-                print(reward)
-                print('-----')
-                print('#########################')
-            except Exception as e:
-                print(e)
-                rewards.append(0.0)
-        return rewards
-
-    @staticmethod
-    def _is_correct(response: str, answer: str):
-        answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', response, re.DOTALL)
-        if len(answer_match) > 0:
-            if answer_match[-1].strip() == answer:
-                return True
-        return False
-    
-    def aqua_reward_fn(self, prompts, completions, correctness_reward=0.9, formatted_reward=0.1, **kwargs):
-        rewards = []
-        for completion, answer in zip(completions, kwargs['answer']):
-            
-            try:
-                completion = "<think>" + completion          
                 reward = 0.0
 
-                is_formatted, reason_str = self._is_formatted(completion)
+                is_formatted, reason_str = is_formatted_fn(completion)
                 if is_formatted:
                     reward += formatted_reward
-                    if self._is_correct(completion, answer):
+                    extracted_answer = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)[-1].strip()
+                    if is_correct_fn(extracted_answer, answer):
                         reward += correctness_reward
                 rewards.append(reward)
 
                 if self.last_log_time is None:
                     self.last_log_time = time.time()
-                if time.time() - self.last_log_time > 5:
+                if time.time() - self.last_log_time > 2:
                     self.last_log_time = time.time()
-                    log_on_main(f"\n#########################\n{completion}\n-----\n{reason_str}\n{reward}\n-----\n#########################\n\n")
+                    log_on_main(f"\n#########################\n{completion}\n-----\nFormat Reason: {reason_str}\nExtracted Answer: {extracted_answer}\nTrue Answer: {answer}\nReward: {reward}\n-----\n#########################\n\n")
 
             except Exception as e:
                 log_on_main(e)
@@ -1472,11 +1384,6 @@ class ArithmeticTrainer(BaseTrainer):
         """Train a model using the specified algorithm with configurations from Hydra"""
 
         log_on_main('\n\n*****\ntrain\n*****\n\n')
-
-        # Extract config values
-        model_name = self.cfg.model.name
-        output_model_name = self.cfg.output.run_name
-        algorithm = self.cfg.algorithm.name
 
         # Load tokenizer & model
         model_config = self._get_model_config()
@@ -1493,13 +1400,22 @@ class ArithmeticTrainer(BaseTrainer):
         peft_config = get_peft_config(model_config)
 
         # Prepare dataset
-        dataset = self._prepare_dataset(split='train')
-        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        dataset = self.prepare_dataset()
+        dataset = dataset.map(self.generate_prompt, remove_columns=dataset.column_names, fn_kwargs={'tokenizer':tokenizer})
         log_on_main(dataset)
-        arithmetic_reward_fn = self.reward_functions[self.cfg.task.name]
+
+        # Set Reward function
+        reward_fn = partial(
+            self.arithmetic_reward_fn,
+            is_correct_fn=self.is_correct_fn[self.cfg.task.name], 
+            correctness_reward=0.9, 
+            is_formatted_fn=self.is_formatted_fn, 
+            formatted_reward=0.1
+        )
+        reward_fn = update_wrapper(reward_fn, self.arithmetic_reward_fn)
 
         # Setup training arguments based on algorithm
-        if "grpo" in algorithm:
+        if "grpo" in self.cfg.algorithm.name:
             training_args = self._setup_grpo_training()
             # batch_size = int(training_args.gradient_accumulation_steps * training_args.per_device_train_batch_size)
             # GRPO doesn't train more than an epoch. Except for epoch override, when learning hard task or maybe?
@@ -1507,27 +1423,15 @@ class ArithmeticTrainer(BaseTrainer):
             # training_args.max_steps = min(training_args.max_steps, len(dataset)//batch_size)
             trainer = CurriculumGRPOTrainer(
                 model=model,
-                reward_funcs=arithmetic_reward_fn,
+                reward_funcs=reward_fn,
                 args=training_args,
                 train_dataset=dataset,
                 processing_class=tokenizer,
                 peft_config=peft_config,
-                num_tasks=len(self.cfg.task.data_files),
+                num_tasks=len(self.cfg.task.training.data_files),
                 total_iterations=training_args.max_steps,
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
-            )
-        elif algorithm == "ppo":
-            training_args = self._setup_ppo_training()
-            trainer = PPOTrainer(
-                model=model,
-                ref_model=model_config.model_name_or_path,  # Same model as reference
-                tokenizer=tokenizer,
-                args=training_args,
-                reward_fn=self._reward_fn,
-                train_dataset=dataset['train'],
-                eval_dataset=dataset['test'],
-                peft_config=peft_config,
             )
         else:
             raise ValueError(f"Unsupported algorithm: {algorithm}")
@@ -1539,78 +1443,65 @@ class ArithmeticTrainer(BaseTrainer):
         if self.cfg.algorithm.training.push_to_hub:
             trainer.push_to_hub(dataset_name='gsm8k-dataset')
 
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
+
 
     def inference(self):
         """Run inference using the trained model"""
         log_on_main('\n\n*****\ntest\n*****\n\n')
 
-        model_checkpoint = self.cfg.task.inference.checkpoint
-        sc_num = self.cfg.task.inference.sc_num
-
-        # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
-
+        # Load tokenizer & model
         tokenizer = AutoTokenizer.from_pretrained(
-            model_dir,
+            str(self.output_dir),
             trust_remote_code=self.cfg.model.trust_remote_code,
         )
         model = LLM(
-            model=model_dir,
+            model=str(self.output_dir),
             trust_remote_code=self.cfg.model.trust_remote_code,
             tensor_parallel_size=torch.cuda.device_count(),
             dtype=self.cfg.model.torch_dtype,
             gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
-            max_model_len=self.cfg.task.inference.max_model_len,
+            max_model_len=self.cfg.task.inference.max_prompt_length+self.cfg.task.inference.max_completion_length,
             seed=self.cfg.experiment.dataset_seed,
             task='generate'
         )
         sampling_params = SamplingParams(
             n=self.cfg.task.inference.n,
             temperature=self.cfg.task.inference.temperature,
-            max_tokens=self.cfg.task.inference.max_tokens,
+            max_tokens=self.cfg.task.inference.max_completion_length,
             min_tokens=1,
-            seed=self.cfg.experiment.dataset_seed,
-            stop=["</answer>"],
-            include_stop_str_in_output=True
+            seed=self.cfg.experiment.dataset_seed
         )
         
-        # Load and Preprocess Dataset  
-        dataset = self._prepare_dataset(split='test')
-        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
-        dataset = dataset.remove_columns('sft')
+        # Prepare dataset
+        dataset = self.prepare_dataset()
+        dataset = dataset.map(self.generate_prompt, remove_columns=dataset.column_names, fn_kwargs={'tokenizer':tokenizer})
         log_on_main(dataset)
 
+        # Set Reward function
+        reward_fn = partial(
+            self.arithmetic_reward_fn,
+            is_correct_fn=self.is_correct_fn[self.cfg.task.name], 
+            correctness_reward=0.9, 
+            is_formatted_fn=self.is_formatted_fn, 
+            formatted_reward=0.1
+        )
+        reward_fn = update_wrapper(reward_fn, self.arithmetic_reward_fn)
+
         # Generate Completions
-        # outputs = []
-        # for i in range(0, len(dataset['prompt']), 8):
-        #     batch_prompts = dataset['prompt'][i:i + 8]
-        #     print(batch_prompts)
-        #     quit()
-        #     batch_outputs = model.generate(batch_prompts, sampling_params)
-        #     prcessed_outputs = [
-        #         completion_output.text
-        #         for request_output in batch_outputs
-        #         for completion_output in request_output.outputs
-        #     ]
-        #     print(prcessed_outputs)
-        #     outputs.extend(prcessed_outputs)
         outputs = model.generate(dataset['prompt'], sampling_params)
         outputs = [
             completion_output.text
             for request_output in outputs
             for completion_output in request_output.outputs
         ]
-        # print(outputs)
-        # quit()
         dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
         dataset = dataset.add_column('output', outputs)
 
         # Calcuate Rewards
-        reward_fn = self.reward_functions[self.cfg.task.name]
-
         rewards = np.array(
             reward_fn(
-                prompts=None,
                 completions=dataset['output'],
                 answer=dataset['answer']
             )
@@ -1625,8 +1516,7 @@ class ArithmeticTrainer(BaseTrainer):
             'accuracy': (rewards > 0.5).mean().item(),
             'support': len(dataset)
         }
-        
-        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+        for task_idx, data_dir in enumerate(self.cfg.task.inference.data_files):
             task_outputs = dataset.filter(lambda example: example['task']==task_idx)
             task_rewards = np.array(task_outputs['reward'])
             results[os.path.basename(os.path.normpath(data_dir))] = {
@@ -1641,6 +1531,8 @@ class ArithmeticTrainer(BaseTrainer):
 
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
+
+
 
 class RLReasoner():
     def __init__(self, base_model, temperature=0.8, sc_num = 1, model_type="completion", icl_example="", pass_at_k=1):
@@ -1691,6 +1583,7 @@ class RLReasoner():
         return outputs  
 
 
+
 def occupy_gpu_memory(gb=75, device="cuda:0"):
     """
     Allocates a tensor on the specified GPU that occupies approximately `gb` GB of memory.
@@ -1716,6 +1609,7 @@ def occupy_gpu_memory(gb=75, device="cuda:0"):
     while True:
         print("Holding memory...")
         time.sleep(60)
+
 
 
 class CodeTrainer(BaseTrainer):
