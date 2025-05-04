@@ -1,26 +1,22 @@
-# conf/task/blocksworld.yaml
 name: "math"
-data_files:
-  - data/math/level_1
-  - data/math/level_2
-  - data/math/level_3
-  - data/math/level_4
-  # - data/math/level_5
 
 training:
+  data_files:
+    - datasets/math/level1
+    - datasets/math/level2
+    - datasets/math/level3
+    - datasets/math/level4
   max_prompt_length: 1600
   max_completion_length: 1600
 
 inference:
-  max_model_len: 3200
-  checkpoint: 1600
-  steps: 4
+  data_files:
+    - datasets/math/level1
+    - datasets/math/level2
+    - datasets/math/level3
+    - datasets/math/level4
+    - datasets/math/level5
+  max_prompt_length: 1600
+  max_completion_length: 1600
   temperature: 0.0
-  sc_num: 1
-  use_icl: false
-  icl_num: 2
-  num_shot: 4
-  resume: 0
-  max_new_tokens: 1600
-  max_tokens: 1600
   n: 1

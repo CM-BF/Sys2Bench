@@ -68,31 +68,18 @@ def list_fewshot_samples() -> list[dict]:
             "level": "Level 5",
         },
     ]
-def get_unnormalized_answer(text: str) -> str:
-    end_seq = "I hope it is correct."
-    text += end_seq
-    match = re.search(
-        r"Final Answer: The final answer is(.*?). I hope it is correct.",
-        text,
-    )
-    if match:
-        return match.group(1).strip()
-    else:
-        return INVALID_ANSWER
 
-def process_result_v1(answer: str, candidates: str, answer_parser: callable = get_unnormalized_answer, format_award=0.1) -> int:
+
+def process_result_v1(extracted_answer:str, answer:str) -> bool:
     # using the orginal answer extraction method
-    unnormalized_answer = answer_parser(candidates)
-    llm_answer = normalize_final_answer(unnormalized_answer)
+    llm_answer = normalize_final_answer(extracted_answer)
     normalized_gold = normalize_final_answer(answer)
-    print(f'LLM Answer - {llm_answer} vs Gold - {normalized_gold}')
     if llm_answer == INVALID_ANSWER:
-        return format_award
+        return False
     if llm_answer.strip() == normalized_gold.strip() or is_equiv(llm_answer, normalized_gold):
-        retval = 1
+        return True
     else:
-        retval = format_award
-    return retval
+        return False
 
 
 def last_boxed_only_string(string: str) -> str:
@@ -200,6 +187,18 @@ def is_equiv(x1: str, x2: str) -> bool:
         eval_logger.debug(f"Failed comparing {x1} and {x2} with {e}")
         return False
 
+
+def get_unnormalized_answer(text: str) -> str:
+    end_seq = "I hope it is correct."
+    text += end_seq
+    match = re.search(
+        r"Final Answer: The final answer is(.*?). I hope it is correct.",
+        text,
+    )
+    if match:
+        return match.group(1).strip()
+    else:
+        return INVALID_ANSWER
 
 
 SUBSTITUTIONS = [
