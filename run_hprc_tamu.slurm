@@ -1,13 +1,12 @@
 #!/bin/bash
 
 #SBATCH --job-name=TrainReasoner
-#SBATCH --account=132726304926
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:h100:3
 #SBATCH --cpus-per-task=8
-#SBATCH --partition=gpu-a40
-#SBATCH --gres=gpu:a40:3
-#SBATCH --mem=48G
+#SBATCH --mem=32G
 #SBATCH --time=0-12:00:00
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
@@ -18,7 +17,6 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} started ..."
 
 mu="0.5"
 sigma="0.5"
-max_steps="1600"
 for i in "$@"; do
   case "$i" in
     --model=*)
@@ -36,20 +34,31 @@ for i in "$@"; do
     --sigma=*)
       sigma="${i#*=}"
       ;;
-    --max_steps=*)
-      max_steps="${i#*=}"
-      ;;
   esac
 done
+
+if [ $task == "math" ]; then
+  max_steps="1200"
+elif [ $task == "aqua" ]; then
+  max_steps="1600"
+elif [ $task == "gsm8k" ]; then
+  max_steps="1600"
+else
+  max_steps=1600
+fi
 
 
 ml purge
 ml WebProxy
-ml Miniconda3
-ml CUDA
+ml GCCcore/13.3.0
+ml Miniconda3/23.10.0-1
+ml CUDA/12.6.0
+ml NCCL/2.22.3-CUDA-12.6.0
+ml binutils/2.42
 source /sw/eb/sw/Miniconda3/23.10.0-1/etc/profile.d/conda.sh
 conda activate sys2bench_env
 cd $SCRATCH/projects/Sys2Bench
+MASTER_PORT=$(expr 10000 + $(echo -n $SLURM_JOBID | tail -c 4))
 
 
 ROOT_PATH="$SCRATCH/projects/Sys2Bench" \
@@ -60,6 +69,7 @@ accelerate launch \
 --gpu_ids 0,1,2 \
 --dynamo_backend no \
 --use_deepspeed \
+--main_process_port $MASTER_PORT \
 --zero_stage 3 \
 --offload_optimizer_device none \
 --offload_param_device none \
@@ -87,6 +97,7 @@ accelerate launch \
 --num_processes 1 \
 --num_machines 1 \
 --gpu_ids 0,1 \
+--main_process_port $MASTER_PORT \
 --dynamo_backend no \
 methods/RL/main.py \
 mode=inference \

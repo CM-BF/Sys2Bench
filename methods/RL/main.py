@@ -1358,6 +1358,7 @@ class ArithmeticTrainer(BaseTrainer):
             try:
                 completion = "<think>" + completion
                 reward = 0.0
+                extracted_answer = None
 
                 is_formatted, reason_str = is_formatted_fn(completion)
                 if is_formatted:
@@ -1374,7 +1375,7 @@ class ArithmeticTrainer(BaseTrainer):
                     log_on_main(f"\n#########################\n{completion}\n-----\nFormat Reason: {reason_str}\nExtracted Answer: {extracted_answer}\nTrue Answer: {answer}\nReward: {reward}\n-----\n#########################\n\n")
 
             except Exception as e:
-                log_on_main(e)
+                print(e)
                 rewards.append(0.0)
 
         return rewards
