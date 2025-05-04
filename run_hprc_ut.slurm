@@ -37,9 +37,9 @@ done
 
 if [ $task == "math" ]; then
   max_steps="1200"
-if [ $task == "aqua" ]; then
+elif [ $task == "aqua" ]; then
   max_steps="1600"
-if [ $task == "gsm8k" ]; then
+elif [ $task == "gsm8k" ]; then
   max_steps="1600"
 else
   max_steps=1600

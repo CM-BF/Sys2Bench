@@ -8,6 +8,42 @@ args = parser.parse_args()
 
 run_dict = {
 
+    'math' : {
+        'qwen15' : [
+            # 'balanced',
+            'cosine',
+            'classic',
+            {
+                'gaussian' : [
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
+                    # {
+                    #     'mu' : 0.5,
+                    #     'sigma' : 0.5
+                    # },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
+                ]
+            },
+        ],
+    },
+
+    'math_lvl4' : {
+        'qwen15' : [
+            'balanced',
+        ],
+    },
+
+    'math_lvl5' : {
+        'qwen15' : [
+            'balanced',
+        ],
+    },
+
     'aqua' : {
         'qwen15' : [
             # 'balanced',
@@ -97,30 +133,6 @@ run_dict = {
             },
         ]
     },
-
-    'math' : {
-        'qwen15' : [
-            # 'balanced',
-            'cosine',
-            'classic',
-            {
-                'gaussian' : [
-                    {
-                        'mu' : 0.25,
-                        'sigma' : 0.75
-                    },
-                    # {
-                    #     'mu' : 0.5,
-                    #     'sigma' : 0.5
-                    # },
-                    {
-                        'mu' : 0.75,
-                        'sigma' : 0.25
-                    },
-                ]
-            },
-        ],
-    }
 
 }
 
