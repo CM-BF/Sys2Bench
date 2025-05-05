@@ -17,6 +17,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} started ..."
 
 mu="0.5"
 sigma="0.5"
+gradaccumsteps=2
 for i in "$@"; do
   case "$i" in
     --model=*)
@@ -33,6 +34,9 @@ for i in "$@"; do
       ;;
     --sigma=*)
       sigma="${i#*=}"
+      ;;
+    --gradaccumsteps=*)
+      gradaccumsteps="${i#*=}"
       ;;
   esac
 done
@@ -84,6 +88,8 @@ algorithm.training.curriculum_schedule="$schedule" \
 algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
+algorithm.training.per_device_train_batch_size="$((8 / gradaccumsteps))" \
+algorithm.training.gradient_accumulation_steps=$gradaccumsteps \
 algorithm.training.curriculum=false \
 algorithm.training.vllm_gpu_memory_utilization=0.8 \
 algorithm.training.report_to=\[tensorboard\] \
@@ -107,6 +113,8 @@ algorithm.training.curriculum_schedule="$schedule" \
 algorithm.training.scheduler_params.mu_exp="$mu" \
 algorithm.training.scheduler_params.sigma="$sigma" \
 algorithm.training.max_steps="$max_steps" \
+algorithm.training.per_device_train_batch_size="$((8 / gradaccumsteps))" \
+algorithm.training.gradient_accumulation_steps=$gradaccumsteps \
 algorithm.training.curriculum=false \
 algorithm.training.vllm_gpu_memory_utilization=0.8 \
 algorithm.training.report_to=\[tensorboard\] \

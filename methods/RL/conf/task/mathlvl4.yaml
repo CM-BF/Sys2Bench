@@ -1,8 +1,8 @@
-name: "math"
+name: "mathlvl4"
 
 training:
   data_files:
-    - datasets/math/level5
+    - datasets/math/level4
   max_prompt_length: 1600
   max_completion_length: 1600
 
