@@ -1398,6 +1398,10 @@ class ArithmeticTrainer(BaseTrainer):
             trust_remote_code=model_config.trust_remote_code,
             attn_implementation=model_config.attn_implementation
         )
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+            model.config.pad_token_id = tokenizer.pad_token_id
         peft_config = get_peft_config(model_config)
 
         # Prepare dataset

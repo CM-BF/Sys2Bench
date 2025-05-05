@@ -10,7 +10,7 @@ run_dict = {
 
     'math' : {
         'qwen15' : [
-            # 'balanced',
+            'balanced',
             'cosine',
             'classic',
             {
@@ -19,10 +19,10 @@ run_dict = {
                         'mu' : 0.25,
                         'sigma' : 0.75
                     },
-                    # {
-                    #     'mu' : 0.5,
-                    #     'sigma' : 0.5
-                    # },
+                    {
+                        'mu' : 0.5,
+                        'sigma' : 0.5
+                    },
                     {
                         'mu' : 0.75,
                         'sigma' : 0.25
@@ -32,13 +32,13 @@ run_dict = {
         ],
     },
 
-    'math_lvl4' : {
+    'mathlvl4' : {
         'qwen15' : [
             'balanced',
         ],
     },
 
-    'math_lvl5' : {
+    'mathlvl5' : {
         'qwen15' : [
             'balanced',
         ],
@@ -46,23 +46,23 @@ run_dict = {
 
     'aqua' : {
         'qwen15' : [
-            # 'balanced',
-            # 'cosine',
-            # 'classic',
+            'balanced',
+            'cosine',
+            'classic',
             {
                 'gaussian' : [
-                    # {
-                    #     'mu' : 0.25,
-                    #     'sigma' : 0.75
-                    # },
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
                     {
                         'mu' : 0.5,
                         'sigma' : 0.5
                     },
-                    # {
-                    #     'mu' : 0.75,
-                    #     'sigma' : 0.25
-                    # },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
                 ]
             },
         ],
@@ -90,27 +90,27 @@ run_dict = {
     },
 
     'gsm8k' : {
-        # 'qwen15' : [
-        #     'balanced',
-        #     'cosine',
-        #     'classic',
-        #     {
-        #         'gaussian' : [
-        #             {
-        #                 'mu' : 0.25,
-        #                 'sigma' : 0.75
-        #             },
-        #             {
-        #                 'mu' : 0.5,
-        #                 'sigma' : 0.5
-        #             },
-        #             {
-        #                 'mu' : 0.75,
-        #                 'sigma' : 0.25
-        #             },
-        #         ]
-        #     },
-        # ],
+        'qwen15' : [
+            'balanced',
+            'cosine',
+            'classic',
+            {
+                'gaussian' : [
+                    {
+                        'mu' : 0.25,
+                        'sigma' : 0.75
+                    },
+                    {
+                        'mu' : 0.5,
+                        'sigma' : 0.5
+                    },
+                    {
+                        'mu' : 0.75,
+                        'sigma' : 0.25
+                    },
+                ]
+            },
+        ],
         'qwen15_base' : [
             'balanced',
             'cosine',
