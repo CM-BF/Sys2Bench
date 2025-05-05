@@ -1719,7 +1719,7 @@ class CodeTrainer(BaseTrainer):
     """Class for training and inference on code models"""
 
 
-    def _prepare_dataset(self):
+    def _prepare_dataset(self, split='train'):
         """Prepare dataset for training"""
         all_samples = []
         for task_idx, file in enumerate(self.cfg.task.data_files):
@@ -1763,11 +1763,6 @@ class CodeTrainer(BaseTrainer):
         """Generate prompt for the coding model"""
         # Extract target and numbers from the example
 
-
-        # data = example.get("reward_model", {}).get("ground_truth", {})
-        # target = data.get("target")
-        # numbers = data.get("numbers")
-        # # expression = data.get("expression") # e.g., (((76 - 80) - 28) + 43), (((65 * 12) + 60) / 28)
         question, verification, id = self._get_info(example)
 
         messages = [
@@ -1883,20 +1878,9 @@ class CodeTrainer(BaseTrainer):
         )
         peft_config = get_peft_config(model_config)
 
-        # Prepare dataset
-        # train_dataset, test_dataset = self._prepare_dataset(self.cfg.task.data_files)
-        # train_dataset = train_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-        # test_dataset = test_dataset.map(lambda example: self._generate_prompt(tokenizer, example))
-
         dataset = self._prepare_dataset()
         dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
         log_on_main(dataset)
-        # Split dataset
-        # train_test_split = dataset.train_test_split(test_size=self.cfg.task.test_size)
-        # train_dataset = train_test_split["train"]
-        # test_dataset = train_test_split["test"]
-
-        # Setup training arguments based on algorithm
 
         if "grpo" in algorithm:
             training_args = self._setup_grpo_training()
@@ -1924,93 +1908,96 @@ class CodeTrainer(BaseTrainer):
 
     def inference(self):
         """Run inference using the trained model"""
-        # Extract config values
-        model_checkpoint = self.cfg.task.inference.checkpoint
-        sc_num = self.cfg.task.inference.sc_num
+        log_on_main('\n\n*****\ntest\n*****\n\n')
 
-        # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+        # Load Tokenizer & Model
+        model_dir = str(self.output_dir)
 
-        # Load test dataset
-        _, test_dataset = self._prepare_dataset([self.cfg.task.test_file])
-
-        # Load model and tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
             model_dir,
             trust_remote_code=self.cfg.model.trust_remote_code
         )
-
-        # Custom model for inference
-        model = HFModel(
-            model_pth=model_dir,
-            tokenizer_pth=model_dir,
-            max_new_tokens=self.cfg.task.inference.max_new_tokens
+        model = LLM(
+            model=model_dir,
+            trust_remote_code=self.cfg.model.trust_remote_code,
+            tensor_parallel_size=torch.cuda.device_count(),
+            dtype=self.cfg.model.torch_dtype,
+            gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
+            max_model_len=self.cfg.task.inference.max_model_len,
+            seed=self.cfg.experiment.dataset_seed,
+            task='generate'
         )
+        sampling_params = SamplingParams(
+            n=self.cfg.task.inference.n,
+            temperature=self.cfg.task.inference.temperature,
+            max_tokens=self.cfg.task.inference.max_tokens,
+            min_tokens=1,
+            seed=self.cfg.experiment.dataset_seed
+        )
+        
+        # Load and Preprocess Dataset  
+        dataset = self._prepare_dataset(split='test')
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        # dataset = dataset.remove_columns('sft')
+        log_on_main(dataset)
 
-        # Run inference on test dataset
-        correct = 0
-        rewards = 0
-        total = 0
-        results = []
+        # Generate Completions
+        outputs = model.generate(dataset['prompt'], sampling_params)
+        outputs = [
+            completion_output.text
+            for request_output in outputs
+            for completion_output in request_output.outputs
+        ]
+        dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+        dataset = dataset.add_column('output', outputs)
 
-        for example in tqdm(test_dataset):
-            # Generate prompt
-            prompt_data = self._generate_prompt(tokenizer, example)
-            prompt = prompt_data["prompt"]
+        # Calcuate Rewards
+        reward_fn = self._coding_reward_fn
 
-            # Generate responses
-            outputs = []
-            for _ in range(sc_num):
-                output = model.generate([prompt], do_sample=True, temperature=0.0, verbose=False, skip_special_tokens=False).text[0]
-                outputs.append(output)
+        rewards = np.array(
+                reward_fn(
+                    completions=dataset['output'],
+                    question=dataset['question'],
+                    test_cases=dataset['test_cases'],
+                    question_id=dataset['question_id']
+                )
+        )
+        dataset = dataset.add_column('reward', rewards.tolist())
+        dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
 
-            # Evaluate responses
-            for output in outputs:
-                # Prepare ground truth for scoring
-                test_cases = prompt_data.get("test_cases", [])
-                
-                # Use the CodingRewardModel for evaluation
-                reward_model = CodingRewardModel(test_cases=test_cases)
+        # Process Metrics
+        results = dict()
+        total_reward = 0.0
+        total_accuracy = 0.0
+        total_support = 0
 
-                # Calculate score
-                score = reward_model.compute_score(output)
+        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+            task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+            task_rewards = np.array(task_outputs['reward'])
 
-                # Extract solution
-                solution = reward_model.extract_solution(output)
+            support = len(task_rewards)
+            avg_reward = task_rewards.mean().item()
+            accuracy = (task_rewards > 0.5).mean().item()
 
-                # Record results
-                results.append({
-                    "prompt": prompt,
-                    "output": output,
-                    "solution": solution,
-                    "test_cases": test_cases,
-                    "score": score
-                })
+            total_reward += avg_reward * support
+            total_accuracy += accuracy * support
+            total_support += support
 
-                rewards += score
-                if score > 0.5:  # We are doing binary scoring so over 0.5 will always be correct
-                    correct += 1
-                total += 1
+            results[os.path.basename(os.path.normpath(data_dir))] = {
+                'avg_reward': avg_reward,
+                'accuracy': accuracy,
+                'support': support
+            }
 
-        # Calculate accuracy
-        accuracy = correct / total if total > 0 else 0
-        rewards /= total if total > 0 else 0
-        print(f'Accuracy: {accuracy}, Rewards: {rewards}')
-
-        # Save results to output directory
-        evaluation_results = {
-            "accuracy": accuracy,
-            "rewards": rewards,
-            "model_checkpoint": model_checkpoint,
-            "sc_num": sc_num,
-            "detailed_results": results,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-
-        # with open(os.path.join(model_dir, "inference_results.json"), "w") as f:
-        #     json.dump(evaluation_results, f, indent=2)
-
-        return accuracy
+        if total_support > 0:
+            results['overall'] = {
+                'avg_reward': total_reward / total_support,
+                'accuracy': total_accuracy / total_support,
+                'support': total_support
+            }
+        log_on_main(json.dumps(results, indent=4))
+        with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
+            json.dump(results, f, indent=4)           
 
 
 if __name__ == "__main__":
