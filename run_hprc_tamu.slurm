@@ -17,7 +17,7 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') Job ${SLURM_JOB_ID} started ..."
 
 mu="0.5"
 sigma="0.5"
-gradaccumsteps=2
+gradaccumsteps=4
 for i in "$@"; do
   case "$i" in
     --model=*)
@@ -77,7 +77,7 @@ accelerate launch \
 --zero_stage 3 \
 --offload_optimizer_device none \
 --offload_param_device none \
---gradient_accumulation_steps 4 \
+--gradient_accumulation_steps $gradaccumsteps \
 --zero3_init_flag true \
 --zero3_save_16bit_model true \
 methods/RL/main.py \

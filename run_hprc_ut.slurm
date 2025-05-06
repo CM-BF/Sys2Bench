@@ -66,7 +66,7 @@ accelerate launch \
 --zero_stage 3 \
 --offload_optimizer_device none \
 --offload_param_device none \
---gradient_accumulation_steps 4 \
+--gradient_accumulation_steps $gradaccumsteps \
 --zero3_init_flag true \
 --zero3_save_16bit_model true \
 methods/RL/main.py \
