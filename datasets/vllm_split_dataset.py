@@ -13,8 +13,6 @@ def preprocess_aqua(dataset):
         'correct' : 'answer'
     })
     return dataset
-
-
 def chat_template_aqua(**kwargs):
     question = kwargs['question']
     options = "  ".join(kwargs['options'])
@@ -33,13 +31,53 @@ def chat_template_aqua(**kwargs):
         }
     ]
     return messages
-
-
 def is_correct_aqua(completion, answer):
     answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)
     if len(answer_match) > 0:
         if answer_match[-1].strip() == answer:
             return 1
+    return 0
+
+
+def preprocess_gsm8k(dataset):
+    def preprocess(example):
+        answer = example['answer'].replace(",", "")
+        answer = answer[answer.find('####') + 4:].strip()
+        answer = answer.split()[0]
+        return {
+            'question' : example['question'],
+            'solution' : example['answer'],
+            'answer' : answer
+        }
+    dataset = dataset.map(preprocess, remove_columns=dataset.column_names)
+    return dataset
+def chat_template_gsm8k(**kwargs):
+    question = kwargs['question']
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+        },
+        {
+            "role": "user",
+            "content": f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
+        },
+        {
+            "role": "assistant",
+            "content": "Let me solve this step by step.\n<think>"
+        }
+    ]
+    return messages
+def is_correct_gsm8k(completion, answer):
+    answer = float(answer)
+    answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)
+    if len(answer_match) > 0:
+        extracted_answer = answer_match[-1].strip()
+        extracted_answer = extracted_answer.replace(",", "")
+        extracted_answer = re.search(r'-?\d+(?:\.\d+)?', extracted_answer)
+        if extracted_answer is not None:
+            extracted_answer = float(extracted_answer.group(0))
+            return 1 * (abs(answer - extracted_answer) < 1e-5)
     return 0
 
 
@@ -71,7 +109,8 @@ def main(config):
     model = LLM(
         **config['model_params'], 
         seed=config['seed'],
-        task='generate'
+        task='generate',
+        max_model_len=config['sampling_params']['truncate_prompt_tokens']+config['sampling_params']['max_tokens']
     )
     sampling_params = SamplingParams(
         **config['sampling_params'], 
@@ -83,7 +122,7 @@ def main(config):
         print(split)
         print('*****')
 
-        dataset = load_dataset(config['dataset'], split=config[split]['split'])
+        dataset = load_dataset(**config['dataset'], split=config[split]['split'])
 
         if config[split]['size'] != -1:
             dataset = dataset.shuffle(seed=config['seed'])
@@ -125,42 +164,45 @@ if __name__ == '__main__':
 
     config = {
 
-        'dataset' : 'deepmind/aqua_rat',
+        'dataset' : {
+            'path' : 'openai/gsm8k',
+            'name' : 'main'
+        },
         
-        'save_path' : 'datasets/aqua',
+        'save_path' : 'datasets/gsm8k',
 
         'seed' : 42,
 
         'train' : {
-            'split' : 'train', # split on hf
-            'size' : 5000
+            'split' : 'train',
+            'size' : -1
         },
         'test' : {
-            'split' : 'test', # split on hf
+            'split' : 'test',
             'size' : -1
         },
 
-        'dataset_preprocess_func' : preprocess_aqua,
+        'dataset_preprocess_func' : preprocess_gsm8k,
 
-        'chat_template_func' : chat_template_aqua,
+        'chat_template_func' : chat_template_gsm8k,
 
         'model_params' : {
-            'model' : 'Qwen/Qwen2.5-3B',
+            'model' : 'Qwen/Qwen2.5-1.5B-Instruct',
             'trust_remote_code' : True,
             'tensor_parallel_size' : 2,  # num gpus 2/4/8
             'dtype' : 'bfloat16',
-            'gpu_memory_utilization' : 0.9,
-            'max_model_len' : 1024,
+            'gpu_memory_utilization' : 0.9
         },
 
         'sampling_params' : {
             'n' : 20,  # max difficulty level
             'temperature' : 0.8,
             'max_tokens' : 512,
-            'min_tokens' : 1
+            'min_tokens' : 1,
+            'truncate_prompt_tokens' : 1600
         },
 
-        'correctness_func' : is_correct_aqua,
+        'correctness_func' : is_correct_gsm8k,
 
         'num_splits' : 4,
 
