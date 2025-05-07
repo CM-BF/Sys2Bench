@@ -1249,6 +1249,10 @@ class ArithmeticTrainer(BaseTrainer):
 
     def __init__(self, cfg: DictConfig):
         super().__init__(cfg)
+        
+        if 'math' in self.cfg.task.name:
+            self.cfg.task.name='math'
+
         self.is_correct_fn = {
             'gsm8k': GSM8KRewardModel.is_correct,
             'aqua': lambda extracted_answer, answer: extracted_answer==answer,
