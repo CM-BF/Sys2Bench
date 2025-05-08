@@ -4,7 +4,7 @@ training:
   data_files:
     - datasets/math/level5
   max_prompt_length: 1600
-  max_completion_length: 1600
+  max_completion_length: 512
 
 inference:
   data_files:
@@ -14,6 +14,6 @@ inference:
     - datasets/math/level4
     - datasets/math/level5
   max_prompt_length: 1600
-  max_completion_length: 1600
+  max_completion_length: 512
   temperature: 0.0
   n: 1

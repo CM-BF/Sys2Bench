@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --partition=gpu-a100
-#SBATCH --time=0-12:00:00
+#SBATCH --time=0-08:00:00
 #SBATCH --overcommit 
 #SBATCH --output=logs/%j.log
 
