@@ -1,10 +1,10 @@
 import os
 import re
+import json
 import torch
 import argparse
 import numpy as np
 from tqdm import tqdm
-from pprint import pprint
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
@@ -18,8 +18,8 @@ def chat_template_gsm8k(**kwargs):
             "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
         },
         {
-            'role': 'user',
-            'content': f"Q: Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?\n<think>Natalia sold 48 clips in April and half as many clips in May, so she sold 48 / 2 = 24 clips in May.\nAltogether, she sold 48 + 24 = 72 clips.\nThe answer is 72.</think><answer> 72 </answer>\n\nQ: Weng earns $12 an hour for babysitting. Yesterday, she just did 50 minutes of babysitting. How much did she earn?\n<think>Since Weng earns $12 an hour for babysitting, she earns $12 / 60 = $0.2 per minute.\n Working 50 minutes, she earned $0.2 x 50 = $10.\nThe answer is 10.</think><answer> 10 </answer>\n\nSimilar to the previous examples, solve the following math problem\nQ: {question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags."
+            "role": "user",
+            "content": f"Solve the following math problem\n{question}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> 500 </answer>."
         },
         {
             "role": "assistant",
@@ -51,7 +51,7 @@ def chat_template_aqua(**kwargs):
         },
         {
             'role': 'user',
-            'content': f"Q: A class of 35 students has an average height of 180 cm. Seven students whose average height is 120 cm, left the class and seven others whose average height is 140 cm, joined. Calculate the new average height of the students of the class (in cm) is?\nA)204.6 cm  B)404.6 cm  C)224.6 cm  D)184.0 cm  E)256.6 cm\n<think> The total height of students before seven students left is 180 * 35 = 6300 cm.The total height of students who joined is 140 * 7  = 980 cm. The new total height of students after seven students joined is 6300 - 840 + 980 = 6440 cm. The new average height is 6440 / 35 = 184 cm. The answer is D.</think><answer> D </answer>\n\nQ: How much is 70% of 40 is greater than 4/5 of 25?\nA)22  B)67  C)88  D)12  E)8\n<think> 70% of 40 is 40 * 0.7 = 28. 4/5 of 25 is 25 * 4/5 = 20. 70% of 40 is greater than 4/5 of 25 by 28 - 20 = 8. The answer is E.</think><answer> E </answer>\n\nSimilar to the previous examples, solve the following math question and choose an answer from the given options\nQ: {question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags."
+            'content': f"Solve the following math problem and choose an answer from the given options\n{question}\n{options}\n\n Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> C </answer>."
         },
         {
             "role": "assistant",
@@ -76,6 +76,8 @@ dataset_dict = {
             'datasets/aqua/medium',
             'datasets/aqua/hard',
         ],
+        'max_prompt_length': 512,
+        'max_completion_length': 512,
         'chat_template' : chat_template_aqua,
         'is_correct' : is_correct_aqua
     },
@@ -86,6 +88,8 @@ dataset_dict = {
             'datasets/gsm8k/medium',
             'datasets/gsm8k/hard'
         ],
+        'max_prompt_length': 1600,
+        'max_completion_length': 512,
         'chat_template' : chat_template_gsm8k,
         'is_correct' : is_correct_gsm8k
     }
@@ -105,14 +109,16 @@ def main(args):
         tensor_parallel_size=torch.cuda.device_count(),
         dtype='bfloat16',
         gpu_memory_utilization=0.9,
-        max_model_len=4096,
+        max_model_len=dataset_dict[args.dataset]['max_prompt_length']+dataset_dict[args.dataset]['max_completion_length'],
         seed=1234,
         task='generate'
     )
     sampling_params = SamplingParams(
+        n=1,
         temperature=0,
-        max_tokens=512,
+        max_tokens=dataset_dict[args.dataset]['max_completion_length'],
         min_tokens=1,
+        truncate_prompt_tokens=dataset_dict[args.dataset]['max_prompt_length'],
         seed=1234
     )
     
@@ -157,7 +163,7 @@ def main(args):
             'accuracy': task_is_correct.mean().item(),
             'support': len(task_is_correct)
         }
-    pprint(results, indent=4, width=2)
+    print(json.dumps(results, indent=4))
 
 
 if __name__ == '__main__':
