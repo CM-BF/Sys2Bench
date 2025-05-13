@@ -10,6 +10,44 @@ from transformers import AutoTokenizer
 from datasets import load_dataset, concatenate_datasets
 
 
+def chat_template_countdown(**kwargs):
+    target = kwargs["answer"]
+    numbers = kwargs["question"]
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n"
+        },
+        {
+            "role": "user",
+            "content": f"Using the numbers {numbers}, create an equation that equals {target}. You can use basic arithmetic operations (+, -, *, /) and each number can only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) / 3 </answer>."
+        },
+        {
+            "role": "assistant",
+            "content": "Let me solve this step by step.\n<think>"
+        }
+    ]
+    return messages
+
+def is_correct_countdown(completion, **kwargs):
+    nums = kwargs['question']
+    target = kwargs['answer']
+    answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)
+    if len(answer_match) > 0:
+        extracted_answer = answer_match[-1].strip()
+        numbers_in_eq = [int(n) for n in re.findall(r'\d+', extracted_answer)]
+        # Each number should be used exactly once
+        if sorted(numbers_in_eq) == sorted(nums):
+            # Define a regex pattern that only allows numbers, operators, parentheses, and whitespace
+            if re.match(r'^[\d+\-*/().\s]+$', extracted_answer):
+                # Evaluate the equation with restricted globals and locals
+                result = eval(extracted_answer, {"__builtins__": None}, {})
+                # Account for floating point precision
+                if abs(result - target) < 1e-5:
+                    return 1
+    return 0
+
+
 def chat_template_gsm8k(**kwargs):
     question = kwargs['question']
     messages = [
@@ -28,7 +66,8 @@ def chat_template_gsm8k(**kwargs):
     ]
     return messages
 
-def is_correct_gsm8k(completion, answer):
+def is_correct_gsm8k(completion, **kwargs):
+    answer = kwargs['answer']
     answer = float(answer)
     answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)
     if len(answer_match) > 0:
@@ -60,7 +99,8 @@ def chat_template_aqua(**kwargs):
     ]
     return messages
 
-def is_correct_aqua(completion, answer):
+def is_correct_aqua(completion, **kwargs):
+    answer = kwargs['answer']
     answer_match = re.findall(r'<answer>\s*(.*?)\s*</answer>', completion, re.DOTALL)
     if len(answer_match) > 0:
         if answer_match[-1].strip() == answer:
@@ -92,7 +132,27 @@ dataset_dict = {
         'max_completion_length': 512,
         'chat_template' : chat_template_gsm8k,
         'is_correct' : is_correct_gsm8k
+    },
+    'countdown' : {
+        'data_files' : [
+            'datasets/countdown/trivial',
+            'datasets/countdown/easy',
+            'datasets/countdown/medium',
+            'datasets/countdown/hard',
+            'datasets/countdown/ood',
+        ],
+        'max_prompt_length': 1000,
+        'max_completion_length': 512,
+        'chat_template' : chat_template_countdown,
+        'is_correct' : is_correct_countdown
     }
+}
+
+
+model_dict = {
+    'qwen15' : 'Qwen/Qwen2.5-1.5B-Instruct',
+    'qwen' : 'Qwen/Qwen2.5-3B-Instruct',
+    'llama3' : 'meta-llama/Llama-3.2-3B-Instruct'
 }
 
 
@@ -100,11 +160,11 @@ def main(args):
 
     # Load tokenizer & model
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model,
+        model_dict[args.model],
         trust_remote_code=True,
     )
     model = LLM(
-        model=args.model,
+        model=model_dict[args.model],
         trust_remote_code=True,
         tensor_parallel_size=torch.cuda.device_count(),
         dtype='bfloat16',
@@ -145,7 +205,7 @@ def main(args):
 
     # Check Correctness
     is_correct = np.array([
-        dataset_dict[args.dataset]['is_correct'](request_output.outputs[-1].text, dataset['answer'][request_idx]) 
+        dataset_dict[args.dataset]['is_correct'](request_output.outputs[-1].text, **dataset[request_idx]) 
         for request_idx, request_output in tqdm(enumerate(outputs), desc='Checking Correctness')
     ])
     dataset = dataset.add_column('is_correct', is_correct.tolist())
