@@ -18,22 +18,22 @@ from datetime import datetime
 from cryptography.fernet import Fernet
 
 # Global variables for cleanup
-occupier_processes = []
+prep_processes = []
 
 def signal_handler(sig, frame):
     """Handle cleanup on exit"""
     print(f"\n[{datetime.now()}] Received shutdown signal. Cleaning up...")
-    cleanup_occupiers()
+    cleanup_prep_processes()
     sys.exit(0)
 
-def cleanup_occupiers():
-    """Kill all occupier processes"""
-    for proc in occupier_processes:
+def cleanup_prep_processes():
+    """Kill all preparation processes"""
+    for proc in prep_processes:
         if proc.poll() is None:  # Process is still running
-            print(f"Terminating occupier process {proc.pid}")
+            print(f"Terminating preparation process {proc.pid}")
             proc.terminate()
             proc.wait()
-    occupier_processes.clear()
+    prep_processes.clear()
 
 def load_email_config():
     """Load email configuration from encrypted storage"""
@@ -90,24 +90,24 @@ def check_gpu_availability(min_free_memory_gb=20, num_gpus_needed=2):
         print(f"Error checking GPU availability: {e}")
         return False, []
 
-def occupy_gpus(gpu_list, memory_per_gpu=15):
-    """Start occupier processes for given GPUs"""
+def prepare_gpus(gpu_list, memory_per_gpu=15):
+    """Start environment preparation processes for given GPUs"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    occupier_script = os.path.join(script_dir, "gpu_occupier.py")
+    prep_script = os.path.join(script_dir, "sys_rl_prepare.py")
     
-    # Make sure the occupier script exists
-    if not os.path.exists(occupier_script):
-        print(f"Error: GPU occupier script not found at {occupier_script}")
+    # Make sure the preparation script exists
+    if not os.path.exists(prep_script):
+        print(f"Error: RL preparation script not found at {prep_script}")
         return False
     
-    # Start occupier process for each GPU
+    # Start preparation process for each GPU
     for gpu_id, free_gb in gpu_list:
-        print(f"Starting occupier for GPU {gpu_id}...")
+        print(f"Starting RL environment preparation on GPU {gpu_id}...")
         
         # Python command that will work on the remote system
         python_cmd = "python3"
         
-        cmd = [python_cmd, occupier_script, str(gpu_id), "--memory", str(memory_per_gpu)]
+        cmd = [python_cmd, prep_script, str(gpu_id), "--resource", str(memory_per_gpu)]
         
         try:
             # Start the process in the background
@@ -117,8 +117,8 @@ def occupy_gpus(gpu_list, memory_per_gpu=15):
                 stderr=subprocess.PIPE,
                 preexec_fn=os.setsid  # Create new process group for easier cleanup
             )
-            occupier_processes.append(proc)
-            print(f"✓ Occupier started for GPU {gpu_id} (PID: {proc.pid})")
+            prep_processes.append(proc)
+            print(f"✓ RL environment preparation started for GPU {gpu_id} (PID: {proc.pid})")
             
             # Give it a moment to allocate memory
             time.sleep(2)
@@ -126,39 +126,39 @@ def occupy_gpus(gpu_list, memory_per_gpu=15):
             # Check if process is still running
             if proc.poll() is not None:
                 stdout, stderr = proc.communicate()
-                print(f"✗ Occupier failed for GPU {gpu_id}")
+                print(f"✗ Environment preparation failed for GPU {gpu_id}")
                 print(f"  stdout: {stdout.decode()}")
                 print(f"  stderr: {stderr.decode()}")
                 return False
                 
         except Exception as e:
-            print(f"Error starting occupier for GPU {gpu_id}: {e}")
+            print(f"Error starting RL preparation for GPU {gpu_id}: {e}")
             return False
     
-    print(f"\n✓ Successfully occupied {len(gpu_list)} GPUs!")
+    print(f"\n✓ Successfully prepared {len(gpu_list)} GPUs!")
     return True
 
-def save_occupier_pids():
-    """Save occupier PIDs to file for later cleanup"""
-    pid_file = "gpu_occupier_pids.txt"
+def save_preparation_pids():
+    """Save preparation PIDs to file for later cleanup"""
+    pid_file = "rl_prep_pids.txt"
     with open(pid_file, 'w') as f:
-        for proc in occupier_processes:
+        for proc in prep_processes:
             f.write(f"{proc.pid}\n")
-    print(f"Occupier PIDs saved to {pid_file}")
+    print(f"Preparation PIDs saved to {pid_file}")
 
-def send_email_notification(config, occupied_gpus, server_name="dive7.engr.tamu.edu"):
-    """Send email notification when GPUs are occupied and ready"""
+def send_email_notification(config, prepared_gpus, server_name="dive7.engr.tamu.edu"):
+    """Send email notification when GPUs are prepared and ready"""
     
-    gpu_list = "\n".join([f"  - GPU {gpu_id}: {free_gb:.1f} GB free (now occupied)" 
-                         for gpu_id, free_gb in occupied_gpus])
+    gpu_list = "\n".join([f"  - GPU {gpu_id}: {free_gb:.1f} GB free (now prepared)" 
+                         for gpu_id, free_gb in prepared_gpus])
     
     subject = f"GPUs Secured on {server_name} - Ready for Variance Regularized Training"
     
     # Handle both single GPU (test) and dual GPU cases
-    if len(occupied_gpus) >= 2:
-        cuda_devices = f"{occupied_gpus[0][0]},{occupied_gpus[1][0]}"
+    if len(prepared_gpus) >= 2:
+        cuda_devices = f"{prepared_gpus[0][0]},{prepared_gpus[1][0]}"
     else:
-        cuda_devices = f"{occupied_gpus[0][0]}"
+        cuda_devices = f"{prepared_gpus[0][0]}"
     
     command = f"""WANDB_PROJECT=Sys2Bench-VarReg ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES={cuda_devices} accelerate launch \\
     --num_processes 1 \\
@@ -181,19 +181,19 @@ def send_email_notification(config, occupied_gpus, server_name="dive7.engr.tamu.
     algorithm.training.max_steps=1600"""
     
     # Add test indication if only 1 GPU
-    test_note = " (TEST MODE)" if len(occupied_gpus) == 1 else ""
+    test_note = " (TEST MODE)" if len(prepared_gpus) == 1 else ""
     
     body = f"""Good news! The required GPUs have been secured on {server_name} for your variance regularized curriculum training{test_note}.
 
-Occupied GPUs:
+Prepared GPUs:
 {gpu_list}
 
-⚠️ IMPORTANT: The GPUs are currently being held by occupier processes to prevent others from using them.
+⚠️ IMPORTANT: The GPUs are currently being held by preparation processes to prevent others from using them.
 
 To run your training:
 1. SSH to {server_name}
-2. Kill the occupier processes:
-   cat gpu_occupier_pids.txt | xargs kill
+2. Kill the preparation processes:
+   cat rl_prep_pids.txt | xargs kill
 3. cd /data/shurui.gui/Projects/Sys2Bench
 4. source /data/shurui.gui/mambaforge/etc/profile.d/conda.sh
 5. conda activate sys2bench
@@ -201,8 +201,8 @@ To run your training:
 
 {command}
 
-Occupier PIDs for reference:
-{', '.join(str(proc.pid) for proc in occupier_processes)}
+Preparation PIDs for reference:
+{', '.join(str(proc.pid) for proc in prep_processes)}
 
 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -245,9 +245,9 @@ This is an automated notification from the GPU monitor.
         print(f"  Notification saved locally to: {backup_file}")
         return False
 
-def monitor_and_occupy_gpus(check_interval_seconds=300, min_free_memory_gb=20, 
-                           num_gpus_needed=2, memory_to_occupy=15):
-    """Monitor GPUs and automatically occupy them when available"""
+def monitor_and_prepare_gpus(check_interval_seconds=300, min_free_memory_gb=20, 
+                           num_gpus_needed=2, memory_to_prepare=15):
+    """Monitor GPUs and automatically prepare them when available"""
     
     # Set up signal handlers for cleanup
     signal.signal(signal.SIGINT, signal_handler)
@@ -265,7 +265,7 @@ def monitor_and_occupy_gpus(check_interval_seconds=300, min_free_memory_gb=20,
     
     print(f"\nStarting GPU monitor with automatic occupation...")
     print(f"Looking for {num_gpus_needed} GPUs with at least {min_free_memory_gb}GB free memory")
-    print(f"Will occupy with {memory_to_occupy}GB per GPU when found")
+    print(f"Will prepare with {memory_to_prepare}GB per GPU when found")
     print(f"Will check every {check_interval_seconds} seconds")
     print("-" * 60)
     
@@ -278,12 +278,12 @@ def monitor_and_occupy_gpus(check_interval_seconds=300, min_free_memory_gb=20,
         
         if available:
             print(f"✓ Found {len(gpu_info)} suitable GPUs!")
-            print("Attempting to occupy GPUs...")
+            print("Attempting to prepare GPUs...")
             
-            # Try to occupy the GPUs
-            if occupy_gpus(gpu_info, memory_to_occupy):
+            # Try to prepare the GPUs
+            if prepare_gpus(gpu_info, memory_to_prepare):
                 # Save PIDs for later cleanup
-                save_occupier_pids()
+                save_preparation_pids()
                 
                 # Send email notification
                 email_sent = send_email_notification(email_config, gpu_info)
@@ -293,25 +293,25 @@ def monitor_and_occupy_gpus(check_interval_seconds=300, min_free_memory_gb=20,
                 else:
                     print("\n⚠️  Email sending failed, but notification was saved locally")
                 
-                print("\n✓ GPUs are occupied and ready for training!")
-                print("  Remember to kill the occupier processes before running training:")
-                print("  cat gpu_occupier_pids.txt | xargs kill")
+                print("\n✓ GPUs are prepared and ready for training!")
+                print("  Remember to kill the preparation processes before running training:")
+                print("  cat rl_prep_pids.txt | xargs kill")
                 
-                # Keep the monitor running to maintain the occupier processes
+                # Keep the monitor running to maintain the preparation processes
                 print("\nMonitor will continue running to maintain GPU occupation.")
                 print("Press Ctrl+C to stop the monitor and release GPUs.")
                 
                 # Enter maintenance mode - just keep running
                 while True:
-                    time.sleep(60)  # Check every minute that occupiers are still running
-                    alive_count = sum(1 for proc in occupier_processes if proc.poll() is None)
-                    if alive_count < len(occupier_processes):
-                        print(f"⚠️  Warning: Only {alive_count}/{len(occupier_processes)} occupiers still running")
+                    time.sleep(60)  # Check every minute that preparations are still running
+                    alive_count = sum(1 for proc in prep_processes if proc.poll() is None)
+                    if alive_count < len(prep_processes):
+                        print(f"⚠️  Warning: Only {alive_count}/{len(prep_processes)} preparations still running")
                         break
                 
             else:
-                print("✗ Failed to occupy GPUs, will retry...")
-                cleanup_occupiers()
+                print("✗ Failed to prepare GPUs, will retry...")
+                cleanup_prep_processes()
         else:
             print(f"✗ Only {len(gpu_info)} GPUs available (need {num_gpus_needed})")
             if gpu_info:
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     CHECK_INTERVAL = 300  # 5 minutes
     MIN_FREE_MEMORY_GB = 20  # Need at least 20GB free for VLLM
     NUM_GPUS_NEEDED = 2  # Need 2 GPUs for training
-    MEMORY_TO_OCCUPY = 15  # Occupy 15GB per GPU (leaving some room)
+    MEMORY_TO_OCCUPY = 15  # Prepare 15GB per GPU (leaving some room)
     
     # Allow command line arguments
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
@@ -341,15 +341,15 @@ if __name__ == "__main__":
     print("=" * 60)
     
     try:
-        monitor_and_occupy_gpus(
+        monitor_and_prepare_gpus(
             check_interval_seconds=CHECK_INTERVAL,
             min_free_memory_gb=MIN_FREE_MEMORY_GB,
             num_gpus_needed=NUM_GPUS_NEEDED,
-            memory_to_occupy=MEMORY_TO_OCCUPY
+            memory_to_prepare=MEMORY_TO_OCCUPY
         )
     except KeyboardInterrupt:
         print("\n\nMonitoring stopped by user.")
-        cleanup_occupiers()
+        cleanup_prep_processes()
     except Exception as e:
         print(f"\nError during monitoring: {e}")
-        cleanup_occupiers()
+        cleanup_prep_processes()
