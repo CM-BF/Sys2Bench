@@ -40,6 +40,8 @@ from accelerate import Accelerator
 from vllm import LLM, SamplingParams
 # For Coding Tasks
 from coding_reward_model import CodingRewardModel
+# For Variance Regularized Scheduler
+from variance_regularized_scheduler import _variance_regularized_schedule, update_variance_regularized_performance, reset_variance_regularized_state
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
@@ -181,7 +183,8 @@ class TaskSampler(torch.utils.data.Sampler):
             'balanced': self._balanced_schedule,
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
-            'classic': self._step_schedule
+            'classic': self._step_schedule,
+            'variance_regularized': partial(_variance_regularized_schedule, **scheduler_params)
         }
         log_on_main(f"Data Schedule: {data_schedule}")
         self.schedule_func = self.schedule_funcs[data_schedule]
@@ -195,6 +198,10 @@ class TaskSampler(torch.utils.data.Sampler):
     def __iter__(self):
         task_ptrs = {t: 0 for t in range(self.num_tasks)}
         indices_by_task = {t: idx.copy() for t, idx in self.indices_by_task.items()}
+        
+        # Reset variance regularized state if using that scheduler
+        if self.data_schedule == 'variance_regularized':
+            reset_variance_regularized_state()
         
         for i in range(self.total_iterations):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
@@ -219,6 +226,10 @@ class TaskSampler(torch.utils.data.Sampler):
                 # else:
                 #     idx = random.choice(indices)
                 # batch_indices.append(int(idx))
+            # Store for variance regularized scheduler
+            self.last_batch_indices = batch_indices
+            self.last_chosen_tasks = chosen_tasks
+            
             log_on_main(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
             yield from batch_indices
 
@@ -282,7 +293,19 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            batch_size=batch_size)
 
     def training_step(self, *args, **kwargs):
-        return super().training_step(*args, **kwargs)
+        # Call parent training step
+        result = super().training_step(*args, **kwargs)
+        
+        # Update variance regularized scheduler if using it
+        if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards'):
+            # Get the task IDs from the current batch
+            sampler = self._get_train_sampler()
+            if hasattr(sampler, 'last_chosen_tasks'):
+                task_ids = sampler.last_chosen_tasks.tolist()
+                rewards = self._last_batch_rewards
+                update_variance_regularized_performance(task_ids, rewards)
+        
+        return result
 
 # class Cosine
 
