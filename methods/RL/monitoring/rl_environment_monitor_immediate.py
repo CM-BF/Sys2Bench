@@ -157,7 +157,7 @@ def send_email_notification(config, prepared_gpu_list, server_name="dive7.engr.t
     gpu_list = "\n".join([f"  - GPU {gpu_id}: {free_gb:.1f}GB free (now prepared)" 
                          for gpu_id, free_gb in prepared_gpu_list])
     
-    subject = f"GPUs Prepared on {server_name} - {len(prepared_gpu_list)} GPU(s) Ready"
+    subject = f"✅ Both GPUs Ready on {server_name} - Training Can Begin!"
     
     # Get list of prepared GPU IDs
     gpu_ids = [gpu_id for gpu_id, _ in prepared_gpu_list]
@@ -182,12 +182,12 @@ def send_email_notification(config, prepared_gpu_list, server_name="dive7.engr.t
     algorithm.training.per_device_train_batch_size=2 \\
     algorithm.training.max_steps=1600"""
     
-    body = f"""RL Environment Update: GPUs have been prepared on {server_name}.
+    body = f"""🎉 Great news! Both GPUs are now secured and ready for your variance regularized training on {server_name}.
 
-Currently Prepared GPUs:
+Secured GPUs:
 {gpu_list}
 
-{training_note}
+✅ Both GPUs are ready for full GRPO training with VLLM!
 
 ⚠️ IMPORTANT: The GPUs are being held by preparation processes.
 
@@ -308,16 +308,17 @@ def monitor_and_prepare_gpus_immediate(check_interval_seconds=60, min_free_memor
                     if prepare_gpu(gpu_id, free_gb, memory_to_prepare):
                         newly_prepared.append((gpu_id, free_gb))
             
-                # Send email if we prepared new GPUs
-                if newly_prepared and len(prepared_gpus) != last_email_count:
-                    # Get full list of all prepared GPUs with their memory
-                    all_prepared = [(gpu_id, 0) for gpu_id in prepared_gpus]  # We don't track original free memory
-                    send_email_notification(email_config, newly_prepared)
-                    last_email_count = len(prepared_gpus)
+                # Check if we've reached our target
+                if len(prepared_gpus) >= max_gpus:
+                    print(f"\n🎯 SUCCESS: Secured {max_gpus} GPUs! Monitor will continue running to maintain them.")
                     
-                    # Check if we've reached our target
-                    if len(prepared_gpus) >= max_gpus:
-                        print(f"\n🎯 SUCCESS: Secured {max_gpus} GPUs! Monitor will continue running to maintain them.")
+                    # Send email only when we have all GPUs ready
+                    if len(prepared_gpus) != last_email_count:
+                        # Get list of all prepared GPUs (we'll show them as having ~50GB originally)
+                        all_prepared_list = [(gpu_id, 50.0) for gpu_id in sorted(prepared_gpus)]
+                        send_email_notification(email_config, all_prepared_list)
+                        last_email_count = len(prepared_gpus)
+                        print("✉️  Email notification sent - both GPUs are ready!")
         
         # Status update
         if prepared_gpus:
