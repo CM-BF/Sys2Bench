@@ -123,7 +123,7 @@ ssh user@server "tmux ls"
 ./check_tmux.sh test
 ```
 
-**4. Important: Use `head` not `tail` for tmux content**
+**4. Important: Use `tail -100` for tmux content**
 - TMUX panes can be large with empty space at bottom
 - Our scripts use appropriate viewing methods
 
