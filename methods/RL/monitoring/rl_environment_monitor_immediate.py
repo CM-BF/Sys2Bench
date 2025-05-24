@@ -93,8 +93,9 @@ def check_all_gpus(min_free_memory_gb=50):
 
 def prepare_gpu(gpu_id, free_gb, memory_to_prepare=45):
     """Start preparation process for a single GPU"""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    prep_script = os.path.join(script_dir, "sys_rl_prepare.py")
+    # Script is now at methods/RL/sys_rl.py
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prep_script = os.path.join(script_dir, "sys_rl.py")
     
     # Make sure the preparation script exists
     if not os.path.exists(prep_script):
@@ -107,7 +108,8 @@ def prepare_gpu(gpu_id, free_gb, memory_to_prepare=45):
     python_cmd = "python3"
     
     # Use 45GB to leave some buffer (for 50GB threshold)
-    cmd = [python_cmd, prep_script, str(gpu_id), "--resource", str(memory_to_prepare)]
+    # New parameters: --sc for system capacity, --data for dataset
+    cmd = [python_cmd, prep_script, str(gpu_id), "--sc", str(memory_to_prepare), "--data", "countdown"]
     
     try:
         # Start the process in the background
