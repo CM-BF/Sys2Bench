@@ -27,6 +27,7 @@ fi
 
 # Kill existing tmux session if it exists
 tmux kill-session -t $TMUX_SESSION 2>/dev/null
+sleep 1
 
 # Activate conda environment
 source /data/shurui.gui/mambaforge/etc/profile.d/conda.sh

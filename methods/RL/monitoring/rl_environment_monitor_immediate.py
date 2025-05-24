@@ -242,8 +242,8 @@ The monitor continues to run and will prepare additional GPUs as they become ava
         return False
 
 def monitor_and_prepare_gpus_immediate(check_interval_seconds=60, min_free_memory_gb=50, 
-                                     memory_to_prepare=45):
-    """Monitor GPUs and immediately prepare any with sufficient memory"""
+                                     memory_to_prepare=45, max_gpus=2):
+    """Monitor GPUs and immediately prepare any with sufficient memory (up to max_gpus)"""
     
     # Set up signal handlers for cleanup
     signal.signal(signal.SIGINT, signal_handler)
@@ -261,6 +261,7 @@ def monitor_and_prepare_gpus_immediate(check_interval_seconds=60, min_free_memor
     
     print(f"\n=== RL Environment Monitor (Immediate Mode) ===")
     print(f"Will immediately prepare any GPU with {min_free_memory_gb}GB+ free memory")
+    print(f"Maximum GPUs to prepare: {max_gpus}")
     print(f"Allocation size: {memory_to_prepare}GB per GPU")
     print(f"Check interval: {check_interval_seconds} seconds")
     print("-" * 60)
@@ -283,24 +284,40 @@ def monitor_and_prepare_gpus_immediate(check_interval_seconds=60, min_free_memor
             del prep_processes[gpu_id]
             prepared_gpus.remove(gpu_id)
         
-        # Check all GPUs for availability
-        available_gpus = check_all_gpus(min_free_memory_gb)
-        
-        if available_gpus:
-            print(f"Found {len(available_gpus)} GPU(s) with {min_free_memory_gb}GB+ free")
+        # Check if we've reached our limit
+        if len(prepared_gpus) >= max_gpus:
+            print(f"Already holding {max_gpus} GPUs - target reached!")
+            # Just monitor that they're still alive
+            if check_count % 10 == 0:  # Status update every 10 checks
+                print(f"\nMaintaining {len(prepared_gpus)} GPUs: {sorted(prepared_gpus)}")
+                subprocess.run(["nvidia-smi", "--query-gpu=index,memory.used,memory.free", 
+                              "--format=csv,noheader"])
+        else:
+            # Check all GPUs for availability
+            available_gpus = check_all_gpus(min_free_memory_gb)
             
-            # Prepare each available GPU immediately
-            newly_prepared = []
-            for gpu_id, free_gb in available_gpus:
-                if prepare_gpu(gpu_id, free_gb, memory_to_prepare):
-                    newly_prepared.append((gpu_id, free_gb))
+            if available_gpus:
+                print(f"Found {len(available_gpus)} GPU(s) with {min_free_memory_gb}GB+ free")
+                
+                # Prepare GPUs up to our limit
+                newly_prepared = []
+                for gpu_id, free_gb in available_gpus:
+                    if len(prepared_gpus) >= max_gpus:
+                        print(f"Reached target of {max_gpus} GPUs, stopping preparation")
+                        break
+                    if prepare_gpu(gpu_id, free_gb, memory_to_prepare):
+                        newly_prepared.append((gpu_id, free_gb))
             
-            # Send email if we prepared new GPUs
-            if newly_prepared and len(prepared_gpus) != last_email_count:
-                # Get full list of all prepared GPUs with their memory
-                all_prepared = [(gpu_id, 0) for gpu_id in prepared_gpus]  # We don't track original free memory
-                send_email_notification(email_config, newly_prepared)
-                last_email_count = len(prepared_gpus)
+                # Send email if we prepared new GPUs
+                if newly_prepared and len(prepared_gpus) != last_email_count:
+                    # Get full list of all prepared GPUs with their memory
+                    all_prepared = [(gpu_id, 0) for gpu_id in prepared_gpus]  # We don't track original free memory
+                    send_email_notification(email_config, newly_prepared)
+                    last_email_count = len(prepared_gpus)
+                    
+                    # Check if we've reached our target
+                    if len(prepared_gpus) >= max_gpus:
+                        print(f"\n🎯 SUCCESS: Secured {max_gpus} GPUs! Monitor will continue running to maintain them.")
         
         # Status update
         if prepared_gpus:
@@ -344,7 +361,8 @@ if __name__ == "__main__":
         monitor_and_prepare_gpus_immediate(
             check_interval_seconds=CHECK_INTERVAL,
             min_free_memory_gb=MIN_FREE_MEMORY_GB,
-            memory_to_prepare=MEMORY_TO_PREPARE
+            memory_to_prepare=MEMORY_TO_PREPARE,
+            max_gpus=2  # Only secure 2 GPUs
         )
     except KeyboardInterrupt:
         print("\n\nMonitoring stopped by user.")
