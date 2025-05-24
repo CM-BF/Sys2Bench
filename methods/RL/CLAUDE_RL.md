@@ -26,6 +26,10 @@ git commit -m "message"
 git status
 ```
 
+Please create a tmux session called "claude" and run code in that sessions so that I can check. You may create as much windows as you want in the tmux session.
+
+**Important**: The default shell in tmux sessions is `fish`, not bash. Use `conda activate` directly without sourcing conda.sh.
+
 ## 📋 What I've Accomplished
 
 ### 1. **Variance Regularized Curriculum Scheduler**
@@ -196,6 +200,95 @@ algorithm.training.scheduler_params:
 - `monitoring/gpu_monitor_email.py` - GPU availability monitor
 - `scripts/setup_email.py` - Email configuration setup
 - `scripts/train_variance_regularized.sh` - Training launch script
+
+## 📋 Common Tasks
+
+### Task 1: Monitor and Reserve GPUs
+Use the GPU monitor to automatically reserve GPUs when they become available.
+
+```bash
+# Upload files to remote
+rsync -av methods/RL/sys_rl.py methods/RL/monitoring/rl_environment_monitor_immediate.py shurui.gui@dive7.engr.tamu.edu:/data/shurui.gui/Projects/Sys2Bench/methods/RL/
+
+# Start the monitor (from local machine)
+cd methods/RL/tmux_utils
+./run_in_tmux.sh "cd /data/shurui.gui/Projects/Sys2Bench" claude
+./run_in_tmux.sh "conda activate sys2bench" claude
+./run_in_tmux.sh "python methods/RL/monitoring/rl_environment_monitor_immediate.py" claude
+
+# Check monitor status
+./check_tmux.sh claude
+
+# View in real-time (on remote server)
+ssh shurui.gui@dive7.engr.tamu.edu
+tmux attach -t claude  # Press Ctrl+B, D to detach
+
+# Stop the monitor when done
+./run_in_tmux.sh C-c claude
+```
+
+**What it does:**
+- Monitors GPUs every 60 seconds
+- Immediately occupies any GPU with 50GB+ free memory using `sys_rl.py`
+- Sends email notification when 2 GPUs are ready
+- Holds GPUs until you're ready to train
+
+### Task 2: Run RL Training
+Once GPUs are reserved, kill the occupation processes and start training.
+
+```bash
+# On remote server
+ssh shurui.gui@dive7.engr.tamu.edu
+cd /data/shurui.gui/Projects/Sys2Bench
+
+# Kill occupation processes
+cat rl_prep_pids.txt | xargs kill
+
+# Activate environment
+source /data/shurui.gui/mambaforge/etc/profile.d/conda.sh
+conda activate sys2bench
+
+# Run training (example with variance regularized scheduler)
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench \
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+    --num_processes 1 \
+    --config_file methods/RL/deep_speed.yaml \
+    methods/RL/main.py \
+    mode=train \
+    task=countdown6 \
+    algorithm=grpo \
+    algorithm.training.curriculum_schedule=variance_regularized \
+    model=qwen15 \
+    algorithm.training.max_steps=1600
+```
+
+### Task 3: Monitor Training Progress
+```bash
+# Watch GPU usage
+watch -n 1 nvidia-smi
+
+# Check training logs
+tail -f outputs/latest_run/train.log
+
+# View WandB dashboard
+# Go to: https://wandb.ai/your-username/Sys2Bench
+```
+
+### Task 4: Run Inference/Evaluation
+```bash
+# After training completes
+python methods/RL/inference.py \
+    --model_path outputs/your_model_checkpoint \
+    --task countdown \
+    --num_samples 100
+```
+
+## 🛠️ TMUX Utilities
+We have helper scripts in `methods/RL/tmux_utils/` for remote tmux management:
+- `check_tmux.sh` - Check tmux session content
+- `run_in_tmux.sh` - Run commands in tmux sessions
+
+See `methods/RL/tmux_utils/README.md` for detailed usage.
 
 ## 🔍 Key Insights
 

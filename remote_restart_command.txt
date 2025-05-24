@@ -1,0 +1,7 @@
+# SSH to the remote server and run this command:
+
+ssh shurui.gui@dive7.engr.tamu.edu 'bash /data/shurui.gui/Projects/Sys2Bench/kill_and_restart_monitor.sh'
+
+# Or if you're already on the server, just run:
+# cd /data/shurui.gui/Projects/Sys2Bench
+# bash kill_and_restart_monitor.sh
