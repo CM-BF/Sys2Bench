@@ -2,6 +2,18 @@
 
 This guide covers the essential workflow for developing locally and running code on remote servers. Follow these step-by-step examples to understand the process.
 
+## Table of Contents
+
+1. [🔄 The Basic Workflow](#-the-basic-workflow)
+2. [📝 Step 1: Local Development](#-step-1-local-development)
+3. [📤 Step 2: Sync to Remote](#-step-2-sync-to-remote)
+4. [🖥️ Step 3: Run on Remote](#️-step-3-run-on-remote)
+5. [📖 Complete Example: Running a Monitor](#-complete-example-running-a-monitor)
+6. [🐛 Debugging TMUX Sessions](#-debugging-tmux-sessions)
+7. [🐟 Fish Shell Notes](#-fish-shell-notes)
+8. [🎯 Quick Reference](#-quick-reference)
+9. [💡 Tips](#-tips)
+
 ## 🔄 The Basic Workflow
 
 1. **Edit locally** → 2. **Sync to remote** → 3. **Run on remote** → 4. **Check results**

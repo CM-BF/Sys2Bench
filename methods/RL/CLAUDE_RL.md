@@ -2,6 +2,18 @@
 
 This file provides comprehensive guidance for Claude Code when working with the RL (Reinforcement Learning) components of Sys2Bench.
 
+## Table of Contents
+
+1. [🚀 Quick Start](#-quick-start)
+2. [📋 What I've Accomplished](#-what-ive-accomplished)
+3. [🔧 Common Development Pipeline](#-common-development-pipeline)
+4. [📊 Key Parameters for Variance Regularized Scheduler](#-key-parameters-for-variance-regularized-scheduler)
+5. [🎯 Next Steps](#-next-steps)
+6. [📋 Common Tasks](#-common-tasks)
+7. [🛠️ Troubleshooting](#️-troubleshooting)
+8. [📚 Important Files Reference](#-important-files-reference)
+9. [🔍 Key Insights](#-key-insights)
+
 ## 🚀 Quick Start
 
 ### Essential Tools & Commands
