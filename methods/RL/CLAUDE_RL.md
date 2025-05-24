@@ -26,9 +26,7 @@ git commit -m "message"
 git status
 ```
 
-Please create a tmux session called "claude" and run code in that sessions so that I can check. You may create as much windows as you want in the tmux session.
-
-**Important**: The default shell in tmux sessions is `fish`, not bash. Use `conda activate` directly without sourcing conda.sh.
+For remote development workflow (editing locally, syncing files, using tmux), see: `/REMOTE_WORKFLOW.md`
 
 ## 📋 What I've Accomplished
 
@@ -207,24 +205,14 @@ algorithm.training.scheduler_params:
 Use the GPU monitor to automatically reserve GPUs when they become available.
 
 ```bash
-# Upload files to remote
-rsync -av methods/RL/sys_rl.py methods/RL/monitoring/rl_environment_monitor_immediate.py shurui.gui@dive7.engr.tamu.edu:/data/shurui.gui/Projects/Sys2Bench/methods/RL/
+# See /REMOTE_WORKFLOW.md for how to sync files and use tmux utilities
 
-# Start the monitor (from local machine)
-cd methods/RL/tmux_utils
+# Quick start (using tmux utilities from tmux_utils/):
+cd ../../tmux_utils  # From methods/RL/
 ./run_in_tmux.sh "cd /data/shurui.gui/Projects/Sys2Bench" claude
-./run_in_tmux.sh "conda activate sys2bench" claude
+./run_in_tmux.sh "conda activate sys2bench" claude  
 ./run_in_tmux.sh "python methods/RL/monitoring/rl_environment_monitor_immediate.py" claude
-
-# Check monitor status
-./check_tmux.sh claude
-
-# View in real-time (on remote server)
-ssh shurui.gui@dive7.engr.tamu.edu
-tmux attach -t claude  # Press Ctrl+B, D to detach
-
-# Stop the monitor when done
-./run_in_tmux.sh C-c claude
+./check_tmux.sh claude  # Check status
 ```
 
 **What it does:**
@@ -283,12 +271,6 @@ python methods/RL/inference.py \
     --num_samples 100
 ```
 
-## 🛠️ TMUX Utilities
-We have helper scripts in `methods/RL/tmux_utils/` for remote tmux management:
-- `check_tmux.sh` - Check tmux session content
-- `run_in_tmux.sh` - Run commands in tmux sessions
-
-See `methods/RL/tmux_utils/README.md` for detailed usage.
 
 ## 🔍 Key Insights
 
