@@ -517,13 +517,9 @@ class BlocksWorldTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+            if self.trainer.data_schedule == 'variance_regularized':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
-                # If we have task IDs, update immediately
-                if len(task_ids) == len(rewards):
-                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
-                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
@@ -597,6 +593,8 @@ class BlocksWorldTrainer(BaseTrainer):
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
             )
+            # Store trainer reference for reward function access
+            self.trainer = trainer
 
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()
@@ -917,13 +915,9 @@ class CountdownTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+            if self.trainer.data_schedule == 'variance_regularized':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
-                # If we have task IDs, update immediately
-                if len(task_ids) == len(rewards):
-                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
-                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
@@ -980,6 +974,8 @@ class CountdownTrainer(BaseTrainer):
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
             )
+            # Store trainer reference for reward function access
+            self.trainer = trainer
 
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()
@@ -1463,6 +1459,8 @@ class ArithmeticTrainer(BaseTrainer):
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
             )
+            # Store trainer reference for reward function access
+            self.trainer = trainer
         elif algorithm == "ppo":
             training_args = self._setup_ppo_training()
             trainer = PPOTrainer(
@@ -1812,13 +1810,9 @@ class CodeTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+            if self.trainer.data_schedule == 'variance_regularized':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
-                # If we have task IDs, update immediately
-                if len(task_ids) == len(rewards):
-                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
-                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
@@ -1872,6 +1866,8 @@ class CodeTrainer(BaseTrainer):
                 data_schedule=self.cfg.algorithm.training.curriculum_schedule,
                 scheduler_params=self.cfg.algorithm.training.scheduler_params,
             )
+            # Store trainer reference for reward function access
+            self.trainer = trainer
         else:
             raise ValueError(f"Unsupported algorithm: {algorithm}")
 
