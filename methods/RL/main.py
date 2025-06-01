@@ -41,7 +41,7 @@ from vllm import LLM, SamplingParams
 # For Coding Tasks
 from coding_reward_model import CodingRewardModel
 # For Variance Regularized Scheduler
-from variance_regularized_scheduler import _variance_regularized_schedule, update_variance_regularized_performance, reset_variance_regularized_state
+from methods.RL.schedulers.variance_regularized_scheduler import _variance_regularized_schedule, update_variance_regularized_performance, reset_variance_regularized_state
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
@@ -52,112 +52,6 @@ accelerator = Accelerator()
 def log_on_main(text):
     if accelerator.is_main_process:
         log.info(text)
-
-
-def cosine_schedule(t, T, num_tasks):
-    total = num_tasks * (num_tasks + 1) / 2.0
-    early = {i: (num_tasks - i)/ total for i in range(num_tasks)}
-    late = {i: (i + 1) / total for i in range(num_tasks)}
-    alpha = 0.5 * (1 + math.cos(math.pi * t / T))
-    probs = {i: alpha * early[i] + (1 - alpha) * late[i] for i in range(num_tasks)}
-    # Enforce symmetric floor equal to the minimum probability in early/late.
-    p_min = 2 / (num_tasks * (num_tasks + 1))
-    for i in range(num_tasks):
-        probs[i] = max(probs[i], p_min)
-    norm = sum(probs.values())
-    return {i: probs[i] / norm for i in probs}
-
-
-class CosineTaskSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset, num_tasks, total_iterations, batch_size, seed=0):
-        """
-        Args:
-          dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
-          num_tasks: total number of task categories (e.g. 4)
-          total_iterations: total training iterations (T)
-          current_iter_fn: callable that returns current iteration (t)
-        """
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.max_dataset_len = len(self.dataset)
-        self.num_tasks = num_tasks
-        self.total_iterations = total_iterations
-        self.indices_by_task = {i: [] for i in range(num_tasks)}
-        for idx, sample in enumerate(self.dataset):
-            task = sample.get("task", 0)
-            self.indices_by_task[task].append(idx)
-            
-        # for idx in range(4):
-        #     print(f"Task {idx}: {len(self.indices_by_task[idx])}")
-        # quit()
-    
-    def __iter__(self):
-        
-        for i in range(self.total_iterations):
-            probs_dict = cosine_schedule(i, self.total_iterations, self.num_tasks)
-            
-            probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
-            print(f'For iter {i}, probs = {probs}')
-            # Sample a task for each slot in the batch using the probabilities.
-            chosen_tasks = np.random.choice(np.arange(self.num_tasks), size=self.batch_size, p=probs, replace=True)
-            batch_indices = []
-            
-            for task in chosen_tasks:
-                indices = self.indices_by_task[task]
-                
-                if len(indices) == 0:
-                    idx = random.randrange(len(self.dataset))
-                else:
-                    idx = random.choice(indices)
-                batch_indices.append(int(idx))
-            print(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
-            yield from batch_indices
-        
-        # indices_by_task = {i: [] for i in range(self.num_tasks)}
-        # for idx, sample in enumerate(self.dataset):
-        #     task = sample.get("task", 0)
-        #     indices_by_task[task].append(idx)
-        
-        # t = self.current_iter_fn()
-        # probs = cosine_schedule(t, self.total_iterations, self.num_tasks)
-        # print(f'For iter {t}, probs = {probs}')
-        # sampled_indices = []
-        # for task, indices in indices_by_task.items():
-        #     if not indices:
-        #         continue
-        #     # Determine sample count; here we simply use a proportion of available indices.
-        #     count = max(1, int(len(indices) * probs[task]))
-        #     # count = min(count, len(indices))
-        #     count = min(int(self.max_dataset_len * probs[task]), count)
-        #     sampled_indices.extend(random.sample(indices, count))
-        # random.shuffle(sampled_indices)
-        # print('Sampled indices:', len(sampled_indices), len(self.dataset))
-        # if t%2 == 0 and t > 0:
-        #     print('Sampled indices:', len(sampled_indices))
-        #     quit()
-        # return iter(sampled_indices)
-
-    def __len__(self):
-        return self.total_iterations * self.batch_size
-
-
-class CosineGRPOTrainer(GRPOTrainer):
-    def __init__(self, num_tasks=4, total_iterations=1200, *args, **kwargs):
-        self.num_tasks = num_tasks
-        self.total_iterations = total_iterations
-        super().__init__(*args, **kwargs)
-    
-    def _get_train_sampler(self):
-        batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
-        return CosineTaskSampler(self.train_dataset,
-                                 num_tasks = self.num_tasks, 
-                                 total_iterations = self.total_iterations, 
-                                #  current_iter_fn= lambda: self.state.global_step,
-                                 batch_size = batch_size)
-    
-    def training_step(self, *args, **kwargs):
-        return super().training_step(*args, **kwargs)
-
 
 class TaskSampler(torch.utils.data.Sampler):
     def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, scheduler_params, seed=0):
@@ -292,18 +186,22 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            scheduler_params=self.scheduler_params,
                            batch_size=batch_size)
 
-    def training_step(self, *args, **kwargs):
+    def training_step(self, model, inputs):
+        # Extract task IDs from the batch before processing
+        if 'task' in inputs:
+            self._current_batch_task_ids = inputs['task'].tolist() if torch.is_tensor(inputs['task']) else inputs['task']
+        
         # Call parent training step
-        result = super().training_step(*args, **kwargs)
+        result = super().training_step(model, inputs)
         
         # Update variance regularized scheduler if using it
-        if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards'):
-            # Get the task IDs from the current batch
-            sampler = self._get_train_sampler()
-            if hasattr(sampler, 'last_chosen_tasks'):
-                task_ids = sampler.last_chosen_tasks.tolist()
-                rewards = self._last_batch_rewards
-                update_variance_regularized_performance(task_ids, rewards)
+        if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
+            task_ids = self._current_batch_task_ids
+            rewards = self._last_batch_rewards
+            update_variance_regularized_performance(task_ids, rewards)
+            # Clean up
+            delattr(self, '_last_batch_rewards')
+            delattr(self, '_current_batch_task_ids')
         
         return result
 
@@ -615,6 +513,17 @@ class BlocksWorldTrainer(BaseTrainer):
             except Exception as e:
                 print(e)
                 rewards.append(0.0)
+
+        # Update variance regularized scheduler if we're in training mode
+        # and task IDs are available
+        if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
+            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+                # Store rewards in trainer for later use
+                self.trainer._last_batch_rewards = rewards
+                # If we have task IDs, update immediately
+                if len(task_ids) == len(rewards):
+                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
+                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
@@ -976,6 +885,10 @@ class CountdownTrainer(BaseTrainer):
     def _countdown_reward_fn(self, completions, target, numbers, **kwargs):
         """Reward function for countdown task"""
         rewards = []
+        
+        # Check if task IDs are provided in kwargs
+        task_ids = kwargs.get('task_ids', None)
+        
         for completion, target_i, numbers_i in zip(completions, target, numbers):
             try:
                 print('#########################')
@@ -1000,6 +913,17 @@ class CountdownTrainer(BaseTrainer):
             except Exception as e:
                 print(e)
                 rewards.append(0.0)
+
+        # Update variance regularized scheduler if we're in training mode
+        # and task IDs are available
+        if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
+            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+                # Store rewards in trainer for later use
+                self.trainer._last_batch_rewards = rewards
+                # If we have task IDs, update immediately
+                if len(task_ids) == len(rewards):
+                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
+                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
@@ -1884,6 +1808,17 @@ class CodeTrainer(BaseTrainer):
             except Exception as e:
                 print(e)
                 rewards.append(0.0)
+
+        # Update variance regularized scheduler if we're in training mode
+        # and task IDs are available
+        if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
+            if self.trainer.data_schedule == 'variance_regularized' and task_ids is not None:
+                # Store rewards in trainer for later use
+                self.trainer._last_batch_rewards = rewards
+                # If we have task IDs, update immediately
+                if len(task_ids) == len(rewards):
+                    from methods.RL.schedulers.variance_regularized_scheduler import update_variance_regularized_performance
+                    update_variance_regularized_performance(task_ids, rewards)
 
         return rewards
 
