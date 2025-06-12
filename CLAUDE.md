@@ -1,205 +1,181 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for working with the Easy 2 Hard (E2H) Reasoner implementation in Sys2Bench.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [📚 Documentation Structure](#-documentation-structure)
+2. [Paper Implementation](#paper-implementation)
 3. [Key Commands](#key-commands)
-   - [Setup and Environment](#setup-and-environment)
-   - [Running Experiments](#running-experiments)
-   - [Batch Evaluation](#batch-evaluation)
-   - [Reinforcement Learning](#reinforcement-learning-rl)
-4. [Architecture and Code Structure](#architecture-and-code-structure)
-   - [Core Framework](#core-framework-reasoners)
-   - [Method Implementations](#method-implementations-methods)
-   - [Key Design Patterns](#key-design-patterns)
-5. [Common Development Patterns](#common-development-patterns)
-   - [Model Selection](#model-selection)
-   - [Temperature and Sampling](#temperature-and-sampling)
-   - [Data Paths](#data-paths)
-   - [Logging and Output](#logging-and-output)
-6. [Adding New Tasks or Methods](#adding-new-tasks-or-methods)
-7. [🎯 Quick Task Reference](#-quick-task-reference)
-8. [Appendix: Method-Specific Details](#appendix-method-specific-details)
+4. [Architecture](#architecture)
+5. [Curriculum Schedulers](#curriculum-schedulers)
+6. [Supported Tasks](#supported-tasks)
+7. [Configuration](#configuration)
+8. [Running Experiments](#running-experiments)
 
 ## Overview
 
-Sys2Bench is a comprehensive benchmark for evaluating the reasoning and planning abilities of Large Language Models (LLMs) using various inference-time techniques. It tests LLMs across 11 diverse tasks in 5 categories:
-- **Algorithmic Reasoning**: Game of 24, Binpacking
-- **Planning**: Blocksworld, Trip Plan, Calendar Plan, Rubik's Cube
-- **Arithmetic Reasoning**: GSM8K, AQuA
-- **Logical Reasoning**: ProntoQA
-- **Common Sense Reasoning**: StrategyQA, HotPotQA
+This repository contains the implementation of the paper "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM Reasoning" (https://arxiv.org/html/2506.06632v1). The E2H Reasoner uses curriculum reinforcement learning to improve language models' reasoning capabilities by training them on tasks with progressively increasing difficulty.
 
-## 📚 Documentation Structure
+## Paper Implementation
 
-### Core Documentation
-- **[README.md](/README.md)** - Project overview, setup instructions, and basic usage
-- **[CLAUDE.md](/CLAUDE.md)** - This file, comprehensive guide for working with the codebase
-- **[REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md)** - Consolidated guide for remote development workflows
+The entire implementation is contained in `/methods/RL/main.py`, which serves as the only valid entry point. This implementation includes:
 
-### Method-Specific Documentation
-- **[methods/RL/CLAUDE_RL.md](methods/RL/CLAUDE_RL.md)** - Detailed RL implementation guide
-- **[methods/AutoHD/README.md](methods/AutoHD/README.md)** - AutoHD method documentation
-- Each method directory contains specific documentation and examples
-
-### Remote Development Resources
-For remote server development, GPU experiments, and long-running tasks, see:
-- **[REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md)** - Complete remote workflow guide
-
-**Note**: Since we're working directly on the remote machine, the remote development workflows in the guide above are for reference when you need to work from a local machine.
+- **Task Sampling**: Custom `TaskSampler` class that implements curriculum scheduling
+- **Curriculum Schedulers**: Multiple scheduling strategies for task difficulty progression
+- **GRPO Training**: Modified `CurriculumGRPOTrainer` that integrates with the task sampling
+- **Multi-task Support**: Training across different difficulty levels within each task
 
 ## Key Commands
 
 ### Setup and Environment
 ```bash
-# Initial setup (creates conda environment and sets environment variables)
-bash setup.sh
-
 # Activate environment
 conda activate sys2bench
 
-# Export API keys (required for OpenAI, optional for DeepInfra)
-export OPENAI_API_KEY="your-api-key"
-export DEEPINFRA_TOKEN="your-token"  # Optional for LLaMA models
-```
-
-### Running Experiments
-
-**Run all benchmarks:**
-```bash
-bash sys2bench.sh
-```
-
-**Run specific method on task:**
-```bash
-# Shell script approach (recommended)
-bash methods/[METHOD]/[TASK]/[method].sh
-
-# Direct Python execution
-python methods/[METHOD]/[TASK]/inference.py --base_lm openai --openai_model gpt-4o-mini [additional args]
-```
-
-**Methods available:** CoT, IO, RAP, ToT, AutoHD, RL
-
-### Batch Evaluation
-```bash
-# Regular evaluation
-GPU_IDX=0,1,2 bash batch_evaluate.sh [conda_env] [evaluate_step] [model_trim]
-
-# Pass@k evaluation
-GPU_IDX=0,1,2 bash batch_evaluate_pass_at_k.sh [conda_env] [evaluate_step]
-
-# SLURM cluster submission
-python batch_runner.py --cluster [ut/tamu]
-```
-
-### Reinforcement Learning (RL)
-
-**Quick Start:**
-```bash
-# Set environment and run training
+# Set environment variable
 export ROOT_PATH=/path/to/Sys2Bench
+```
+
+### Training with E2H
+```bash
+# Basic training command
 accelerate launch --config_file methods/RL/deep_speed.yaml \
     methods/RL/main.py mode=train task=countdown algorithm=grpo model=qwen15
+
+# With specific scheduler
+accelerate launch --config_file methods/RL/deep_speed.yaml \
+    methods/RL/main.py mode=train task=blocksworld algorithm=grpo \
+    model=qwen15 algorithm.training.curriculum_schedule=cosine
 ```
 
-**Key Features:**
-- Curriculum learning with multiple schedulers (balanced, cosine, gaussian, variance_regularized)
-- Multi-task training across difficulty levels
-- GRPO/PPO/SGRPO algorithm support
-- Automated GPU monitoring and notifications
+### Inference
+```bash
+python methods/RL/main.py mode=inference task=countdown \
+    task.inference.checkpoint=1200 model=qwen15
+```
 
-**For detailed RL documentation, see:** `methods/RL/CLAUDE_RL.md`
+## Architecture
 
-## Architecture and Code Structure
+The implementation centers around the `TaskSampler` class (lines 56-131 in main.py) which manages curriculum learning:
 
-### Core Framework (`/reasoners/`)
-- **Base classes**: Define abstract interfaces for search algorithms and world models
-- **Algorithms**: Implementations of beam search, DFS, greedy, MCTS, and heuristic search
-- **LM interfaces**: Unified API for OpenAI, HuggingFace, Anthropic, and LLaMA models
-- **Benchmarks**: Task-specific implementations and evaluation logic
+```python
+class TaskSampler(torch.utils.data.Sampler):
+    def __init__(self, dataset, num_tasks, total_iterations, 
+                 data_schedule, batch_size, scheduler_params, seed=0)
+```
 
-### Method Implementations (`/methods/`)
-Each method follows a consistent structure:
-- `inference.py`: Main execution script with method-specific logic
-- `[method].sh`: Shell script with common parameter configurations
-- `world_model.py`: Task state representation and transition logic (for search methods)
-- `search_config.py`: Configuration for search algorithms
-- `utils.py`: Helper functions and evaluation metrics
+The sampler:
+1. Organizes data by difficulty level (task 0 = easiest, task N-1 = hardest)
+2. Applies the chosen scheduling function at each iteration
+3. Samples tasks according to the computed probabilities
 
-### Key Design Patterns
-1. **World Model Pattern**: Search-based methods (RAP, ToT, AutoHD) use world models to represent task states and valid transitions
-2. **Prompt Templates**: Each task has standardized prompts in `/prompts/[task]/`
-3. **Distributed Execution**: Many scripts support multi-GPU via `torch.distributed.run`
-4. **Configuration Management**: RL experiments use Hydra for complex configuration management
+## Curriculum Schedulers
 
+The implementation includes five scheduling strategies:
 
-### Adding New Tasks or Methods
-1. **New Task**: Add data to `/data/`, implement benchmark class in `/reasoners/benchmark/`, create prompts in `/prompts/`
-2. **New Method**: Create directory in `/methods/`, implement inference script following existing patterns, add shell script for easy execution
+### 1. **Balanced Schedule** (`balanced`)
+- Equal probability for all difficulty levels throughout training
+- P(task_i) = 1/num_tasks
 
-## Common Development Patterns
+### 2. **Classical Curriculum** (`classic`)
+- Sequential progression through difficulties
+- Trains on task i for T/num_tasks iterations before moving to task i+1
 
-### Model Selection
-- OpenAI: `--base_lm openai --openai_model [gpt-4o/gpt-4o-mini]`
-- LLaMA API: `--base_lm llamaapi --api_model_id Meta-Llama-3.1-70B-Instruct`
-- HuggingFace: `--base_lm hf --model_dir [path]`
+### 3. **Cosine Schedule** (`cosine`)
+- Smooth transition from easy to hard tasks
+- Uses cosine annealing to shift probabilities
+- Includes minimum probability floor to prevent task starvation
 
-### Temperature and Sampling
-- Most methods use `--temperature 0.8` for generation
-- Search methods use beam size (`--n_beam`) and depth limit (`--depth_limit`)
+### 4. **Gaussian Schedule** (`gaussian`)
+- Bell curve that moves from easy to hard tasks
+- Configurable parameters:
+  - `mu_exp`: Controls progression speed (default: 1.0)
+  - `sigma`: Standard deviation of the Gaussian
+  - `min_prob`: Minimum probability per task
 
-### Data Paths
-- Test data: `/data/[task]/test.json` or task-specific filenames
-- Train data: `/data/[task]/train.json` (used for few-shot examples)
-- Prompts: `/prompts/[task]/prompts.json`
+### 5. **Variance Regularized** (`variance_regularized`)
+- Adaptive scheduling based on performance variance
+- Imported from external module
+- Updates probabilities based on reward feedback
 
-### Logging and Output
-- Logs are typically written to `logs/[method]/[task]/[timestamp]`
-- Results include accuracy metrics and often per-example predictions
-- Search methods may output tree visualizations or search traces
-- RL outputs are saved in `outputs/[model]_[task]_[algorithm]_[timestamp]/`
+## Supported Tasks
 
----
+The implementation supports four main task categories:
 
-## Appendix: Method-Specific Details
+1. **BlocksWorld** - Planning task with block manipulation
+2. **Countdown** - Arithmetic puzzle solving
+3. **Arithmetic** - GSM8K, AQuA, MATH datasets
+4. **Coding** - Programming problem solving
 
-### Reinforcement Learning (RL)
-For comprehensive RL documentation including:
-- Detailed training configurations
-- Reward model implementation
-- Curriculum scheduler details
-- GPU monitoring setup
-- Debugging workflows
+Each task has multiple difficulty levels defined by separate data files.
 
-See: `methods/RL/CLAUDE_RL.md`
+## Configuration
 
-### Other Methods
-Each method directory contains its own specific documentation and examples.
-Refer to the respective method directories for detailed implementation guides.
+The system uses Hydra for configuration management. Key configuration options:
 
-## 🎯 Quick Task Reference
+```yaml
+# Algorithm settings
+algorithm:
+  name: grpo  # or ppo
+  training:
+    curriculum_schedule: cosine  # balanced, classic, gaussian, variance_regularized
+    scheduler_params:
+      mu_exp: 1.0
+      sigma: 0.5
+      min_prob: 0.1
+    max_steps: 1200
+    per_device_train_batch_size: 4
 
-### For Running Experiments
-1. **Simple experiment** (no GPU): Run directly with shell scripts
-2. **GPU experiment**: Check GPU availability → run with appropriate CUDA_VISIBLE_DEVICES
-3. **RL training**: See methods/RL/CLAUDE_RL.md for detailed instructions
-4. **Monitor GPUs**: Use `nvidia-smi` or the RL monitoring system
+# Task settings
+task:
+  name: countdown  # blocksworld, gsm8k, etc.
+  data_files:
+    - data/countdown/easy.json
+    - data/countdown/medium.json
+    - data/countdown/hard.json
 
-### For Development
-1. **Add new method**: Create directory structure following existing patterns
-2. **Add new task**: Add data, benchmark class, and prompts
-3. **Track experiments**: Use meaningful output directories and logging
+# Model settings
+model:
+  name: Qwen/Qwen2.5-1.5B-Instruct
+  family: Qwen
+```
 
-### For Remote Development
-See [REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md) for complete workflow when working from a local machine.
+## Running Experiments
+
+### Training Examples
+
+**Countdown with Gaussian scheduler:**
+```bash
+accelerate launch --config_file methods/RL/deep_speed.yaml \
+    methods/RL/main.py mode=train task=countdown algorithm=grpo \
+    model=qwen15 algorithm.training.curriculum_schedule=gaussian \
+    algorithm.training.scheduler_params.sigma=0.5 \
+    algorithm.training.scheduler_params.mu_exp=0.8
+```
+
+**BlocksWorld with Cosine scheduler:**
+```bash
+accelerate launch --config_file methods/RL/deep_speed.yaml \
+    methods/RL/main.py mode=train task=blocksworld algorithm=grpo \
+    model=qwen15 algorithm.training.curriculum_schedule=cosine
+```
+
+### Monitoring Training
+- Logs are saved to Hydra output directory
+- Task sampling probabilities are logged at each iteration
+- Rewards and format compliance are tracked
+
+### Key Implementation Details
+
+1. **Prompt Format**: All tasks use a consistent format with `<think>` tags for reasoning and task-specific answer tags
+2. **Reward Functions**: Each task has a custom reward function that validates format and correctness
+3. **Batch Sampling**: Tasks are sampled per-batch based on scheduler probabilities
+4. **Data Exhaustion**: When a difficulty level's data is exhausted, it's reshuffled
 
 ## 📋 Important Notes
 
-- **Follow existing patterns** - Check similar methods for conventions
-- **Use meaningful names** - For output directories, logs, and sessions
-- **Check GPU availability** - Before starting large experiments
-- **Document your changes** - Update relevant documentation files
+- **Entry Point**: Always use `methods/RL/main.py` as the entry point
+- **Scheduler Selection**: Choose scheduler based on task characteristics
+- **GPU Memory**: Configure batch size and gradient accumulation based on available memory
+- **Checkpoint Saving**: Models are saved at regular intervals defined in configuration
