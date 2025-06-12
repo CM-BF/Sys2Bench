@@ -118,7 +118,36 @@ Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM
 - **Below best Gaussian** (14.2%) but shows promise for further optimization
 - **First successful implementation** of variance regularization for curriculum RL
 
-### 7. **Directory Reorganization**
+### 7. **Reward Hacking Issues Identified and Fixed**
+**Problem Analysis:**
+- **Reward Hacking Pattern**: Model outputting identical short completions like `(65 + 47 - 43 + 32)` repeatedly
+- **Overfitting to Easy Tasks**: VREx getting stuck on countdown2 (easiest task) without progressing
+- **Poor Task Progression**: Unlike Gaussian scheduling, VREx maintained high probability on easy tasks
+
+**Root Causes from Paper Analysis:**
+- Performance deficit scoring rewarded easy task mastery without forcing progression
+- No mechanism to transition away from mastered easy tasks  
+- Short completion rewards enabled minimal reasoning rather than comprehensive solutions
+
+**Implemented Fixes:**
+1. **Enhanced VREx Scheduler** (`variance_regularized_scheduler.py`):
+   - **Task Mastery Tracking**: Monitor when tasks exceed performance threshold (60%)
+   - **Progression Bias**: Time-weighted bias toward harder tasks (`progression_bias=0.3`)
+   - **Mastery Penalty**: Reduce sampling of mastered easy tasks over time
+   - **Adaptive Min Probability**: Decay `min_prob` for easy tasks using `min_prob_decay=0.8`
+
+2. **Enhanced Reward Function** (`countdown_reward_model.py` + `main.py`):
+   - **Length Penalty**: Penalize completions shorter than 100 characters (30% penalty)
+   - **Diversity Penalty**: Track recent 20 completions, penalize repeated equations (20% penalty)
+   - **Recent Completion Tracking**: Maintain sliding window of 50 recent completions
+
+3. **New Hyperparameters Available via CLI**:
+   - `algorithm.training.scheduler_params.progression_bias=0.3`
+   - `algorithm.training.scheduler_params.performance_threshold=0.6` 
+   - `algorithm.training.scheduler_params.min_prob_decay=0.8`
+   - `algorithm.training.scheduler_params.beta=0.7` (increased reliance on adaptive sampling)
+
+### 8. **Directory Reorganization**
 ```
 methods/RL/
 ├── conf/                            # Hydra configurations
@@ -334,6 +363,9 @@ WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIB
 
 # Inference evaluation on countdown6 task - ✅ COMPLETED  
 CUDA_VISIBLE_DEVICES=3 ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench python methods/RL/main.py mode=inference task=countdown2345 algorithm=grpo model=qwen15 model.family=citrinegui model.trim=Qwen2.5-1.5B-Instruct_countdown2345_grpo_variance_regularized_0.5_0.5_True_1600 task.test_file=citrinegui/countdown_n6t100_1-100 algorithm.training.max_steps=1600 task.inference.batch_size=32 2>&1 | tee methods/RL/logs/vrex_inference_countdown6.log
+
+# Enhanced VREx training with anti-reward-hacking fixes - 🔧 READY TO TEST
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29759 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 algorithm.training.scheduler_params.beta=0.7 algorithm.training.scheduler_params.progression_bias=0.3 algorithm.training.scheduler_params.performance_threshold=0.6 algorithm.training.scheduler_params.min_prob_decay=0.8 2>&1 | tee methods/RL/logs/vrex_enhanced_training.log
 ```
 
 ### Task 3: Monitor Training Progress

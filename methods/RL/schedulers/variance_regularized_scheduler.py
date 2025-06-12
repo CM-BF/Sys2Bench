@@ -19,10 +19,13 @@ def _variance_regularized_schedule(
     window_size: int = 100,
     min_prob: float = 0.1,
     temperature: float = 1.0,
-    beta: float = 0.5,
+    beta: float = 0.5,  # Keep default, change via CLI
     warmup_steps: int = 100,
     vrex_penalty_weight: float = 1.0,
     groupdro_alpha: float = 0.01,
+    progression_bias: float = 0.3,  # New: bias toward harder tasks over time
+    performance_threshold: float = 0.6,  # New: threshold for reducing easy task sampling
+    min_prob_decay: float = 0.8,  # New: factor to reduce min_prob for easy tasks over time
     **kwargs
 ) -> Dict[int, float]:
     """
@@ -38,7 +41,8 @@ def _variance_regularized_schedule(
             'task_counts': defaultdict(int),
             'group_weights': np.ones(num_tasks) / num_tasks,
             'current_probs': {i: 1.0 / num_tasks for i in range(num_tasks)},
-            'last_update': -1
+            'last_update': -1,
+            'task_mastery': {i: False for i in range(num_tasks)}  # Track task mastery
         }
     
     state = _variance_regularized_schedule.state
@@ -63,6 +67,12 @@ def _variance_regularized_schedule(
             stats[task_id] = (mean, var)
         else:
             stats[task_id] = (0.5, 1.0)  # Default values for unexplored tasks
+    
+    # Update task mastery status
+    for task_id in range(num_tasks):
+        mean, _ = stats[task_id]
+        if mean > performance_threshold and not state['task_mastery'][task_id]:
+            state['task_mastery'][task_id] = True
     
     # Update GroupDRO weights
     means = np.array([stats[i][0] for i in range(num_tasks)])
@@ -96,13 +106,24 @@ def _variance_regularized_schedule(
         cross_task_variance = np.var(all_means) if len(all_means) > 1 else 0.0
         vrex_score = vrex_penalty_weight * cross_task_variance
         
+        # Progression bias: encourage harder tasks over time
+        time_progress = t / T  # 0 to 1
+        progression_score = progression_bias * (task_id / (num_tasks - 1)) * time_progress
+        
+        # Mastery penalty: reduce sampling of mastered easy tasks
+        mastery_penalty = 0.0
+        if state['task_mastery'][task_id] and task_id < num_tasks // 2:  # Only for easier tasks
+            mastery_penalty = -0.5 * time_progress  # Increasing penalty over time
+        
         # Combine scores
         scores[task_id] = (
-            0.3 * perf_deficit +
-            0.2 * var_score +
+            0.25 * perf_deficit +
+            0.15 * var_score +
             0.1 * exploration_bonus +
-            0.3 * groupdro_weight +
-            0.1 * vrex_score
+            0.25 * groupdro_weight +
+            0.1 * vrex_score +
+            0.1 * progression_score +
+            0.05 * mastery_penalty  # Small but increasing effect
         )
     
     # Apply temperature and softmax
@@ -114,9 +135,15 @@ def _variance_regularized_schedule(
     uniform_weights = np.ones(num_tasks) / num_tasks
     blended_weights = (1 - beta) * uniform_weights + beta * weights
     
-    # Ensure minimum probability
+    # Adaptive minimum probability: reduce min_prob for easy tasks over time
+    time_progress = t / T
     for i in range(num_tasks):
-        blended_weights[i] = max(blended_weights[i], min_prob)
+        # Reduce min_prob for easier tasks (task 0, 1) as training progresses
+        if i < num_tasks // 2 and state['task_mastery'][i]:
+            adaptive_min_prob = min_prob * (min_prob_decay ** time_progress)
+        else:
+            adaptive_min_prob = min_prob
+        blended_weights[i] = max(blended_weights[i], adaptive_min_prob)
     
     # Renormalize
     blended_weights = blended_weights / blended_weights.sum()
@@ -168,6 +195,10 @@ def update_variance_regularized_performance(task_ids: List[int], performances: L
                 total_counts = sum(state['task_counts'].values())
                 for i, count in state['task_counts'].items():
                     trainer.log({f'vrex/task_{i}_sample_frequency': count / max(total_counts, 1)})
+                
+                # Task mastery status
+                for i, mastered in state['task_mastery'].items():
+                    trainer.log({f'vrex/task_{i}_mastery': float(mastered)})
                 
                 # Log all task metrics
                 trainer.log(task_means)

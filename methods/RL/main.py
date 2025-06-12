@@ -888,6 +888,10 @@ class CountdownTrainer(BaseTrainer):
         # Check if task IDs are provided in kwargs
         task_ids = kwargs.get('task_ids', None)
         
+        # Track recent completions for diversity penalty (maintain last 50 completions)
+        if not hasattr(self, '_recent_completions'):
+            self._recent_completions = []
+        
         for completion, target_i, numbers_i in zip(completions, target, numbers):
             try:
                 print('#########################')
@@ -899,10 +903,30 @@ class CountdownTrainer(BaseTrainer):
                     rewards.append(0.0)  # Penalty to avoid format errors
                     continue
 
-                # Use the CountdownRewardModel class
+                # Use the CountdownRewardModel class with enhanced penalties
                 reward_model = CountdownRewardModel(target_i, numbers_i)
-                reward = reward_model.compute_score(completion)
+                
+                # Extract equation for diversity tracking
+                equation = reward_model.extract_equation(completion)
+                
+                # Get recent equations for this target (last 20 completions)
+                recent_equations = [eq for eq in self._recent_completions[-20:] if eq is not None]
+                
+                reward = reward_model.compute_score(
+                    completion, 
+                    penalize_short_completions=True,
+                    min_completion_length=100,  # Require longer reasoning
+                    recent_completions=recent_equations,
+                    diversity_penalty_weight=0.2
+                )
                 rewards.append(reward)
+                
+                # Track this equation for future diversity checking
+                if equation is not None:
+                    self._recent_completions.append(equation)
+                    # Keep only last 50 completions
+                    if len(self._recent_completions) > 50:
+                        self._recent_completions.pop(0)
                 print('-----')
                 print(reward)
                 print(target_i)
