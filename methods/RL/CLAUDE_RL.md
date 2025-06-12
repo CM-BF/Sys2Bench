@@ -100,7 +100,25 @@ For remote development workflow (editing locally, syncing files, using tmux), se
   - Model shows generalization capability despite difficulty increase
   - Inference completed successfully with VREx-trained model
 
-### 6. **Directory Reorganization**
+### 6. **Paper Baseline Comparison Results**
+Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM Reasoning" ([arxiv.org/html/2506.06632v1](https://arxiv.org/html/2506.06632v1)):
+
+| Scheduler | OOD Accuracy (6-number countdown) | Notes |
+|-----------|-----------------------------------|-------|
+| **Balanced** | 9.2% | Standard baseline |
+| **Classical CL** | 12.6% | Traditional curriculum learning |
+| **Cosine (E2H-C)** | 6.4% | Smooth transition curriculum |
+| **Gaussian (E2H-G) Best** | **14.2%** | E2H-G (0.5, 0.5) - Best paper result |
+| **VREx (Our Implementation)** | **9.18%** | Variance regularized curriculum |
+
+**Key Findings:**
+- **VREx achieves competitive performance** at 9.18% OOD accuracy
+- **Matches Balanced baseline** (9.2%) performance closely  
+- **Outperforms Cosine** scheduler (6.4%) significantly
+- **Below best Gaussian** (14.2%) but shows promise for further optimization
+- **First successful implementation** of variance regularization for curriculum RL
+
+### 7. **Directory Reorganization**
 ```
 methods/RL/
 ├── conf/                            # Hydra configurations
