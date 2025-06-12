@@ -25,7 +25,6 @@ def _variance_regularized_schedule(
     groupdro_alpha: float = 0.01,
     progression_bias: float = 0.3,  # New: bias toward harder tasks over time
     performance_threshold: float = 0.6,  # New: threshold for reducing easy task sampling
-    min_prob_decay: float = 0.8,  # New: factor to reduce min_prob for easy tasks over time
     **kwargs
 ) -> Dict[int, float]:
     """
@@ -135,15 +134,9 @@ def _variance_regularized_schedule(
     uniform_weights = np.ones(num_tasks) / num_tasks
     blended_weights = (1 - beta) * uniform_weights + beta * weights
     
-    # Adaptive minimum probability: reduce min_prob for easy tasks over time
-    time_progress = t / T
+    # Ensure minimum probability (consistent with Gaussian scheduler)
     for i in range(num_tasks):
-        # Reduce min_prob for easier tasks (task 0, 1) as training progresses
-        if i < num_tasks // 2 and state['task_mastery'][i]:
-            adaptive_min_prob = min_prob * (min_prob_decay ** time_progress)
-        else:
-            adaptive_min_prob = min_prob
-        blended_weights[i] = max(blended_weights[i], adaptive_min_prob)
+        blended_weights[i] = max(blended_weights[i], min_prob)
     
     # Renormalize
     blended_weights = blended_weights / blended_weights.sum()

@@ -134,7 +134,7 @@ Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM
    - **Task Mastery Tracking**: Monitor when tasks exceed performance threshold (60%)
    - **Progression Bias**: Time-weighted bias toward harder tasks (`progression_bias=0.3`)
    - **Mastery Penalty**: Reduce sampling of mastered easy tasks over time
-   - **Adaptive Min Probability**: Decay `min_prob` for easy tasks using `min_prob_decay=0.8`
+   - **Consistent Min Probability**: Use standard `min_prob=0.1` like Gaussian scheduler
 
 2. **Enhanced Reward Function** (`countdown_reward_model.py` + `main.py`):
    - **Length Penalty**: Penalize completions shorter than 100 characters (30% penalty)
@@ -144,7 +144,6 @@ Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM
 3. **New Hyperparameters Available via CLI**:
    - `algorithm.training.scheduler_params.progression_bias=0.3`
    - `algorithm.training.scheduler_params.performance_threshold=0.6` 
-   - `algorithm.training.scheduler_params.min_prob_decay=0.8`
    - `algorithm.training.scheduler_params.beta=0.7` (increased reliance on adaptive sampling)
 
 ### 8. **Directory Reorganization**
@@ -365,7 +364,7 @@ WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIB
 CUDA_VISIBLE_DEVICES=3 ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench python methods/RL/main.py mode=inference task=countdown2345 algorithm=grpo model=qwen15 model.family=citrinegui model.trim=Qwen2.5-1.5B-Instruct_countdown2345_grpo_variance_regularized_0.5_0.5_True_1600 task.test_file=citrinegui/countdown_n6t100_1-100 algorithm.training.max_steps=1600 task.inference.batch_size=32 2>&1 | tee methods/RL/logs/vrex_inference_countdown6.log
 
 # Enhanced VREx training with anti-reward-hacking fixes - 🔧 READY TO TEST
-WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29759 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 algorithm.training.scheduler_params.beta=0.7 algorithm.training.scheduler_params.progression_bias=0.3 algorithm.training.scheduler_params.performance_threshold=0.6 algorithm.training.scheduler_params.min_prob_decay=0.8 2>&1 | tee methods/RL/logs/vrex_enhanced_training.log
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29759 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 algorithm.training.scheduler_params.beta=0.7 algorithm.training.scheduler_params.progression_bias=0.3 algorithm.training.scheduler_params.performance_threshold=0.6 2>&1 | tee methods/RL/logs/vrex_enhanced_training.log
 ```
 
 ### Task 3: Monitor Training Progress
