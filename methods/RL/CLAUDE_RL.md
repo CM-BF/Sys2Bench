@@ -38,7 +38,7 @@ git commit -m "message"
 git status
 ```
 
-For remote development workflow (editing locally, syncing files, using tmux), see: `/REMOTE_WORKFLOW.md`
+For remote development workflow (editing locally, syncing files, using tmux), see: `/REMOTE_DEVELOPMENT_GUIDE.md`
 
 ## 📋 What I've Accomplished
 
@@ -217,14 +217,13 @@ algorithm.training.scheduler_params:
 Use the GPU monitor to automatically reserve GPUs when they become available.
 
 ```bash
-# See /REMOTE_WORKFLOW.md for how to sync files and use tmux utilities
+# Direct execution (if on remote server)
+cd /data/shurui.gui/Projects/Sys2Bench
+conda activate sys2bench
+python methods/RL/monitoring/rl_environment_monitor_immediate.py
 
-# Quick start (using tmux utilities from tmux_utils/):
-cd ../../tmux_utils  # From methods/RL/
-./run_in_tmux.sh "cd /data/shurui.gui/Projects/Sys2Bench" claude
-./run_in_tmux.sh "conda activate sys2bench" claude  
-./run_in_tmux.sh "python methods/RL/monitoring/rl_environment_monitor_immediate.py" claude
-./check_tmux.sh claude  # Check status
+# Or using tmux for persistent monitoring
+# See /REMOTE_DEVELOPMENT_GUIDE.md for tmux utilities usage
 ```
 
 **What it does:**

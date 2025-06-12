@@ -4,32 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Table of Contents
 
-### Workflow Documentation
-1. [📚 Documentation Structure](#-documentation-structure)
-   - [Development Workflow](#development-workflow)
-   - [Research & Experiments](#research--experiments)  
-   - [Working on Remote Servers](#working-on-remote-servers)
-2. [🔄 Development Workflow](#-development-workflow)
-3. [🎯 Quick Task Reference](#-quick-task-reference)
-
-### Research Documentation  
-4. [Overview](#overview)
-5. [Key Commands](#key-commands)
+1. [Overview](#overview)
+2. [📚 Documentation Structure](#-documentation-structure)
+3. [Key Commands](#key-commands)
    - [Setup and Environment](#setup-and-environment)
    - [Running Experiments](#running-experiments)
    - [Batch Evaluation](#batch-evaluation)
    - [Reinforcement Learning](#reinforcement-learning-rl)
-6. [Architecture and Code Structure](#architecture-and-code-structure)
+4. [Architecture and Code Structure](#architecture-and-code-structure)
    - [Core Framework](#core-framework-reasoners)
    - [Method Implementations](#method-implementations-methods)
    - [Key Design Patterns](#key-design-patterns)
-7. [Common Development Patterns](#common-development-patterns)
+5. [Common Development Patterns](#common-development-patterns)
    - [Model Selection](#model-selection)
    - [Temperature and Sampling](#temperature-and-sampling)
    - [Data Paths](#data-paths)
    - [Logging and Output](#logging-and-output)
-8. [Adding New Tasks or Methods](#adding-new-tasks-or-methods)
-9. [Appendix: Method-Specific Details](#appendix-method-specific-details)
+6. [Adding New Tasks or Methods](#adding-new-tasks-or-methods)
+7. [🎯 Quick Task Reference](#-quick-task-reference)
+8. [Appendix: Method-Specific Details](#appendix-method-specific-details)
 
 ## Overview
 
@@ -42,33 +35,21 @@ Sys2Bench is a comprehensive benchmark for evaluating the reasoning and planning
 
 ## 📚 Documentation Structure
 
-### Development Workflow
-- **[/REMOTE_WORKFLOW.md](/REMOTE_WORKFLOW.md)** - Essential guide for remote development:
-  - Edit locally → Sync → Run → Check cycle
-  - TMUX utilities for persistent sessions
-  - Step-by-step debugging strategies
-  - Fish shell considerations
+### Core Documentation
+- **[README.md](/README.md)** - Project overview, setup instructions, and basic usage
+- **[CLAUDE.md](/CLAUDE.md)** - This file, comprehensive guide for working with the codebase
+- **[REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md)** - Consolidated guide for remote development workflows
 
-- **[/tmux_utils/](/tmux_utils/)** - Helper scripts for remote work:
-  - `check_tmux.sh` - View tmux session content
-  - `run_in_tmux.sh` - Execute commands in tmux
-  - See README.md in that folder for usage
+### Method-Specific Documentation
+- **[methods/RL/CLAUDE_RL.md](methods/RL/CLAUDE_RL.md)** - Detailed RL implementation guide
+- **[methods/AutoHD/README.md](methods/AutoHD/README.md)** - AutoHD method documentation
+- Each method directory contains specific documentation and examples
 
-### Research & Experiments
-- **[methods/RL/CLAUDE_RL.md](methods/RL/CLAUDE_RL.md)** - Reinforcement Learning guide:
-  - GPU monitoring and reservation
-  - Training configurations
-  - Variance regularized scheduler
-  - Common RL tasks
+### Remote Development Resources
+For remote server development, GPU experiments, and long-running tasks, see:
+- **[REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md)** - Complete remote workflow guide
 
-- **Method-specific docs** - Each method has its own documentation
-
-### Working on Remote Servers
-Most experiments require GPU access. Follow this workflow:
-1. **Develop locally** - Make all code changes on your machine
-2. **Use REMOTE_WORKFLOW.md** - Follow the sync and run procedures
-3. **Use tmux** - For long-running GPU experiments
-4. **Monitor remotely** - Check progress without interrupting
+**Note**: Since we're working directly on the remote machine, the remote development workflows in the guide above are for reference when you need to work from a local machine.
 
 ## Key Commands
 
@@ -200,32 +181,25 @@ See: `methods/RL/CLAUDE_RL.md`
 Each method directory contains its own specific documentation and examples.
 Refer to the respective method directories for detailed implementation guides.
 
-## 🔄 Development Workflow
-
-For remote server development (the typical workflow for GPU-intensive tasks):
-1. **Edit locally** - Make all code changes on your local machine
-2. **Sync to remote** - Use rsync to upload files (see `/REMOTE_WORKFLOW.md`)
-3. **Run on remote** - Use tmux utilities in `/tmux_utils/` for persistent sessions
-4. **Monitor progress** - Check outputs and logs via tmux
-
-This workflow is essential for RL training, large-scale experiments, and any GPU-dependent tasks.
-
 ## 🎯 Quick Task Reference
 
 ### For Running Experiments
 1. **Simple experiment** (no GPU): Run directly with shell scripts
-2. **GPU experiment**: Use REMOTE_WORKFLOW.md → sync files → run in tmux
-3. **RL training**: See methods/RL/CLAUDE_RL.md Task section
-4. **Monitor GPUs**: Use the RL monitoring system (see RL guide)
+2. **GPU experiment**: Check GPU availability → run with appropriate CUDA_VISIBLE_DEVICES
+3. **RL training**: See methods/RL/CLAUDE_RL.md for detailed instructions
+4. **Monitor GPUs**: Use `nvidia-smi` or the RL monitoring system
 
 ### For Development
-1. **Add new method**: Create directory structure as shown above
-2. **Debug remotely**: Use tmux_utils scripts
-3. **Track long runs**: Always use tmux for GPU tasks
+1. **Add new method**: Create directory structure following existing patterns
+2. **Add new task**: Add data, benchmark class, and prompts
+3. **Track experiments**: Use meaningful output directories and logging
+
+### For Remote Development
+See [REMOTE_DEVELOPMENT_GUIDE.md](/REMOTE_DEVELOPMENT_GUIDE.md) for complete workflow when working from a local machine.
 
 ## 📋 Important Notes
 
-- **Never edit files directly on remote** - Always edit locally and sync
-- **Use meaningful tmux session names** - Makes tracking easier
-- **Check GPU availability first** - Before starting large experiments
 - **Follow existing patterns** - Check similar methods for conventions
+- **Use meaningful names** - For output directories, logs, and sessions
+- **Check GPU availability** - Before starting large experiments
+- **Document your changes** - Update relevant documentation files
