@@ -6,13 +6,14 @@ This file provides comprehensive guidance for Claude Code when working with the 
 
 1. [🚀 Quick Start](#-quick-start)
 2. [📋 What I've Accomplished](#-what-ive-accomplished)
-3. [🔧 Common Development Pipeline](#-common-development-pipeline)
-4. [📊 Key Parameters for Variance Regularized Scheduler](#-key-parameters-for-variance-regularized-scheduler)
-5. [🎯 Next Steps](#-next-steps)
-6. [📋 Common Tasks](#-common-tasks)
-7. [🛠️ Troubleshooting](#️-troubleshooting)
-8. [📚 Important Files Reference](#-important-files-reference)
-9. [🔍 Key Insights](#-key-insights)
+3. [🧠 Deep Implementation Understanding](#-deep-implementation-understanding)
+4. [🔧 Common Development Pipeline](#-common-development-pipeline)
+5. [📊 Key Parameters for Variance Regularized Scheduler](#-key-parameters-for-variance-regularized-scheduler)
+6. [🎯 Next Steps](#-next-steps)
+7. [📋 Common Tasks](#-common-tasks)
+8. [🛠️ Troubleshooting](#️-troubleshooting)
+9. [📚 Important Files Reference](#-important-files-reference)
+10. [🔍 Key Insights](#-key-insights)
 
 ## 🚀 Quick Start
 
@@ -69,15 +70,33 @@ For remote development workflow (editing locally, syncing files, using tmux), se
 ### 4. **Directory Reorganization**
 ```
 methods/RL/
-├── conf/                    # Hydra configurations
-├── monitoring/              # GPU monitoring scripts
-├── schedulers/              # Curriculum schedulers
-├── scripts/                 # Utility and setup scripts
-├── utils/                   # Helper files and patches
-├── *_reward_model.py        # Task-specific reward models
-├── main.py                  # Main training entry point
-└── CLAUDE_RL.md            # This documentation
+├── conf/                            # Hydra configurations
+├── monitoring/                      # GPU monitoring scripts
+├── schedulers/                      # Curriculum schedulers
+├── scripts/                         # Utility and setup scripts
+├── utils/                           # Helper files and patches
+├── *_reward_model.py                # Task-specific reward models
+├── main.py                          # Main training entry point
+├── implementation_understanding.md  # Deep technical documentation
+└── CLAUDE_RL.md                    # This documentation
 ```
+
+## 🧠 Deep Implementation Understanding
+
+For a comprehensive technical understanding of the E2H curriculum learning implementation with variance regularized scheduler, see:
+
+**[📖 implementation_understanding.md](implementation_understanding.md)**
+
+This document covers:
+- Core architecture and data flow
+- TaskSampler mechanism in detail
+- All 5 curriculum schedulers (balanced, classic, cosine, gaussian, variance_regularized)
+- Variance regularized scheduler deep dive with theoretical foundations
+- Complete reward feedback loop analysis
+- Configuration system and integration points
+- Critical implementation details and gotchas
+
+**Priority**: Read this document carefully before making any modifications to the training pipeline.
 
 ## 🔧 Common Development Pipeline
 
