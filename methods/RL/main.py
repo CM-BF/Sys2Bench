@@ -67,6 +67,7 @@ class TaskSampler(torch.utils.data.Sampler):
         self.max_dataset_len = len(self.dataset)
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
+        self.data_schedule = data_schedule
         self.rng = np.random.default_rng(seed)
         task_col = np.array(self.dataset['task'])
         self.indices_by_task = {
@@ -186,19 +187,19 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            scheduler_params=self.scheduler_params,
                            batch_size=batch_size)
 
-    def training_step(self, model, inputs):
+    def training_step(self, model, inputs, num_items_in_batch=None):
         # Extract task IDs from the batch before processing
         if 'task' in inputs:
             self._current_batch_task_ids = inputs['task'].tolist() if torch.is_tensor(inputs['task']) else inputs['task']
         
         # Call parent training step
-        result = super().training_step(model, inputs)
+        result = super().training_step(model, inputs, num_items_in_batch)
         
         # Update variance regularized scheduler if using it
         if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
             task_ids = self._current_batch_task_ids
             rewards = self._last_batch_rewards
-            update_variance_regularized_performance(task_ids, rewards)
+            update_variance_regularized_performance(task_ids, rewards, trainer=self)
             # Clean up
             delattr(self, '_last_batch_rewards')
             delattr(self, '_current_batch_task_ids')

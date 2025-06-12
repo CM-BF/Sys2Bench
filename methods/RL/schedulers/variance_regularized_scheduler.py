@@ -128,13 +128,54 @@ def _variance_regularized_schedule(
 
 
 # Helper function to update performance (to be called from the trainer)
-def update_variance_regularized_performance(task_ids: List[int], performances: List[float]):
+def update_variance_regularized_performance(task_ids: List[int], performances: List[float], trainer=None):
     """Update performance metrics for the variance regularized scheduler."""
     if hasattr(_variance_regularized_schedule, 'state'):
         state = _variance_regularized_schedule.state
         for task_id, perf in zip(task_ids, performances):
             state['task_performances'][task_id].append(perf)
             state['task_counts'][task_id] += 1
+        
+        # Log VREx-specific metrics to WandB if trainer available
+        if trainer is not None and hasattr(trainer, 'log'):
+            try:
+                # Compute current metrics
+                task_means = {}
+                task_vars = {}
+                for i in range(len(state['task_performances'])):
+                    perfs = list(state['task_performances'][i])
+                    if len(perfs) > 0:
+                        task_means[f'vrex/task_{i}_mean_reward'] = np.mean(perfs)
+                        task_vars[f'vrex/task_{i}_reward_variance'] = np.var(perfs) if len(perfs) > 1 else 0.0
+                
+                # Cross-task variance (VREx penalty)
+                all_means = [np.mean(list(state['task_performances'][i])) for i in range(len(state['task_performances'])) if len(state['task_performances'][i]) > 0]
+                if len(all_means) > 1:
+                    cross_task_variance = np.var(all_means)
+                    trainer.log({'vrex/cross_task_variance': cross_task_variance})
+                
+                # Task sampling probabilities
+                current_probs = state.get('current_probs', {})
+                for i, prob in current_probs.items():
+                    trainer.log({f'vrex/task_{i}_sampling_prob': prob})
+                
+                # GroupDRO weights
+                group_weights = state.get('group_weights', np.array([]))
+                for i, weight in enumerate(group_weights):
+                    trainer.log({f'vrex/task_{i}_groupdro_weight': weight})
+                
+                # Task counts for exploration tracking
+                total_counts = sum(state['task_counts'].values())
+                for i, count in state['task_counts'].items():
+                    trainer.log({f'vrex/task_{i}_sample_frequency': count / max(total_counts, 1)})
+                
+                # Log all task metrics
+                trainer.log(task_means)
+                trainer.log(task_vars)
+                
+            except Exception as e:
+                # Silently continue if logging fails to avoid breaking training
+                pass
 
 
 # Reset function for new training runs

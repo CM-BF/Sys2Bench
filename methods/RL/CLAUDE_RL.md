@@ -2,6 +2,19 @@
 
 This file provides comprehensive guidance for Claude Code when working with the RL (Reinforcement Learning) components of Sys2Bench.
 
+## ⚠️ IMPORTANT INSTRUCTIONS
+
+**Document Priority**: 
+- CLAUDE.md has **HIGHER PRIORITY** than CLAUDE_RL.md when there are conflicts about commands to use
+- CLAUDE.md has been checked by the user, while CLAUDE_RL.md was written by Claude Code
+- Always refer to CLAUDE.md first for training commands and configurations
+
+**Working Approach**:
+- Read all configurations, files, and scripts carefully before making changes
+- Focus on testing and exploring the variance regularized (vrex) scheduler
+- The main entry point is `methods/RL/main.py` - never use other entry points
+- Main task focus is countdown tasks with curriculum learning
+
 ## Table of Contents
 
 1. [🚀 Quick Start](#-quick-start)
@@ -165,9 +178,12 @@ algorithm.training.scheduler_params:
 ## 🎯 Next Steps
 
 ### Immediate Tasks
-1. **Wait for GPU availability** - Monitor is running with PID saved in `gpu_monitor.pid`
-2. **Run training** when 2 GPUs with 20GB+ free memory are available
-3. **Evaluate results** - Compare variance regularized vs. other schedulers
+1. ✅ **GPU availability verified** - GPUs 0,1 available with sufficient memory
+2. ✅ **VREx scheduler bugs fixed** - Fixed missing data_schedule attribute and training_step signature
+3. ✅ **Training verified** - VREx scheduler successfully executing during training steps
+4. **Add VREx logging** - Integrate scheduler-specific metrics into WandB logging
+5. **Run full training** - Execute complete training sessions with different schedulers
+6. **Evaluate results** - Compare variance regularized vs. other schedulers
 
 ### Future Improvements
 1. **Performance Tracking Integration**
@@ -256,28 +272,24 @@ Once GPUs are reserved, kill the occupation processes and start training.
 
 ```bash
 # On remote server
-ssh shurui.gui@dive7.engr.tamu.edu
 cd /data/shurui.gui/Projects/Sys2Bench
 
-# Kill occupation processes
-cat rl_prep_pids.txt | xargs kill
+# Kill GPU occupation processes if any
+ps -ef | grep "sys_rl.py\|rl_environment_monitor" | grep -v grep | awk '{print $2}' | xargs kill
 
-# Activate environment
-source /data/shurui.gui/mambaforge/etc/profile.d/conda.sh
-conda activate sys2bench
+# Verify environment (already activated)
+# conda activate sys2bench
 
-# Run training (example with variance regularized scheduler)
-WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench \
-CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
-    --num_processes 1 \
-    --config_file methods/RL/deep_speed.yaml \
-    methods/RL/main.py \
-    mode=train \
-    task=countdown6 \
-    algorithm=grpo \
-    algorithm.training.curriculum_schedule=variance_regularized \
-    model=qwen15 \
-    algorithm.training.max_steps=1600
+# ✅ VERIFIED WORKING COMMANDS:
+
+# Test VREx scheduler (verified working - logs in methods/RL/logs/)
+timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29756 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=5" 2>&1 | tee methods/RL/logs/vrex_actual_training_test.log
+
+# Test other schedulers for comparison
+timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29757 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=balanced model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=5" 2>&1 | tee methods/RL/logs/balanced_test.log
+
+# Full training run (1600 steps)
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29758 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 2>&1 | tee methods/RL/logs/vrex_full_training.log
 ```
 
 ### Task 3: Monitor Training Progress
