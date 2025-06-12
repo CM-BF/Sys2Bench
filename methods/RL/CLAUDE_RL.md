@@ -80,10 +80,31 @@ For remote development workflow (editing locally, syncing files, using tmux), se
   - Secure credential storage with encryption
   - Test mode for single GPU verification
 
-### 4. **Directory Reorganization**
+### 4. **Comprehensive WandB Logging Integration**
+- **Enhanced**: `variance_regularized_scheduler.py`
+- **Features**:
+  - Task-specific mean rewards and variances
+  - Cross-task variance (VREx penalty) tracking
+  - Task sampling probabilities monitoring
+  - GroupDRO weights logging
+  - Task frequency analysis
+
+### 5. **Successful Training and Evaluation Results**
+- **Training**: 1600-step VREx curriculum training on countdown2345 task
+  - Final training reward: **54.16%** on training tasks (2-5 numbers)
+  - Comprehensive VREx-specific metrics logged to WandB
+  - Adaptive task sampling successfully implemented
+
+- **Generalization Evaluation**: countdown6 task (harder 6-number problems)
+  - Accuracy: **9.18%** (18.26% reward) on out-of-distribution test
+  - Model shows generalization capability despite difficulty increase
+  - Inference completed successfully with VREx-trained model
+
+### 6. **Directory Reorganization**
 ```
 methods/RL/
 ├── conf/                            # Hydra configurations
+├── logs/                            # Training and inference logs
 ├── monitoring/                      # GPU monitoring scripts
 ├── schedulers/                      # Curriculum schedulers
 ├── scripts/                         # Utility and setup scripts
@@ -181,9 +202,11 @@ algorithm.training.scheduler_params:
 1. ✅ **GPU availability verified** - GPUs 0,1 available with sufficient memory
 2. ✅ **VREx scheduler bugs fixed** - Fixed missing data_schedule attribute and training_step signature
 3. ✅ **Training verified** - VREx scheduler successfully executing during training steps
-4. **Add VREx logging** - Integrate scheduler-specific metrics into WandB logging
-5. **Run full training** - Execute complete training sessions with different schedulers
-6. **Evaluate results** - Compare variance regularized vs. other schedulers
+4. ✅ **Add VREx logging** - Integrated comprehensive WandB logging for VREx-specific metrics
+5. ✅ **Run full training** - Completed 1600-step VREx training on countdown2345 (Final reward: 54.16%)
+6. ✅ **Evaluate generalization** - Tested VREx model on countdown6 task (9.18% accuracy on harder problems)
+7. **Analyze results** - Compare variance regularized vs. other schedulers
+8. **Baseline comparison** - Run training with balanced/cosine schedulers for comparison
 
 ### Future Improvements
 1. **Performance Tracking Integration**
@@ -288,8 +311,11 @@ timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects
 # Test other schedulers for comparison
 timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29757 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=balanced model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=5" 2>&1 | tee methods/RL/logs/balanced_test.log
 
-# Full training run (1600 steps)
-WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29758 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 2>&1 | tee methods/RL/logs/vrex_full_training.log
+# Full training run (1600 steps) - ✅ COMPLETED
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29758 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 2>&1 | tee methods/RL/logs/vrex_full_training_no_timeout.log
+
+# Inference evaluation on countdown6 task - ✅ COMPLETED  
+CUDA_VISIBLE_DEVICES=3 ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench python methods/RL/main.py mode=inference task=countdown2345 algorithm=grpo model=qwen15 model.family=citrinegui model.trim=Qwen2.5-1.5B-Instruct_countdown2345_grpo_variance_regularized_0.5_0.5_True_1600 task.test_file=citrinegui/countdown_n6t100_1-100 algorithm.training.max_steps=1600 task.inference.batch_size=32 2>&1 | tee methods/RL/logs/vrex_inference_countdown6.log
 ```
 
 ### Task 3: Monitor Training Progress
