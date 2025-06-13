@@ -146,7 +146,44 @@ Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM
    - `algorithm.training.scheduler_params.performance_threshold=0.6` 
    - `algorithm.training.scheduler_params.beta=0.7` (increased reliance on adaptive sampling)
 
-### 8. **Directory Reorganization**
+### 8. **Comprehensive VREx Inference Results (400-step model)**
+
+| **Countdown Level** | **Accuracy (%)** | **Reward** | **Notes** |
+|---------------------|------------------|------------|-----------|
+| **Countdown 2** | **95.99%** | 0.9640 | Excellent performance on trained task |
+| **Countdown 3** | **50.29%** | 0.5526 | Good generalization to harder task |
+| **Countdown 4** | **16.02%** | 0.2441 | Reasonable OOD performance |
+| **Countdown 5** | **10.45%** | 0.1940 | Training data included, shows challenge |
+| **Countdown 6** | **4.30%** | 0.1387 | OOD performance, consistent with paper |
+
+**Key Analysis:**
+- **No reward hacking detected**: Completion lengths stable at ~63 characters (vs problematic 30 chars)
+- **Healthy generalization curve**: Clear difficulty progression with graceful degradation
+- **Competitive OOD performance**: 4.30% on countdown6 comparable to paper baselines
+- **Task mastery verification**: 95.99% on easiest task confirms model competence
+
+### 9. **VREx-Specific Logging Fix**
+
+**Issue Identified:** VREx scheduler metrics weren't appearing in WandB due to timing issue with log buffer flushing.
+
+**Solution Implemented:**
+```python
+# Fixed in variance_regularized_scheduler.py - lines 197-208
+# Log directly to WandB to ensure metrics appear
+if hasattr(trainer, 'accelerator') and trainer.accelerator.is_main_process:
+    import wandb
+    if wandb.run is not None:
+        step = trainer.state.global_step if hasattr(trainer.state, 'global_step') else None
+        wandb.log(vrex_metrics, step=step)
+```
+
+**Expected Metrics in WandB:**
+- `vrex/task_{i}_sampling_prob`: Real-time task probability distribution
+- `vrex/cross_task_variance`: VREx penalty tracking
+- `vrex/task_{i}_mean_reward`: Per-task performance monitoring
+- `vrex/task_{i}_mastery`: Task mastery status tracking
+
+### 10. **Directory Reorganization**
 ```
 methods/RL/
 ├── conf/                            # Hydra configurations
@@ -363,8 +400,19 @@ WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIB
 # Inference evaluation on countdown6 task - ✅ COMPLETED  
 CUDA_VISIBLE_DEVICES=3 ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench python methods/RL/main.py mode=inference task=countdown2345 algorithm=grpo model=qwen15 model.family=citrinegui model.trim=Qwen2.5-1.5B-Instruct_countdown2345_grpo_variance_regularized_0.5_0.5_True_1600 task.test_file=citrinegui/countdown_n6t100_1-100 algorithm.training.max_steps=1600 task.inference.batch_size=32 2>&1 | tee methods/RL/logs/vrex_inference_countdown6.log
 
-# Enhanced VREx training with anti-reward-hacking fixes - 🔧 READY TO TEST
-WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29759 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 algorithm.training.scheduler_params.beta=0.7 algorithm.training.scheduler_params.progression_bias=0.3 algorithm.training.scheduler_params.performance_threshold=0.6 2>&1 | tee methods/RL/logs/vrex_enhanced_training.log
+# Enhanced VREx training with anti-reward-hacking fixes - 🔧 RUNNING MULTIPLE CONFIGS
+
+# Config 1: Default Enhanced (beta=0.7, progression_bias=0.3, performance_threshold=0.6) - ✅ RUNNING  
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=1,2 accelerate launch --num_processes 1 --main_process_port=29761 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=400 algorithm.training.vllm_gpu_memory_utilization=0.6 +algorithm.training.scheduler_params.beta=0.7 +algorithm.training.scheduler_params.progression_bias=0.3 +algorithm.training.scheduler_params.performance_threshold=0.6 > methods/RL/logs/vrex_config1_test.log 2>&1 &
+
+# Config 2: Aggressive Progression (beta=0.8, progression_bias=0.5, performance_threshold=0.5) - ✅ RUNNING
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=4,7 accelerate launch --num_processes 1 --main_process_port=29762 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=400 algorithm.training.vllm_gpu_memory_utilization=0.6 +algorithm.training.scheduler_params.beta=0.8 +algorithm.training.scheduler_params.progression_bias=0.5 +algorithm.training.scheduler_params.performance_threshold=0.5 > methods/RL/logs/vrex_config2_aggressive.log 2>&1 &
+
+# Config 3: Conservative Progression (beta=0.6, progression_bias=0.2, performance_threshold=0.7) - ✅ RUNNING
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,3 accelerate launch --num_processes 1 --main_process_port=29763 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=400 algorithm.training.vllm_gpu_memory_utilization=0.6 +algorithm.training.scheduler_params.beta=0.6 +algorithm.training.scheduler_params.progression_bias=0.2 +algorithm.training.scheduler_params.performance_threshold=0.7 > methods/RL/logs/vrex_config3_conservative.log 2>&1 &
+
+# Config 4: High Variance Penalty (vrex_penalty_weight=2.0, beta=0.7) - ✅ RUNNING  
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=5,6 accelerate launch --num_processes 1 --main_process_port=29764 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=400 algorithm.training.vllm_gpu_memory_utilization=0.6 +algorithm.training.scheduler_params.beta=0.7 +algorithm.training.scheduler_params.vrex_penalty_weight=2.0 +algorithm.training.scheduler_params.progression_bias=0.3 +algorithm.training.scheduler_params.performance_threshold=0.6 > methods/RL/logs/vrex_config4_high_penalty.log 2>&1 &
 ```
 
 ### Task 3: Monitor Training Progress

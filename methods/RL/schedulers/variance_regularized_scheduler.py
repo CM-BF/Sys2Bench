@@ -157,49 +157,68 @@ def update_variance_regularized_performance(task_ids: List[int], performances: L
             state['task_counts'][task_id] += 1
         
         # Log VREx-specific metrics to WandB if trainer available
-        if trainer is not None and hasattr(trainer, 'log'):
+        if trainer is not None:
             try:
-                # Compute current metrics
-                task_means = {}
-                task_vars = {}
+                # Build all metrics in a single dict first
+                vrex_metrics = {}
+                
+                # Compute task-specific metrics
                 for i in range(len(state['task_performances'])):
                     perfs = list(state['task_performances'][i])
                     if len(perfs) > 0:
-                        task_means[f'vrex/task_{i}_mean_reward'] = np.mean(perfs)
-                        task_vars[f'vrex/task_{i}_reward_variance'] = np.var(perfs) if len(perfs) > 1 else 0.0
+                        vrex_metrics[f'vrex/task_{i}_mean_reward'] = np.mean(perfs)
+                        vrex_metrics[f'vrex/task_{i}_reward_variance'] = np.var(perfs) if len(perfs) > 1 else 0.0
                 
                 # Cross-task variance (VREx penalty)
                 all_means = [np.mean(list(state['task_performances'][i])) for i in range(len(state['task_performances'])) if len(state['task_performances'][i]) > 0]
                 if len(all_means) > 1:
                     cross_task_variance = np.var(all_means)
-                    trainer.log({'vrex/cross_task_variance': cross_task_variance})
+                    vrex_metrics['vrex/cross_task_variance'] = cross_task_variance
                 
                 # Task sampling probabilities
                 current_probs = state.get('current_probs', {})
                 for i, prob in current_probs.items():
-                    trainer.log({f'vrex/task_{i}_sampling_prob': prob})
+                    vrex_metrics[f'vrex/task_{i}_sampling_prob'] = prob
                 
                 # GroupDRO weights
                 group_weights = state.get('group_weights', np.array([]))
                 for i, weight in enumerate(group_weights):
-                    trainer.log({f'vrex/task_{i}_groupdro_weight': weight})
+                    vrex_metrics[f'vrex/task_{i}_groupdro_weight'] = weight
                 
                 # Task counts for exploration tracking
                 total_counts = sum(state['task_counts'].values())
                 for i, count in state['task_counts'].items():
-                    trainer.log({f'vrex/task_{i}_sample_frequency': count / max(total_counts, 1)})
+                    vrex_metrics[f'vrex/task_{i}_sample_frequency'] = count / max(total_counts, 1)
                 
                 # Task mastery status
                 for i, mastered in state['task_mastery'].items():
-                    trainer.log({f'vrex/task_{i}_mastery': float(mastered)})
+                    vrex_metrics[f'vrex/task_{i}_mastery'] = float(mastered)
                 
-                # Log all task metrics
-                trainer.log(task_means)
-                trainer.log(task_vars)
+                # Debug print to confirm metrics are created
+                print(f"[VREx DEBUG] Created {len(vrex_metrics)} metrics: {list(vrex_metrics.keys())[:5]}...")
+                
+                # Log directly to WandB to ensure metrics appear
+                if hasattr(trainer, 'accelerator') and trainer.accelerator.is_main_process:
+                    import wandb
+                    if wandb.run is not None:
+                        # Get current step from trainer
+                        step = trainer.state.global_step if hasattr(trainer.state, 'global_step') else None
+                        wandb.log(vrex_metrics, step=step)
+                        print(f"[VREx DEBUG] Successfully logged to WandB at step {step}")
+                    else:
+                        print("[VREx DEBUG] WandB run is None")
+                else:
+                    print("[VREx DEBUG] Not main process or no accelerator")
+                    # Fallback to trainer.log() but call log_stats immediately
+                    trainer.log(vrex_metrics)
+                    if hasattr(trainer, 'log_stats'):
+                        trainer.log_stats(vrex_metrics, step=trainer.state.global_step)
                 
             except Exception as e:
-                # Silently continue if logging fails to avoid breaking training
-                pass
+                # Log the error instead of silently continuing
+                print(f"[VREx ERROR] Failed to log metrics: {e}")
+                import traceback
+                traceback.print_exc()
 
 
 # Reset function for new training runs
