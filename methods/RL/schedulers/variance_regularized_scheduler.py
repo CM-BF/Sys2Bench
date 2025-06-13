@@ -200,7 +200,7 @@ def update_variance_regularized_performance(task_ids: List[int], performances: L
                     trainer._vrex_metrics_to_log.update(vrex_metrics)
                 else:
                     trainer._vrex_metrics_to_log = vrex_metrics.copy()
-                
+                trainer.log(vrex_metrics, step=trainer.global_step, prefix='vrex/')
                 print(f"[VREx DEBUG] Stored {len(vrex_metrics)} metrics for post-training logging")
                 
             except Exception as e:

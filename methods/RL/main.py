@@ -192,8 +192,8 @@ class CurriculumGRPOTrainer(GRPOTrainer):
 
     def training_step(self, model, inputs, num_items_in_batch=None):
         # Extract task IDs from the batch before processing
-        if 'task' in inputs:
-            self._current_batch_task_ids = inputs['task'].tolist() if torch.is_tensor(inputs['task']) else inputs['task']
+        if 'task' in inputs[0]:
+            self._current_batch_task_ids = [inp['task'] for inp in inputs]
         
         # Call parent training step
         result = super().training_step(model, inputs, num_items_in_batch)
@@ -205,9 +205,11 @@ class CurriculumGRPOTrainer(GRPOTrainer):
             update_variance_regularized_performance(task_ids, rewards, trainer=self)
             
             # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
+            print('EEEE-> Log vrex')
             if hasattr(self, '_vrex_metrics_to_log'):
                 try:
                     # Use the trainer's log method which stages metrics for next log_stats call
+                    print('I am in', self._vrex_metrics_to_log)
                     self.log(self._vrex_metrics_to_log)
                     print(f"[VREx DEBUG] Successfully logged {len(self._vrex_metrics_to_log)} metrics after training step")
                     # Clear the stored metrics

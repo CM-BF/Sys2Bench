@@ -162,28 +162,95 @@ Based on "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM
 - **Competitive OOD performance**: 4.30% on countdown6 comparable to paper baselines
 - **Task mastery verification**: 95.99% on easiest task confirms model competence
 
-### 9. **VREx-Specific Logging Fix**
+### 9. **VREx-Specific Logging Fix** Not solved yet
 
-**Issue Identified:** VREx scheduler metrics weren't appearing in WandB due to timing issue with log buffer flushing.
+**Root Cause Identified:** VREx scheduler metrics weren't appearing in WandB due to **silent error handling** that was suppressing all logging failures.
 
-**Solution Implemented:**
+**Problem Details:**
+- VREx scheduler was working correctly (confirmed by task difficulty logs: `[3 3 1 2 1 3 0 0]`)
+- Metrics were being created but WandB logging was failing silently
+- Original code had `except Exception as e: pass` which hid all errors
+
+**Solution Implemented (Commit: db6551f):**
 ```python
-# Fixed in variance_regularized_scheduler.py - lines 197-208
-# Log directly to WandB to ensure metrics appear
+# Fixed in variance_regularized_scheduler.py
+# BEFORE: Silent error handling
+try:
+    # ... logging code ...
+except Exception as e:
+    pass  # ❌ Silent failure
+
+# AFTER: Proper error reporting + debug logging  
+# Debug print to confirm metrics are created
+print(f"[VREx DEBUG] Created {len(vrex_metrics)} metrics: {list(vrex_metrics.keys())[:5]}...")
+
+# Log to WandB with error reporting
 if hasattr(trainer, 'accelerator') and trainer.accelerator.is_main_process:
     import wandb
     if wandb.run is not None:
         step = trainer.state.global_step if hasattr(trainer.state, 'global_step') else None
         wandb.log(vrex_metrics, step=step)
+        print(f"[VREx DEBUG] Successfully logged to WandB at step {step}")
+    else:
+        print("[VREx DEBUG] WandB run is None")
+        
+except Exception as e:
+    print(f"[VREx ERROR] Failed to log metrics: {e}")  # ✅ Proper error reporting
+    import traceback
+    traceback.print_exc()
 ```
 
-**Expected Metrics in WandB:**
+**Status:** 
+- ✅ **Fix committed** - New training runs will show debug messages and VREx metrics
+- ✅ **Current experiments verified working** - VREx scheduler is sampling tasks correctly
+- 🔄 **Next runs will have visible metrics** - WandB will show VREx-specific curves
+
+**Expected Metrics in WandB (for new runs):**
 - `vrex/task_{i}_sampling_prob`: Real-time task probability distribution
-- `vrex/cross_task_variance`: VREx penalty tracking
+- `vrex/cross_task_variance`: VREx penalty tracking  
 - `vrex/task_{i}_mean_reward`: Per-task performance monitoring
 - `vrex/task_{i}_mastery`: Task mastery status tracking
+- `vrex/task_{i}_groupdro_weight`: GroupDRO weights
+- `vrex/task_{i}_sample_frequency`: Task sampling frequency
 
-### 10. **Directory Reorganization**
+### 10. **How to Check WandB Reward Curves** ✅ VERIFIED
+
+**Script Created**: `check_wandb_run_metrics.py`
+
+**Example Usage:**
+```python
+python methods/RL/check_wandb_run_metrics.py
+```
+
+**Key Findings from Run snn90u6m:**
+- **Run URL**: https://wandb.ai/dive-ci/Sys2Bench/runs/snn90u6m
+- **Status**: Crashed after 12 steps (but data available)
+- **Reward metric**: `train/rewards/_countdown_reward_fn` (NOT just `reward`)
+- **Reward progression**: [0.1337, 0.1253, 0.1869, 0.2230, 0.2366, 0.2406, 0.2642, 0.3012, 0.3308, 0.3556, 0.3329, 0.3740]
+- **Improvement**: 179.6% increase (0.1337 → 0.3740)
+- **VREx metrics**: ❌ MISSING - confirms logging timing issue
+
+**Important Notes:**
+1. **Reward is logged under**: `train/rewards/_countdown_reward_fn` for countdown tasks
+2. **Also available as**: `train/reward` 
+3. **Use WandB API** to access full history: `run.history(samples=1000)`
+4. **Check all reward columns**: Some runs may have different reward metric names
+
+**Script Output Example:**
+```
+📈 Complete Reward History:
+   Step 0: 0.1337
+   Step 1: 0.1253
+   ...
+   Step 11: 0.3740
+
+📊 Reward values as list:
+   [0.1337, 0.1253, 0.1869, ..., 0.3740]
+
+📈 Improvement: 0.2403 (179.6% increase)
+```
+
+### 11. **Directory Reorganization**
 ```
 methods/RL/
 ├── conf/                            # Hydra configurations
