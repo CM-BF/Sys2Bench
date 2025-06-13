@@ -54,13 +54,14 @@ def log_on_main(text):
         log.info(text)
 
 class TaskSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, scheduler_params, seed=0):
+    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, scheduler_params, seed=0, trainer=None):
         """
         Args:
           dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
           num_tasks: total number of task categories (e.g. 4)
           total_iterations: total training iterations (T)
           current_iter_fn: callable that returns current iteration (t)
+          trainer: reference to the trainer for VREx logging
         """
         self.dataset = dataset
         self.batch_size = batch_size
@@ -68,6 +69,7 @@ class TaskSampler(torch.utils.data.Sampler):
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
         self.data_schedule = data_schedule
+        self.trainer = trainer
         self.rng = np.random.default_rng(seed)
         task_col = np.array(self.dataset['task'])
         self.indices_by_task = {
@@ -79,7 +81,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule,
-            'variance_regularized': partial(_variance_regularized_schedule, **scheduler_params)
+            'variance_regularized': partial(_variance_regularized_schedule, trainer=trainer, **scheduler_params)
         }
         log_on_main(f"Data Schedule: {data_schedule}")
         self.schedule_func = self.schedule_funcs[data_schedule]
@@ -185,7 +187,8 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            total_iterations=self.total_iterations,
                            data_schedule=self.data_schedule,
                            scheduler_params=self.scheduler_params,
-                           batch_size=batch_size)
+                           batch_size=batch_size,
+                           trainer=self)
 
     def training_step(self, model, inputs, num_items_in_batch=None):
         # Extract task IDs from the batch before processing
