@@ -200,6 +200,18 @@ class CurriculumGRPOTrainer(GRPOTrainer):
             task_ids = self._current_batch_task_ids
             rewards = self._last_batch_rewards
             update_variance_regularized_performance(task_ids, rewards, trainer=self)
+            
+            # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
+            if hasattr(self, '_vrex_metrics_to_log'):
+                try:
+                    # Use the trainer's log method which stages metrics for next log_stats call
+                    self.log(self._vrex_metrics_to_log)
+                    print(f"[VREx DEBUG] Successfully logged {len(self._vrex_metrics_to_log)} metrics after training step")
+                    # Clear the stored metrics
+                    delattr(self, '_vrex_metrics_to_log')
+                except Exception as e:
+                    print(f"[VREx ERROR] Failed to log stored metrics: {e}")
+            
             # Clean up
             delattr(self, '_last_batch_rewards')
             delattr(self, '_current_batch_task_ids')

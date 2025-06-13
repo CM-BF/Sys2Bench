@@ -194,29 +194,18 @@ def update_variance_regularized_performance(task_ids: List[int], performances: L
                 for i, mastered in state['task_mastery'].items():
                     vrex_metrics[f'vrex/task_{i}_mastery'] = float(mastered)
                 
-                # Debug print to confirm metrics are created
-                print(f"[VREx DEBUG] Created {len(vrex_metrics)} metrics: {list(vrex_metrics.keys())[:5]}...")
-                
-                # Log directly to WandB to ensure metrics appear
-                if hasattr(trainer, 'accelerator') and trainer.accelerator.is_main_process:
-                    import wandb
-                    if wandb.run is not None:
-                        # Get current step from trainer
-                        step = trainer.state.global_step if hasattr(trainer.state, 'global_step') else None
-                        wandb.log(vrex_metrics, step=step)
-                        print(f"[VREx DEBUG] Successfully logged to WandB at step {step}")
-                    else:
-                        print("[VREx DEBUG] WandB run is None")
+                # Store metrics in trainer state for logging after training step
+                # Don't log here - this happens BEFORE training step and gets cleared!
+                if hasattr(trainer, '_vrex_metrics_to_log'):
+                    trainer._vrex_metrics_to_log.update(vrex_metrics)
                 else:
-                    print("[VREx DEBUG] Not main process or no accelerator")
-                    # Fallback to trainer.log() but call log_stats immediately
-                    trainer.log(vrex_metrics)
-                    if hasattr(trainer, 'log_stats'):
-                        trainer.log_stats(vrex_metrics, step=trainer.state.global_step)
+                    trainer._vrex_metrics_to_log = vrex_metrics.copy()
+                
+                print(f"[VREx DEBUG] Stored {len(vrex_metrics)} metrics for post-training logging")
                 
             except Exception as e:
                 # Log the error instead of silently continuing
-                print(f"[VREx ERROR] Failed to log metrics: {e}")
+                print(f"[VREx ERROR] Failed to create metrics: {e}")
                 import traceback
                 traceback.print_exc()
 
