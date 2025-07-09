@@ -25,4 +25,8 @@ training:
   scheduler_params:
     mu_exp: 0.5
     sigma: 0.5
+    vrex_adds:
+      default: 1.0
+      gaussian: 0.0
+    beta: 1.0
     min_prob: true    # true: use default p_min. (float): use min_prob value. false: use 0.0

@@ -16,14 +16,13 @@ def _variance_regularized_schedule(
     t: int, 
     T: int, 
     num_tasks: int,
+    mu_exp, sigma, vrex_adds: dict=None,
     window_size: int = 100,
     min_prob: float = 0.1,
     temperature: float = 1.0,
     beta: float = 0.5,  # Keep default, change via CLI
     warmup_steps: int = 100,
-    vrex_penalty_weight: float = 1.0,
     groupdro_alpha: float = 0.01,
-    progression_bias: float = 0.3,  # New: bias toward harder tasks over time
     performance_threshold: float = 0.6,  # New: threshold for reducing easy task sampling
     **kwargs
 ) -> Dict[int, float]:
@@ -73,6 +72,8 @@ def _variance_regularized_schedule(
         mean, _ = stats[task_id]
         if mean > performance_threshold and not state['task_mastery'][task_id]:
             state['task_mastery'][task_id] = True
+
+    scores = dict()
     
     # Update GroupDRO weights
     means = np.array([stats[i][0] for i in range(num_tasks)])
@@ -80,51 +81,20 @@ def _variance_regularized_schedule(
     losses = 1.0 - means  # Convert to loss (1 - performance)
     state['group_weights'] *= np.exp(groupdro_alpha * losses)
     state['group_weights'] /= state['group_weights'].sum()
-    
-    # Compute sampling scores
-    scores = np.zeros(num_tasks)
-    total_counts = sum(state['task_counts'].values()) + 1e-8
-    
-    for task_id in range(num_tasks):
-        mean, var = stats[task_id]
-        count = state['task_counts'][task_id]
-        
-        # Performance deficit (lower performance = higher score)
-        perf_deficit = 1.0 / (mean + 1e-8)
-        
-        # Variance score (higher variance = higher score)
-        var_score = math.sqrt(var + 1e-8)
-        
-        # Exploration bonus (less sampled = higher score)
-        exploration_bonus = 1.0 / (count / total_counts + 1e-8)
-        
-        # GroupDRO weight
-        groupdro_weight = state['group_weights'][task_id]
-        
-        # VREx penalty: penalize variance across task performances
-        all_means = [stats[i][0] for i in range(num_tasks)]
-        cross_task_variance = np.var(all_means) if len(all_means) > 1 else 0.0
-        vrex_score = vrex_penalty_weight * cross_task_variance
-        
-        # Progression bias: encourage harder tasks over time
-        time_progress = t / T  # 0 to 1
-        progression_score = progression_bias * (task_id / (num_tasks - 1)) * time_progress
-        
-        # Mastery penalty: reduce sampling of mastered easy tasks
-        mastery_penalty = 0.0
-        if state['task_mastery'][task_id] and task_id < num_tasks // 2:  # Only for easier tasks
-            mastery_penalty = -0.5 * time_progress  # Increasing penalty over time
-        
-        # Combine scores
-        scores[task_id] = (
-            0.25 * perf_deficit +
-            0.15 * var_score +
-            0.1 * exploration_bonus +
-            0.25 * groupdro_weight +
-            0.1 * vrex_score +
-            0.1 * progression_score +
-            0.05 * mastery_penalty  # Small but increasing effect
-        )
+
+    scores['group_weights'] = (1.0, state['group_weights'])  # Add GroupDRO weights to scores
+
+
+    # Gaussian scheduler adds
+    if 'gaussian' in vrex_adds:
+        mu = (t / T) ** mu_exp * (num_tasks - 1)
+        gaussian_base = [math.exp(-((i - mu) ** 2) / (2 * sigma ** 2)) for i in range(num_tasks)]
+        gaussian_total = sum(gaussian_base)
+        gaussian_prob = np.array([b / gaussian_total for b in gaussian_base], dtype=float)
+        scores['gaussian'] = (vrex_adds['gaussian'], gaussian_prob)
+
+
+    scores = sum([weight * value for weight, value in scores.values()])
     
     # Apply temperature and softmax
     scores = scores / temperature
@@ -158,8 +128,6 @@ def _variance_regularized_schedule(
     if t % 100 == 0:
         print(f"[VREx DEBUG] Step {t}: Final probabilities: {q}")
 
-
-    
     # Store current probabilities
     state['current_probs'] = {i: p_min + (1 - num_tasks * p_min) * q_i for i, q_i in enumerate(q)}
     
