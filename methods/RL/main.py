@@ -103,8 +103,8 @@ class TaskSampler(torch.utils.data.Sampler):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
             
             # Debug print for variance regularized scheduler
-            if self.data_schedule == 'variance_regularized' and i % 100 == 0:
-                print(f"[VREx Sampler DEBUG] Iteration {i}: Schedule func returned: {probs_dict}")
+            # if self.data_schedule == 'variance_regularized' and i % 100 == 0:
+            log_on_main(f"[VREx Sampler DEBUG] Iteration {i}: Schedule func returned: {probs_dict}")
 
             probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
             # Sample a task for each slot in the batch using the probabilities.
@@ -211,13 +211,11 @@ class CurriculumGRPOTrainer(GRPOTrainer):
             update_variance_regularized_performance_v2(task_ids, rewards, trainer=self)
             
             # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
-            print('EEEE-> Log vrex')
             if hasattr(self, '_vrex_metrics_to_log'):
                 try:
                     # Use the trainer's log method which stages metrics for next log_stats call
-                    print('I am in', self._vrex_metrics_to_log)
                     self.log(self._vrex_metrics_to_log)
-                    print(f"[VREx DEBUG] Successfully logged {len(self._vrex_metrics_to_log)} metrics after training step")
+                    # print(f"[VREx DEBUG] Successfully logged {len(self._vrex_metrics_to_log)} metrics after training step")
                     # Clear the stored metrics
                     delattr(self, '_vrex_metrics_to_log')
                 except Exception as e:

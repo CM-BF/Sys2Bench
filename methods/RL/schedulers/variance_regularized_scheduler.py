@@ -35,6 +35,7 @@ def _variance_regularized_schedule(
     """
     # Initialize state if not exists (using function attributes for persistence)
     if not hasattr(_variance_regularized_schedule, 'state'):
+        # print("[CRITICAL] not having state, initializing...")
         _variance_regularized_schedule.state = {
             'task_performances': {i: deque(maxlen=window_size) for i in range(num_tasks)},
             'task_counts': defaultdict(int),
@@ -46,13 +47,13 @@ def _variance_regularized_schedule(
     
     state = _variance_regularized_schedule.state
     
-    # During warmup, use uniform sampling
-    if t < warmup_steps:
-        return {i: 1.0 / num_tasks for i in range(num_tasks)}
-    
-    # Only update at intervals (every 10 steps)
-    if t - state['last_update'] < 10:
-        return state['current_probs']
+    # # During warmup, use uniform sampling
+    # if t < warmup_steps:
+    #     return {i: 1.0 / num_tasks for i in range(num_tasks)}
+    #
+    # # Only update at intervals (every 10 steps)
+    # if t - state['last_update'] < 10:
+    #     return state['current_probs']
     
     state['last_update'] = t
     
@@ -131,29 +132,36 @@ def _variance_regularized_schedule(
     weights = weights / weights.sum()
     
     # Debug print
-    if t % 100 == 0:
-        print(f"[VREx DEBUG] Step {t}: Raw scores: {scores}")
-        print(f"[VREx DEBUG] Step {t}: Softmax weights: {weights}")
-        print(f"[VREx DEBUG] Step {t}: Task means: {[stats[i][0] for i in range(num_tasks)]}")
-        print(f"[VREx DEBUG] Step {t}: Beta: {beta}, Min prob: {min_prob}")
+    # if t % 100 == 0:
+    print(f"[VREx DEBUG] Step {t}: Raw scores: {scores}")
+    print(f"[VREx DEBUG] Step {t}: Softmax weights: {weights}")
+    print(f"[VREx DEBUG] Step {t}: Task means: {[stats[i][0] for i in range(num_tasks)]}")
+
     
     # Blend with uniform distribution
     uniform_weights = np.ones(num_tasks) / num_tasks
     blended_weights = (1 - beta) * uniform_weights + beta * weights
+    print(f"[VREx DEBUG] Step {t}: blended weights: {blended_weights}")
     
     # Ensure minimum probability (consistent with Gaussian scheduler)
-    for i in range(num_tasks):
-        blended_weights[i] = max(blended_weights[i], min_prob)
+    p_min = (2 / (num_tasks * (num_tasks + 1))) if (min_prob is True) else (
+        min_prob if isinstance(min_prob, float) else None)
+
+    print(f"[VREx DEBUG] Step {t}: Beta: {beta}, Min prob: {min_prob}, p_min: {p_min}")
+    # for i in range(num_tasks):
+    #     blended_weights[i] = max(blended_weights[i], p_min)
     
     # Renormalize
-    blended_weights = blended_weights / blended_weights.sum()
+    q = blended_weights / blended_weights.sum()
     
     # Debug print final probabilities
     if t % 100 == 0:
-        print(f"[VREx DEBUG] Step {t}: Final probabilities: {blended_weights}")
+        print(f"[VREx DEBUG] Step {t}: Final probabilities: {q}")
+
+
     
     # Store current probabilities
-    state['current_probs'] = {i: float(blended_weights[i]) for i in range(num_tasks)}
+    state['current_probs'] = {i: p_min + (1 - num_tasks * p_min) * q_i for i, q_i in enumerate(q)}
     
     return state['current_probs']
 
@@ -168,57 +176,49 @@ def update_variance_regularized_performance_v2(task_ids: List[int], performances
             state['task_counts'][task_id] += 1
         
         # Log VREx-specific metrics to WandB if trainer available
-        if trainer is not None:
-            try:
-                # Build all metrics in a single dict first
-                vrex_metrics = {}
-                
-                # Compute task-specific metrics
-                for i in range(len(state['task_performances'])):
-                    perfs = list(state['task_performances'][i])
-                    if len(perfs) > 0:
-                        vrex_metrics[f'vrex/task_{i}_mean_reward'] = np.mean(perfs)
-                        vrex_metrics[f'vrex/task_{i}_reward_variance'] = np.var(perfs) if len(perfs) > 1 else 0.0
-                
-                # Cross-task variance (VREx penalty)
-                all_means = [np.mean(list(state['task_performances'][i])) for i in range(len(state['task_performances'])) if len(state['task_performances'][i]) > 0]
-                if len(all_means) > 1:
-                    cross_task_variance = np.var(all_means)
-                    vrex_metrics['vrex/cross_task_variance'] = cross_task_variance
-                
-                # Task sampling probabilities
-                current_probs = state.get('current_probs', {})
-                for i, prob in current_probs.items():
-                    vrex_metrics[f'vrex/task_{i}_sampling_prob'] = prob
-                
-                # GroupDRO weights
-                group_weights = state.get('group_weights', np.array([]))
-                for i, weight in enumerate(group_weights):
-                    vrex_metrics[f'vrex/task_{i}_groupdro_weight'] = weight
-                
-                # Task counts for exploration tracking
-                total_counts = sum(state['task_counts'].values())
-                for i, count in state['task_counts'].items():
-                    vrex_metrics[f'vrex/task_{i}_sample_frequency'] = count / max(total_counts, 1)
-                
-                # Task mastery status
-                for i, mastered in state['task_mastery'].items():
-                    vrex_metrics[f'vrex/task_{i}_mastery'] = float(mastered)
-                
-                # Store metrics in trainer state for logging after training step
-                # Don't log here - this happens BEFORE training step and gets cleared!
-                if hasattr(trainer, '_vrex_metrics_to_log'):
-                    trainer._vrex_metrics_to_log.update(vrex_metrics)
-                else:
-                    trainer._vrex_metrics_to_log = vrex_metrics.copy()
-                trainer.log(vrex_metrics, step=trainer.global_step, prefix='vrex/')
-                print(f"[VREx DEBUG] Stored {len(vrex_metrics)} metrics for post-training logging")
-                
-            except Exception as e:
-                # Log the error instead of silently continuing
-                print(f"[VREx ERROR] Failed to create metrics: {e}")
-                import traceback
-                traceback.print_exc()
+        # Build all metrics in a single dict first
+        vrex_metrics = {}
+
+        # Compute task-specific metrics
+        for i in range(len(state['task_performances'])):
+            perfs = list(state['task_performances'][i])
+            if len(perfs) > 0:
+                vrex_metrics[f'vrex/task_{i}_mean_reward'] = np.mean(perfs)
+                vrex_metrics[f'vrex/task_{i}_reward_variance'] = np.var(perfs) if len(perfs) > 1 else 0.0
+
+        # Cross-task variance (VREx penalty)
+        all_means = [np.mean(list(state['task_performances'][i])) for i in range(len(state['task_performances'])) if len(state['task_performances'][i]) > 0]
+        if len(all_means) > 1:
+            cross_task_variance = np.var(all_means)
+            vrex_metrics['vrex/cross_task_variance'] = cross_task_variance
+
+        # Task sampling probabilities
+        current_probs = state.get('current_probs', {})
+        for i, prob in current_probs.items():
+            vrex_metrics[f'vrex/task_{i}_sampling_prob'] = prob
+
+        # GroupDRO weights
+        group_weights = state.get('group_weights', np.array([]))
+        for i, weight in enumerate(group_weights):
+            vrex_metrics[f'vrex/task_{i}_groupdro_weight'] = weight
+
+        # Task counts for exploration tracking
+        total_counts = sum(state['task_counts'].values())
+        for i, count in state['task_counts'].items():
+            vrex_metrics[f'vrex/task_{i}_sample_frequency'] = count / max(total_counts, 1)
+
+        # Task mastery status
+        for i, mastered in state['task_mastery'].items():
+            vrex_metrics[f'vrex/task_{i}_mastery'] = float(mastered)
+
+        # Store metrics in trainer state for logging after training step
+        # Don't log here - this happens BEFORE training step and gets cleared!
+        if hasattr(trainer, '_vrex_metrics_to_log'):
+            trainer._vrex_metrics_to_log.update(vrex_metrics)
+        else:
+            trainer._vrex_metrics_to_log = vrex_metrics.copy()
+        # trainer.log(vrex_metrics, step=trainer.global_step, prefix='vrex/')
+        print(f"[VREx DEBUG] Stored {len(vrex_metrics)} metrics for post-training logging")
 
 
 # Reset function for new training runs

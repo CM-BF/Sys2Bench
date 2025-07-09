@@ -5,9 +5,11 @@ from accelerate.commands.launch import launch_command, main
 
 if __name__ == "__main__":
     # ---- 1a. Environment variables exactly as in your shell one-liner
-    # os.environ["WANDB_PROJECT"] = "Sys2Bench"
-    # os.environ["ROOT_PATH"]     = "/data/shurui.gui/Projects/gateway/Sys2Bench"
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "3,4"
+    # print('start path', sys.path)
+    os.environ["WANDB_PROJECT"] = "Sys2Bench"
+    os.environ["ROOT_PATH"]     = "/data/shurui.gui/Projects/gateway/Sys2Bench"
+    sys.argv = sys.argv[1:]
+    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[0].replace('cuda_visible_devices=', '')
     #
     # # ---- 1b. Recreate the CLI arguments list
     # sys.argv = [

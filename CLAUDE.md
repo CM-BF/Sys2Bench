@@ -17,6 +17,11 @@ This file provides guidance for working with the Easy 2 Hard (E2H) Reasoner impl
 
 This repository contains the implementation of the paper "Curriculum Reinforcement Learning from Easy to Hard Tasks Improves LLM Reasoning" (https://arxiv.org/html/2506.06632v1). The E2H Reasoner uses curriculum reinforcement learning to improve language models' reasoning capabilities by training them on tasks with progressively increasing difficulty.
 
+## Must read
+
+- When you read this, read my paper carefully: https://arxiv.org/html/2506.06632v1
+- Read methods/RL/CLAUDE.md
+
 ## Paper Implementation
 
 The entire implementation is contained in `/methods/RL/main.py`, which serves as the only valid entry point. This implementation includes:
@@ -35,10 +40,17 @@ conda activate sys2bench
 ```
 
 ### Training with E2H
+
+Using the new `run_train.py` wrapper script (recommended):
+```bash
+python run_train.py cuda_visible_devices=0,1 --num_processes 1 --main_process_port 29750 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=cosine model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.scheduler_params.mu_exp=0.5 algorithm.training.scheduler_params.sigma=0.5 algorithm.training.max_steps=1600
+```
+
+Or using the original command:
 ```bash
 WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29750 --config_file methods/RL/deep_speed.yaml  methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=cosine model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.scheduler_params.mu_exp=0.5 algorithm.training.scheduler_params.sigma=0.5 algorithm.training.max_steps=1600
 ```
-- CUDA_VISIBLE_DEVICES: Specify GPUs to use (e.g., 0,1 for two GPUs). The last gpu is always reserved for VLLM. So you can see that `--num_processes 1`, when num_processes is set to 1, it will use the first GPU for model training and the last GPU for VLLM.
+- cuda_visible_devices (or CUDA_VISIBLE_DEVICES): Specify GPUs to use (e.g., 0,1 for two GPUs). The last gpu is always reserved for VLLM. So you can see that `--num_processes 1`, when num_processes is set to 1, it will use the first GPU for model training and the last GPU for VLLM.
 - countdown2345: path methods/RL/tasks/countdown2345, which contains the data files for countdown tasks with different difficulty levels (2 numbers, 3 numbers, 4 numbers, and 5 numbers). Schedulers will sample these 4-level tasks.
 - algorithm: we only use grpo.
 - curriculum_schedule: the curriculum scheduler to use. Options are `balanced`, `classic`, `cosine`, `gaussian`, and `variance_regularized` (vrex is being exploring). The default is `balanced`.
@@ -125,6 +137,17 @@ The system uses Hydra for configuration management. Check methods/RL/conf/ thoro
 2. **Reward Functions**: Each task has a custom reward function that validates format and correctness
 3. **Batch Sampling**: Tasks are sampled per-batch based on scheduler probabilities
 4. **Data Exhaustion**: When a difficulty level's data is exhausted, it's reshuffled
+
+## 🚨 CRITICAL DEVELOPMENT PRINCIPLE
+
+**NEVER ASSUME DATA STRUCTURES - ALWAYS PRINT AND VERIFY**
+- Print type and content of EVERY new variable: `print(f"var type: {type(var)}, content: {var}")`
+- Test EACH line of new code immediately - treat every line as a potential failure point
+- Silent failures cascade into debugging nightmares - add assertions and explicit checks
+
+## 💡 Debugging Tips
+
+- **Speed up data preparation**: Add `task.train_size=1000` to reduce dataset mapping time from 3 minutes to seconds
 
 ## 📋 Important Notes
 

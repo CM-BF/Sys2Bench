@@ -1,12 +1,12 @@
-# CLAUDE_RL.md
+# methods/RL/CLAUDE.md
 
 This file provides comprehensive guidance for Claude Code when working with the RL (Reinforcement Learning) components of Sys2Bench.
 
 ## ⚠️ IMPORTANT INSTRUCTIONS
 
 **Document Priority**: 
-- CLAUDE.md has **HIGHER PRIORITY** than CLAUDE_RL.md when there are conflicts about commands to use
-- CLAUDE.md has been checked by the user, while CLAUDE_RL.md was written by Claude Code
+- CLAUDE.md has **HIGHER PRIORITY** than methods/RL/CLAUDE.md when there are conflicts about commands to use
+- CLAUDE.md has been checked by the user, while methods/RL/CLAUDE.md was written by Claude Code
 - Always refer to CLAUDE.md first for training commands and configurations
 
 **Working Approach**:
@@ -262,7 +262,7 @@ methods/RL/
 ├── *_reward_model.py                # Task-specific reward models
 ├── main.py                          # Main training entry point
 ├── implementation_understanding.md  # Deep technical documentation
-└── CLAUDE_RL.md                    # This documentation
+└── CLAUDE.md                    # This documentation
 ```
 
 ## 🧠 Deep Implementation Understanding
@@ -379,7 +379,7 @@ algorithm.training.scheduler_params:
 ### Common Issues
 
 1. **VPN Connection Required**
-   - Error: `Could not resolve hostname dive7.engr.tamu.edu`
+   - Error: `Could not resolve hostname csce-dive7.engr.tamu.edu`
    - Solution: Connect to university VPN first
 
 2. **GPU Memory Requirements**
@@ -462,7 +462,7 @@ timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects
 timeout 600 bash -c "WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29757 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=balanced model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=5" 2>&1 | tee methods/RL/logs/balanced_test.log
 
 # Full training run (1600 steps) - ✅ COMPLETED
-WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29758 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 2>&1 | tee methods/RL/logs/vrex_full_training_no_timeout.log
+WANDB_PROJECT=Sys2Bench ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench CUDA_VISIBLE_DEVICES=0,1 accelerate launch --num_processes 1 --main_process_port=29758 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train task=countdown2345 algorithm=grpo algorithm.training.curriculum_schedule=variance_regularized model=qwen15 algorithm.training.per_device_train_batch_size=2 algorithm.training.max_steps=1600 2>&1 | tee methods/RL/logs/vrex_full_training_no_timeout.log
 
 # Inference evaluation on countdown6 task - ✅ COMPLETED  
 CUDA_VISIBLE_DEVICES=3 ROOT_PATH=/data/shurui.gui/Projects/gateway/Sys2Bench python methods/RL/main.py mode=inference task=countdown2345 algorithm=grpo model=qwen15 model.family=citrinegui model.trim=Qwen2.5-1.5B-Instruct_countdown2345_grpo_variance_regularized_0.5_0.5_True_1600 task.test_file=citrinegui/countdown_n6t100_1-100 algorithm.training.max_steps=1600 task.inference.batch_size=32 2>&1 | tee methods/RL/logs/vrex_inference_countdown6.log
