@@ -4,7 +4,8 @@ from typing import Union, TypedDict, List
 
 import pandas as pd
 
-sys.path.append(os.environ['ROOT_PATH'])
+sys.path.insert(0, os.environ['ROOT_PATH'])
+print(sys.path)
 import re
 import time
 import json
@@ -41,7 +42,7 @@ from vllm import LLM, SamplingParams
 # For Coding Tasks
 from coding_reward_model import CodingRewardModel
 # For Variance Regularized Scheduler
-from methods.RL.schedulers.variance_regularized_scheduler import _variance_regularized_schedule, update_variance_regularized_performance, reset_variance_regularized_state
+from methods.RL.schedulers.variance_regularized_scheduler import _variance_regularized_schedule, update_variance_regularized_performance_v2, reset_variance_regularized_state
 
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
@@ -96,12 +97,14 @@ class TaskSampler(torch.utils.data.Sampler):
         task_ptrs = {t: 0 for t in range(self.num_tasks)}
         indices_by_task = {t: idx.copy() for t, idx in self.indices_by_task.items()}
         
-        # Reset variance regularized state if using that scheduler
-        if self.data_schedule == 'variance_regularized':
-            reset_variance_regularized_state()
+        # Don't reset variance regularized state here - it's done once in trainer init
         
         for i in range(self.total_iterations):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
+            
+            # Debug print for variance regularized scheduler
+            if self.data_schedule == 'variance_regularized' and i % 100 == 0:
+                print(f"[VREx Sampler DEBUG] Iteration {i}: Schedule func returned: {probs_dict}")
 
             probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
             # Sample a task for each slot in the batch using the probabilities.
@@ -178,6 +181,9 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         self.total_iterations = total_iterations
         self.data_schedule = data_schedule
         self.scheduler_params=scheduler_params
+        # Reset variance regularized state once at initialization
+        if self.data_schedule == 'variance_regularized':
+            reset_variance_regularized_state()
         super().__init__(*args, **kwargs)
 
     def _get_train_sampler(self):
@@ -202,7 +208,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
             task_ids = self._current_batch_task_ids
             rewards = self._last_batch_rewards
-            update_variance_regularized_performance(task_ids, rewards, trainer=self)
+            update_variance_regularized_performance_v2(task_ids, rewards, trainer=self)
             
             # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
             print('EEEE-> Log vrex')

@@ -130,6 +130,13 @@ def _variance_regularized_schedule(
     weights = np.exp(scores - np.max(scores))
     weights = weights / weights.sum()
     
+    # Debug print
+    if t % 100 == 0:
+        print(f"[VREx DEBUG] Step {t}: Raw scores: {scores}")
+        print(f"[VREx DEBUG] Step {t}: Softmax weights: {weights}")
+        print(f"[VREx DEBUG] Step {t}: Task means: {[stats[i][0] for i in range(num_tasks)]}")
+        print(f"[VREx DEBUG] Step {t}: Beta: {beta}, Min prob: {min_prob}")
+    
     # Blend with uniform distribution
     uniform_weights = np.ones(num_tasks) / num_tasks
     blended_weights = (1 - beta) * uniform_weights + beta * weights
@@ -141,6 +148,10 @@ def _variance_regularized_schedule(
     # Renormalize
     blended_weights = blended_weights / blended_weights.sum()
     
+    # Debug print final probabilities
+    if t % 100 == 0:
+        print(f"[VREx DEBUG] Step {t}: Final probabilities: {blended_weights}")
+    
     # Store current probabilities
     state['current_probs'] = {i: float(blended_weights[i]) for i in range(num_tasks)}
     
@@ -148,7 +159,7 @@ def _variance_regularized_schedule(
 
 
 # Helper function to update performance (to be called from the trainer)
-def update_variance_regularized_performance(task_ids: List[int], performances: List[float], trainer=None):
+def update_variance_regularized_performance_v2(task_ids: List[int], performances: List[float], trainer=None):
     """Update performance metrics for the variance regularized scheduler."""
     if hasattr(_variance_regularized_schedule, 'state'):
         state = _variance_regularized_schedule.state
