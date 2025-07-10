@@ -4,6 +4,9 @@ from typing import Union, TypedDict, List
 
 import pandas as pd
 
+# Fix VLLM compatibility issue - force V0 engine before importing VLLM
+os.environ["VLLM_USE_V1"] = "0"
+
 sys.path.insert(0, os.environ['ROOT_PATH'])
 print(sys.path)
 import re
@@ -154,7 +157,7 @@ class TaskSampler(torch.utils.data.Sampler):
         return {i: probs[i] / norm for i in probs}
 
     @staticmethod
-    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob: Union[bool, float]=False):
+    def _gaussian_schedule(t, T, num_tasks, mu_exp, sigma, min_prob: Union[bool, float]=False, **kwargs):
         '''
         Gaussian schedule for task sampling.
         mu_exp: exponent for the mean, typically 1.0. Move faster at the beginning: < 1.0. Move slower at the beginning: > 1.0
@@ -186,7 +189,8 @@ class CurriculumGRPOTrainer(GRPOTrainer):
             reset_variance_regularized_state()
         super().__init__(*args, **kwargs)
 
-    def _get_train_sampler(self):
+    def _get_train_sampler(self, train_dataset=None):
+        # The parent class passes the dataset as an argument, but we use self.train_dataset
         batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
         return TaskSampler(self.train_dataset,
                            num_tasks=self.num_tasks,

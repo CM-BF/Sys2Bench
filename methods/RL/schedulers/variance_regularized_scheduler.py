@@ -22,7 +22,7 @@ def _variance_regularized_schedule(
     temperature: float = 1.0,
     beta: float = 0.5,  # Keep default, change via CLI
     warmup_steps: int = 100,
-    groupdro_alpha: float = 0.01,
+    groupdro_alpha: float = 1.0,
     performance_threshold: float = 0.6,  # New: threshold for reducing easy task sampling
     **kwargs
 ) -> Dict[int, float]:

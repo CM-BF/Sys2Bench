@@ -1,0 +1,93 @@
+[2025-07-10 01:17:18,187] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+['/data/shurui.gui/Projects/gateway/Sys2Bench', '/nvme-data2/shurui.gui/Projects/gateway/Sys2Bench/methods/RL', '/data/shurui.gui/Projects/Sys2Bench', '/nvme-data2/shurui.gui/Projects/gateway/Sys2Bench', '/data/shurui.gui/mambaforge/envs/sys2bench/lib/python310.zip', '/data/shurui.gui/mambaforge/envs/sys2bench/lib/python3.10', '/data/shurui.gui/mambaforge/envs/sys2bench/lib/python3.10/lib-dynload', '/data/shurui.gui/mambaforge/envs/sys2bench/lib/python3.10/site-packages']
+[2025-07-10 01:17:24,711] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+INFO 07-10 01:17:26 [__init__.py:244] Automatically detected platform cuda.
+[2025-07-10 01:17:28,374] [INFO] [comm.py:652:init_distributed] cdb=None
+[2025-07-10 01:17:28,374] [INFO] [comm.py:683:init_distributed] Initializing TorchBackend in DeepSpeed with backend nccl
+mode: train
+experiment:
+  dataset_size: 6000
+  dataset_seed: 1234
+  test_size: 0.1
+  hf_token: ${oc.env:HF_TOKEN,null}
+output:
+  root_path: ${oc.env:ROOT_PATH}
+  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum_schedule}_${algorithm.training.scheduler_params.mu_exp}_${algorithm.training.scheduler_params.sigma}_G${algorithm.training.scheduler_params.vrex_adds.gaussian}_${algorithm.training.scheduler_params.min_prob}_${algorithm.training.max_steps}
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.1
+  target_modules:
+  - q_proj
+  - v_proj
+  task_type: CAUSAL_LM
+occupy_gpu_memory: false
+occupy_gpu_memory_gb: 50
+gpu_device: cuda:0
+model:
+  family: Qwen
+  trim: Qwen2.5-1.5B-Instruct
+  name: ${model.family}/${model.trim}
+  trust_remote_code: true
+  torch_dtype: bfloat16
+  attn_implementation: flash_attention_2
+task:
+  name: countdown2345
+  data_files:
+  - citrinegui/countdown_n2t100_1-100
+  - citrinegui/countdown_n3t100_1-100
+  - citrinegui/countdown_n4t100_1-100
+  - citrinegui/countdown_n5t100_1-100
+  test_file: citrinegui/countdown_n5t100_1-100
+  force_redownload: false
+  train_size: 1000
+  test_size: 1024
+  training:
+    max_prompt_length: 1000
+    max_completion_length: 512
+  inference:
+    checkpoint: ${algorithm.training.max_steps}
+    temperature: 0.0
+    sc_num: 1
+    pass_at_k: 1
+    resume: 0
+    max_new_tokens: 512
+    batch_size: 32
+algorithm:
+  name: grpo
+  training:
+    learning_rate: 1.0e-06
+    lr_scheduler_type: cosine
+    logging_steps: 10
+    max_steps: 1600
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 4
+    gradient_checkpointing: true
+    bf16: true
+    report_to:
+    - wandb
+    push_to_hub: true
+    save_strategy: steps
+    save_steps: ${algorithm.training.max_steps}
+    tf32: true
+    num_generations: 8
+    beta: 0.001
+    use_vllm: true
+    vllm_gpu_memory_utilization: 0.2
+    curriculum: false
+    curriculum_schedule: gaussian
+    scheduler_params:
+      mu_exp: 0.5
+      sigma: 0.5
+      vrex_adds:
+        default: 1.0
+        gaussian: 0.0
+      beta: 1.0
+      min_prob: true
+
+Working directory: /data/shurui.gui/Projects/gateway/Sys2Bench
+Output directory: /data/shurui.gui/Projects/gateway/Sys2Bench/outputs/Qwen2.5-1.5B-Instruct_countdown2345_grpo_gaussian_0.5_0.5_G0.0_True_1600
+Already logged in to Hugging Face as citrinegui
+[2025-07-10 01:17:29,693] [INFO] [config.py:733:__init__] Config mesh_device None world_size = 1
+You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU after initializing it on CPU with `model.to('cuda')`.
+[2025-07-10 01:17:30,711] [INFO] [partition_parameters.py:348:__exit__] finished initializing model - num_params = 339, num_elems = 1.78B

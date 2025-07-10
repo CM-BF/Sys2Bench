@@ -8,6 +8,8 @@ if __name__ == "__main__":
     # print('start path', sys.path)
     os.environ["WANDB_PROJECT"] = "Sys2Bench"
     os.environ["ROOT_PATH"]     = "/data/shurui.gui/Projects/gateway/Sys2Bench"
+    # Fix VLLM compatibility issue - force V0 engine
+    os.environ["VLLM_USE_V1"] = "0"
     sys.argv = sys.argv[1:]
     os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[0].replace('cuda_visible_devices=', '')
     #
