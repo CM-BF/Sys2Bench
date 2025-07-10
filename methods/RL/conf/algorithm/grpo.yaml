@@ -19,6 +19,7 @@ training:
   num_generations: 8
   beta: 0.001
   use_vllm: true
+  vllm_mode: "colocate"  # Use colocated vLLM instead of server mode
   vllm_gpu_memory_utilization: 0.2
   curriculum: false
   curriculum_schedule: "balanced" # fixed in default
