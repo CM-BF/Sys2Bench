@@ -5,7 +5,7 @@ from typing import Union, TypedDict, List
 import pandas as pd
 
 # Fix VLLM compatibility issue - force V0 engine before importing VLLM
-os.environ["VLLM_USE_V1"] = "0"
+# os.environ["VLLM_USE_V1"] = "0"
 
 sys.path.insert(0, os.environ['ROOT_PATH'])
 print(sys.path)
@@ -58,7 +58,7 @@ def log_on_main(text):
         log.info(text)
 
 class TaskSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, scheduler_params, seed=0, trainer=None):
+    def __init__(self, dataset, num_tasks, total_iterations, data_schedule, batch_size, mini_repeat_count, repeat_count, scheduler_params, seed=0, trainer=None):
         """
         Args:
           dataset: a HF dataset; each sample is assumed to be a dict including "task" (an integer 0 to num_tasks-1)
@@ -69,6 +69,8 @@ class TaskSampler(torch.utils.data.Sampler):
         """
         self.dataset = dataset
         self.batch_size = batch_size
+        self.mini_repeat_count = mini_repeat_count
+        self.repeat_count = repeat_count
         self.max_dataset_len = len(self.dataset)
         self.num_tasks = num_tasks
         self.total_iterations = total_iterations
@@ -134,10 +136,14 @@ class TaskSampler(torch.utils.data.Sampler):
             self.last_chosen_tasks = chosen_tasks
             
             log_on_main(f"Iteration {i}: Batch indices: {batch_indices}: Task Difficulties: {chosen_tasks}")
-            yield from batch_indices
+            for _ in range(self.repeat_count):
+                for index in batch_indices:
+                    for _ in range(self.mini_repeat_count):
+                        yield index
+            # yield from batch_indices
 
     def __len__(self):
-        return self.total_iterations * self.batch_size
+        return self.total_iterations * self.batch_size * self.mini_repeat_count * self.repeat_count
     @staticmethod
     def _balanced_schedule(t, T, num_tasks):
         return {i: 1. / num_tasks for i in range(num_tasks)}
@@ -191,13 +197,16 @@ class CurriculumGRPOTrainer(GRPOTrainer):
 
     def _get_train_sampler(self, train_dataset=None):
         # The parent class passes the dataset as an argument, but we use self.train_dataset
-        batch_size = int(self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps)
+
+        # generation_batch_size = self.accelerator.num_processes (num_device) * self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps
         return TaskSampler(self.train_dataset,
                            num_tasks=self.num_tasks,
                            total_iterations=self.total_iterations,
                            data_schedule=self.data_schedule,
                            scheduler_params=self.scheduler_params,
-                           batch_size=batch_size,
+                           batch_size=self.args.generation_batch_size // self.num_generations,
+                           mini_repeat_count=self.num_generations,
+                           repeat_count=self.num_iterations * self.args.steps_per_generation, #num_iterations=1 is a GRPO param.
                            trainer=self)
 
     def training_step(self, model, inputs, num_items_in_batch=None):
@@ -362,6 +371,7 @@ class BaseTrainer:
             "beta": training_cfg.beta,
             # Vllm
             "use_vllm": training_cfg.use_vllm,
+            "vllm_mode": training_cfg.vllm_mode,  # Add missing vllm_mode parameter
             "vllm_gpu_memory_utilization": training_cfg.vllm_gpu_memory_utilization,
         }
 
@@ -909,14 +919,10 @@ class CountdownTrainer(BaseTrainer):
     def _countdown_reward_fn(self, completions, target, numbers, **kwargs):
         """Reward function for countdown task"""
         rewards = []
-        
+
         # Check if task IDs are provided in kwargs
         task_ids = kwargs.get('task_ids', None)
-        
-        # Track recent completions for diversity penalty (maintain last 50 completions)
-        if not hasattr(self, '_recent_completions'):
-            self._recent_completions = []
-        
+
         for completion, target_i, numbers_i in zip(completions, target, numbers):
             try:
                 print('#########################')
@@ -928,30 +934,10 @@ class CountdownTrainer(BaseTrainer):
                     rewards.append(0.0)  # Penalty to avoid format errors
                     continue
 
-                # Use the CountdownRewardModel class with enhanced penalties
+                # Use the CountdownRewardModel class
                 reward_model = CountdownRewardModel(target_i, numbers_i)
-                
-                # Extract equation for diversity tracking
-                equation = reward_model.extract_equation(completion)
-                
-                # Get recent equations for this target (last 20 completions)
-                recent_equations = [eq for eq in self._recent_completions[-20:] if eq is not None]
-                
-                reward = reward_model.compute_score(
-                    completion, 
-                    penalize_short_completions=True,
-                    min_completion_length=100,  # Require longer reasoning
-                    recent_completions=recent_equations,
-                    diversity_penalty_weight=0.2
-                )
+                reward = reward_model.compute_score(completion)
                 rewards.append(reward)
-                
-                # Track this equation for future diversity checking
-                if equation is not None:
-                    self._recent_completions.append(equation)
-                    # Keep only last 50 completions
-                    if len(self._recent_completions) > 50:
-                        self._recent_completions.pop(0)
                 print('-----')
                 print(reward)
                 print(target_i)

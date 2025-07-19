@@ -6,8 +6,8 @@ training:
   lr_scheduler_type: "cosine"
   logging_steps: 10
   max_steps: 1600
-  per_device_train_batch_size: 2
-  gradient_accumulation_steps: 4
+  per_device_train_batch_size: 16 # completion number in one mini step
+  gradient_accumulation_steps: 4 # 4 mini steps one global step
   gradient_checkpointing: true
   bf16: true
   report_to:

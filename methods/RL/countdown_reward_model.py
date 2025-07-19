@@ -91,9 +91,7 @@ class CountdownRewardModel:
             print(f"Error evaluating equation: {e}")
             return None
 
-    def compute_score(self, solution_str, format_score=0.1, success_score=1.0, debug=False, 
-                     penalize_short_completions=True, min_completion_length=50,
-                     recent_completions=None, diversity_penalty_weight=0.1):
+    def compute_score(self, solution_str, format_score=0.1, success_score=1.0, debug=False):
         """
         Compute a score for the given solution.
 
@@ -132,39 +130,14 @@ class CountdownRewardModel:
                 print(f"Could not evaluate equation")
             return format_score
 
-        # Base score calculation
-        base_score = success_score if abs(result - self.target) < 1e-5 else format_score
-        
-        if debug:
-            if base_score == success_score:
+        if abs(result - self.target) < 1e-5:  # Account for floating point precision
+            if debug:
                 print(f"Correct equation: {equation} = {result}")
-            else:
-                print(f"Wrong result: equation = {result}, target = {self.target}")
-        
-        # Apply penalties only to correct answers to encourage better reasoning
-        if base_score == success_score:
-            final_score = base_score
-            
-            # Length penalty: encourage longer, more reasoned completions
-            if penalize_short_completions:
-                completion_length = len(solution_str)
-                if completion_length < min_completion_length:
-                    length_penalty = (min_completion_length - completion_length) / min_completion_length * 0.3
-                    final_score *= (1.0 - length_penalty)
-                    if debug:
-                        print(f"Length penalty applied: {length_penalty:.3f} (length: {completion_length})")
-            
-            # Diversity penalty: discourage identical solutions
-            if recent_completions is not None and equation in recent_completions:
-                frequency = recent_completions.count(equation)
-                diversity_penalty = min(frequency * diversity_penalty_weight, 0.5)  # Cap at 50%
-                final_score *= (1.0 - diversity_penalty)
-                if debug:
-                    print(f"Diversity penalty applied: {diversity_penalty:.3f} (frequency: {frequency})")
-            
-            return final_score
+            return success_score
         else:
-            return base_score
+            if debug:
+                print(f"Wrong result: equation = {result}, target = {self.target}")
+            return format_score
 
     def find_solution(self, numbers=None, target=None, max_depth=6):
         """
