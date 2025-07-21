@@ -198,7 +198,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
     def _get_train_sampler(self, train_dataset=None):
         # The parent class passes the dataset as an argument, but we use self.train_dataset
 
-        # generation_batch_size = self.accelerator.num_processes (num_device) * self.args.per_device_train_batch_size * self.args.gradient_accumulation_steps
+        # generation_batch_size = self.accelerator.num_processes (num_device) * self.args.per_device_train_batch_size (including num_generation) * self.args.gradient_accumulation_steps
         return TaskSampler(self.train_dataset,
                            num_tasks=self.num_tasks,
                            total_iterations=self.total_iterations,
@@ -206,7 +206,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
                            scheduler_params=self.scheduler_params,
                            batch_size=self.args.generation_batch_size // self.num_generations,
                            mini_repeat_count=self.num_generations,
-                           repeat_count=self.num_iterations * self.args.steps_per_generation, #num_iterations=1 is a GRPO param.
+                           repeat_count=self.num_iterations, # * self.args.steps_per_generation, #num_iterations=1 is a GRPO param.
                            trainer=self)
 
     def training_step(self, model, inputs, num_items_in_batch=None):
