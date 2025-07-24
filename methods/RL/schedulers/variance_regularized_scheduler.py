@@ -24,6 +24,10 @@ def _variance_regularized_schedule(
     warmup_steps: int = 100,
     groupdro_alpha: float = 1.0,
     performance_threshold: float = 0.6,  # New: threshold for reducing easy task sampling
+    # SEC (Self-Evolving Curriculum) parameters - defaults from paper
+    td_alpha: float = 0.5,  # TD learning rate (mostly 0.5 across tasks in paper)
+    sec_temperature: float = 1.0,  # Boltzmann temperature (mostly 1.0 for 3B model)
+    sec_weight: float = 0.3,  # Weight for blending SEC with VREx (not in paper, our choice)
     **kwargs
 ) -> Dict[int, float]:
     """
@@ -41,7 +45,15 @@ def _variance_regularized_schedule(
             'group_weights': np.ones(num_tasks) / num_tasks,
             'current_probs': {i: 1.0 / num_tasks for i in range(num_tasks)},
             'last_update': -1,
-            'task_mastery': {i: False for i in range(num_tasks)}  # Track task mastery
+            'task_mastery': {i: False for i in range(num_tasks)},  # Track task mastery
+            # SEC (Self-Evolving Curriculum) components
+            'q_values': {i: 0.0 for i in range(num_tasks)},  # TD(0) Q-values initialized to 0
+            'batch_advantages': defaultdict(list),  # Temporary storage for current batch advantages by task_id
+            'sec_params': {
+                'td_alpha': td_alpha,
+                'sec_temperature': sec_temperature, 
+                'sec_weight': sec_weight
+            }
         }
     
     state = _variance_regularized_schedule.state
@@ -83,6 +95,33 @@ def _variance_regularized_schedule(
     state['group_weights'] /= state['group_weights'].sum()
 
     scores['group_weights'] = (vrex_adds['groupdro'], state['group_weights'])  # Add GroupDRO weights to scores
+    
+    # SEC Q-value updates using collected advantages
+    if state['batch_advantages']:
+        sec_params = state['sec_params']
+        alpha = sec_params['td_alpha']
+        
+        # TD(0) update for each task with data
+        for task_id, advantages in state['batch_advantages'].items():
+            mean_abs_advantage = np.mean([abs(adv) for adv in advantages])
+            # Q_{t+1}(c) = α * r_t(c) + (1-α) * Q_t(c)
+            old_q = state['q_values'][task_id]
+            state['q_values'][task_id] = alpha * mean_abs_advantage + (1 - alpha) * old_q
+        
+        # Clear batch advantages after processing
+        state['batch_advantages'].clear()
+    
+    # Add SEC probabilities to scores (following plugin architecture)
+    if 'sec' in vrex_adds:
+        sec_params = state['sec_params']
+        sec_temp = sec_params['sec_temperature']
+        
+        # Compute Boltzmann probabilities from Q-values
+        q_values = np.array([state['q_values'][i] for i in range(num_tasks)])
+        sec_probs = np.exp(q_values / sec_temp)
+        sec_probs = sec_probs / sec_probs.sum()
+        
+        scores['sec'] = (vrex_adds['sec'], sec_probs)
 
 
     # Gaussian scheduler adds
@@ -135,13 +174,20 @@ def _variance_regularized_schedule(
 
 
 # Helper function to update performance (to be called from the trainer)
-def update_variance_regularized_performance_v2(task_ids: List[int], performances: List[float], trainer=None):
+def update_variance_regularized_performance_v2(task_ids: List[int], performances: List[float], advantages: List[float] = None, trainer=None):
     """Update performance metrics for the variance regularized scheduler."""
     if hasattr(_variance_regularized_schedule, 'state'):
         state = _variance_regularized_schedule.state
+        
+        # Standard VREx performance tracking
         for task_id, perf in zip(task_ids, performances):
             state['task_performances'][task_id].append(perf)
             state['task_counts'][task_id] += 1
+        
+        # Collect advantages for SEC if provided
+        if advantages is not None:
+            for task_id, advantage in zip(task_ids, advantages):
+                state['batch_advantages'][task_id].append(advantage)
         
         # Log VREx-specific metrics to WandB if trainer available
         # Build all metrics in a single dict first

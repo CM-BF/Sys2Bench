@@ -31,5 +31,10 @@ training:
     vrex_adds:
       groupdro: 1.0
       gaussian: 0.0
+      sec: 0.0  # SEC (Self-Evolving Curriculum) weight
     beta: 1.0
     min_prob: true    # true: use default p_min. (float): use min_prob value. false: use 0.0
+    # SEC (Self-Evolving Curriculum) parameters - defaults from paper
+    td_alpha: 0.5      # TD learning rate (mostly 0.5 across tasks in paper)
+    sec_temperature: 1.0  # Boltzmann temperature (mostly 1.0 for 3B model)
+    sec_weight: 0.3    # Weight for blending SEC with VREx (not in paper, our choice)

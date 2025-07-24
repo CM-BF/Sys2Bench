@@ -190,6 +190,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         self.total_iterations = total_iterations
         self.data_schedule = data_schedule
         self.scheduler_params=scheduler_params
+        # self.data2reward_fn_name = {'countdown': '_countdown_reward_fn', 'blocksworld'}
         # Reset variance regularized state once at initialization
         if self.data_schedule == 'variance_regularized':
             reset_variance_regularized_state()
@@ -220,9 +221,10 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         
         # Update variance regularized scheduler if using it
         if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
+            advantages = list(self._textual_logs['advantages'])
             task_ids = self._current_batch_task_ids
-            rewards = self._last_batch_rewards
-            update_variance_regularized_performance_v2(task_ids, rewards, trainer=self)
+            rewards = self._last_batch_rewards    # can use self._textual_logs['rewards']['_countdown_reward_fn'] if we can somehow know which dataset we are using here.
+            update_variance_regularized_performance_v2(task_ids, rewards, advantages=advantages, trainer=self)
             
             # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
             # Only log when it aligns with logging_steps
