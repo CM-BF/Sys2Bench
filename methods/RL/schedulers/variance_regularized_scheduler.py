@@ -82,7 +82,7 @@ def _variance_regularized_schedule(
     state['group_weights'] *= np.exp(groupdro_alpha * losses)
     state['group_weights'] /= state['group_weights'].sum()
 
-    scores['group_weights'] = (1.0, state['group_weights'])  # Add GroupDRO weights to scores
+    scores['group_weights'] = (vrex_adds['groupdro'], state['group_weights'])  # Add GroupDRO weights to scores
 
 
     # Gaussian scheduler adds
@@ -97,9 +97,9 @@ def _variance_regularized_schedule(
     scores = sum([weight * value for weight, value in scores.values()])
     
     # Apply temperature and softmax
-    scores = scores / temperature
-    weights = np.exp(scores - np.max(scores))
-    weights = weights / weights.sum()
+    # scores = scores / temperature
+    # weights = np.exp(scores - np.max(scores))
+    weights = scores / scores.sum()
     
     # Debug print
     # if t % 100 == 0:

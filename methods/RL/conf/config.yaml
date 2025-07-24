@@ -16,7 +16,7 @@ experiment:
 
 output:
   root_path: ${oc.env:ROOT_PATH}
-  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum_schedule}_${algorithm.training.scheduler_params.mu_exp}_${algorithm.training.scheduler_params.sigma}_G${algorithm.training.scheduler_params.vrex_adds.gaussian}_${algorithm.training.scheduler_params.min_prob}_${algorithm.training.max_steps}  # This will dynamically set the model name based on task and algorithm
+  run_name: ${model.trim}_${task.name}_${algorithm.name}_${algorithm.training.curriculum_schedule}_${algorithm.training.scheduler_params.mu_exp}_${algorithm.training.scheduler_params.sigma}_DRO${algorithm.training.scheduler_params.vrex_adds.groupdro}G${algorithm.training.scheduler_params.vrex_adds.gaussian}_${algorithm.training.scheduler_params.min_prob}_${algorithm.training.max_steps}  # This will dynamically set the model name based on task and algorithm
 
 lora:
   r: 32

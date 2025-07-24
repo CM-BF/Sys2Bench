@@ -198,13 +198,14 @@ class CurriculumGRPOTrainer(GRPOTrainer):
     def _get_train_sampler(self, train_dataset=None):
         # The parent class passes the dataset as an argument, but we use self.train_dataset
 
-        # generation_batch_size = self.accelerator.num_processes (num_device) * self.args.per_device_train_batch_size (including num_generation) * self.args.gradient_accumulation_steps
+        # generation_batch_size = self.accelerator.num_processes (num_device) * self.args.per_device_train_batch_size (including num_generation)
+        # * self.steps_per_generation (steps_per_generation is mutual exclusive to generation_batch_size)
         return TaskSampler(self.train_dataset,
                            num_tasks=self.num_tasks,
                            total_iterations=self.total_iterations,
                            data_schedule=self.data_schedule,
                            scheduler_params=self.scheduler_params,
-                           batch_size=self.args.generation_batch_size // self.num_generations,
+                           batch_size=self.args.generation_batch_size * self.args.gradient_accumulation_steps // self.num_generations,
                            mini_repeat_count=self.num_generations,
                            repeat_count=self.num_iterations, # * self.args.steps_per_generation, #num_iterations=1 is a GRPO param.
                            trainer=self)
@@ -224,10 +225,13 @@ class CurriculumGRPOTrainer(GRPOTrainer):
             update_variance_regularized_performance_v2(task_ids, rewards, trainer=self)
             
             # Log VREx metrics at the correct time - AFTER training step, BEFORE log_stats buffer clear
-            if hasattr(self, '_vrex_metrics_to_log'):
+            # Only log when it aligns with logging_steps
+            if hasattr(self, '_vrex_metrics_to_log'):# and self.state.global_step % self.args.logging_steps == 0:
                 try:
                     # Use the trainer's log method which stages metrics for next log_stats call
-                    self.log(self._vrex_metrics_to_log)
+                    # self.log(self._vrex_metrics_to_log)
+                    for key, value in self._vrex_metrics_to_log.items():
+                        self._metrics['train'][key].append(value)
                     # print(f"[VREx DEBUG] Successfully logged {len(self._vrex_metrics_to_log)} metrics after training step")
                     # Clear the stored metrics
                     delattr(self, '_vrex_metrics_to_log')
@@ -367,6 +371,8 @@ class BaseTrainer:
             # GRPO specific parameters
             "max_prompt_length": self.cfg.task.training.max_prompt_length,
             "max_completion_length": self.cfg.task.training.max_completion_length,
+            "steps_per_generation": training_cfg.steps_per_generation,
+            "generation_batch_size": training_cfg.generation_batch_size,
             "num_generations": training_cfg.num_generations,
             "beta": training_cfg.beta,
             # Vllm

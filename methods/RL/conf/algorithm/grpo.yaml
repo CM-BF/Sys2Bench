@@ -7,6 +7,8 @@ training:
   logging_steps: 10
   max_steps: 1600
   per_device_train_batch_size: 16 # completion number in one mini step
+  generation_batch_size: null # completion number in one mini step
+  steps_per_generation: 1 # generation_batch_size = steps_per_generation * per_device_train_batch_size * num_gpus but its default is gradient_accumulation_steps, seems not right.
   gradient_accumulation_steps: 4 # 4 mini steps one global step
   gradient_checkpointing: true
   bf16: true
@@ -27,7 +29,7 @@ training:
     mu_exp: 0.5
     sigma: 0.5
     vrex_adds:
-      default: 1.0
+      groupdro: 1.0
       gaussian: 0.0
     beta: 1.0
     min_prob: true    # true: use default p_min. (float): use min_prob value. false: use 0.0
