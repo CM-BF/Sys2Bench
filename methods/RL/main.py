@@ -87,7 +87,7 @@ class TaskSampler(torch.utils.data.Sampler):
             'cosine': self._cosine_schedule,
             'gaussian': partial(self._gaussian_schedule, **scheduler_params),
             'classic': self._step_schedule,
-            'variance_regularized': partial(_variance_regularized_schedule, trainer=trainer, **scheduler_params)
+            'vrex': partial(_variance_regularized_schedule, trainer=trainer, **scheduler_params)
         }
         log_on_main(f"Data Schedule: {data_schedule}")
         self.schedule_func = self.schedule_funcs[data_schedule]
@@ -108,7 +108,7 @@ class TaskSampler(torch.utils.data.Sampler):
             probs_dict = self.schedule_func(i, self.total_iterations, self.num_tasks)
             
             # Debug print for variance regularized scheduler
-            # if self.data_schedule == 'variance_regularized' and i % 100 == 0:
+            # if self.data_schedule == 'vrex' and i % 100 == 0:
             log_on_main(f"[VREx Sampler DEBUG] Iteration {i}: Schedule func returned: {probs_dict}")
 
             probs = np.array([probs_dict[j] for j in range(self.num_tasks)])
@@ -192,7 +192,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         self.scheduler_params=scheduler_params
         # self.data2reward_fn_name = {'countdown': '_countdown_reward_fn', 'blocksworld'}
         # Reset variance regularized state once at initialization
-        if self.data_schedule == 'variance_regularized':
+        if self.data_schedule == 'vrex':
             reset_variance_regularized_state()
         super().__init__(*args, **kwargs)
 
@@ -220,7 +220,7 @@ class CurriculumGRPOTrainer(GRPOTrainer):
         result = super().training_step(model, inputs, num_items_in_batch)
         
         # Update variance regularized scheduler if using it
-        if self.data_schedule == 'variance_regularized' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
+        if self.data_schedule == 'vrex' and hasattr(self, '_last_batch_rewards') and hasattr(self, '_current_batch_task_ids'):
             advantages = list(self._textual_logs['advantages'])
             task_ids = self._current_batch_task_ids
             rewards = self._last_batch_rewards    # can use self._textual_logs['rewards']['_countdown_reward_fn'] if we can somehow know which dataset we are using here.
@@ -561,7 +561,7 @@ class BlocksWorldTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized':
+            if self.trainer.data_schedule == 'vrex':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
 
@@ -959,7 +959,7 @@ class CountdownTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized':
+            if self.trainer.data_schedule == 'vrex':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
 
@@ -1854,7 +1854,7 @@ class CodeTrainer(BaseTrainer):
         # Update variance regularized scheduler if we're in training mode
         # and task IDs are available
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'data_schedule'):
-            if self.trainer.data_schedule == 'variance_regularized':
+            if self.trainer.data_schedule == 'vrex':
                 # Store rewards in trainer for later use
                 self.trainer._last_batch_rewards = rewards
 

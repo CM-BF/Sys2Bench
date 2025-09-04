@@ -53,3 +53,4 @@ wandb
 outputs
 wandb.zip
 .idea
+imgs/*

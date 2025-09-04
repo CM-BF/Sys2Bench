@@ -27,7 +27,6 @@ def _variance_regularized_schedule(
     # SEC (Self-Evolving Curriculum) parameters - defaults from paper
     td_alpha: float = 0.5,  # TD learning rate (mostly 0.5 across tasks in paper)
     sec_temperature: float = 1.0,  # Boltzmann temperature (mostly 1.0 for 3B model)
-    sec_weight: float = 0.3,  # Weight for blending SEC with VREx (not in paper, our choice)
     **kwargs
 ) -> Dict[int, float]:
     """
@@ -52,7 +51,6 @@ def _variance_regularized_schedule(
             'sec_params': {
                 'td_alpha': td_alpha,
                 'sec_temperature': sec_temperature, 
-                'sec_weight': sec_weight
             }
         }
     
@@ -143,7 +141,7 @@ def _variance_regularized_schedule(
     # Debug print
     # if t % 100 == 0:
     print(f"[VREx DEBUG] Step {t}: Raw scores: {scores}")
-    print(f"[VREx DEBUG] Step {t}: Softmax weights: {weights}")
+    print(f"[VREx DEBUG] Step {t}: Normalized scores: {weights}")
     print(f"[VREx DEBUG] Step {t}: Task means: {[stats[i][0] for i in range(num_tasks)]}")
 
     
