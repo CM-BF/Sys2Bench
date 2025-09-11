@@ -2,6 +2,7 @@
 name: "grpo"
 
 training:
+  resume_from_checkpoint: null
   learning_rate: 1e-6
   lr_scheduler_type: "cosine"
   logging_steps: 10
@@ -24,7 +25,7 @@ training:
   vllm_mode: "colocate"  # Use colocated vLLM instead of server mode
   vllm_gpu_memory_utilization: 0.2
   curriculum: false
-  curriculum_schedule: "balanced" # fixed in default
+  curriculum_schedule: "balanced" # fixed in default # "balanced", "gaussian", "vrex"
   scheduler_params:
     mu_exp: 0.5
     sigma: 0.5

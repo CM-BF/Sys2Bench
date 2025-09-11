@@ -50,6 +50,7 @@ from methods.RL.schedulers.variance_regularized_scheduler import _variance_regul
 log = logging.getLogger(__name__)
 OmegaConf.register_new_resolver("d2s", lambda digit, sub: str(digit).replace(".", "_"))
 OmegaConf.register_new_resolver("mode2name", lambda mode, sub1, sub2: sub1 if mode == "train" else sub2)
+OmegaConf.register_new_resolver("ckpt2short", lambda ckpt: f"_FT{ckpt.split('_')[-1]}" if ckpt else "")
 
 disable_caching()
 accelerator = Accelerator()
@@ -327,8 +328,9 @@ class BaseTrainer:
         else:
             import warnings
 
+            warnings.warn(f"Checkpoint not found at {checkpoint_path}.")
             checkpoint_path = f'{self.cfg.model.family}/{model_name}'
-            warnings.warn(f"Checkpoint not found at {checkpoint_path}. Will attempt to use the model in huggingface: {checkpoint_path}.")
+            warnings.warn(f"Will attempt to use the model in huggingface: {checkpoint_path}.")
 
 
         return checkpoint_path
@@ -595,7 +597,7 @@ class BlocksWorldTrainer(BaseTrainer):
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_config.model_name_or_path,
+            model_path,
             torch_dtype=model_config.torch_dtype,
             trust_remote_code=model_config.trust_remote_code,
             attn_implementation=model_config.attn_implementation
@@ -971,11 +973,23 @@ class CountdownTrainer(BaseTrainer):
         model_name = self.cfg.model.name
         output_model_name = self.cfg.output.run_name
         algorithm = self.cfg.algorithm.name
+        
+        # Check if we're loading from checkpoint
+        checkpoint_path = getattr(self.cfg.algorithm.training, 'resume_from_checkpoint', None)
 
         # Load tokenizer and model
         model_config = self._get_model_config()
+        
+        # Determine model path - either checkpoint or base model
+        if checkpoint_path:
+            model_path = self._get_checkpoint_path(int(checkpoint_path.split('_')[-1]), checkpoint_path)
+            print(f"Loading model from checkpoint: {model_path}")
+        else:
+            model_path = model_config.model_name_or_path
+            print(f"Loading base model: {model_path}")
+            
         tokenizer = AutoTokenizer.from_pretrained(
-            model_config.model_name_or_path,
+            model_path,
             trust_remote_code=model_config.trust_remote_code
         )
         # Ensure we have a pad_token
@@ -985,7 +999,7 @@ class CountdownTrainer(BaseTrainer):
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_config.model_name_or_path,
+            model_path,
             torch_dtype=model_config.torch_dtype,
             trust_remote_code=model_config.trust_remote_code,
             attn_implementation=model_config.attn_implementation
