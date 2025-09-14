@@ -1,0 +1,35 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Python Debugger: Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "accelerate.commands.launch",
+            // "program": "methods/RL/main.py",
+            "args": [
+                "--num_processes", "1", 
+                "--main_process_port", "29738", 
+                "--config_file", "methods/RL/deep_speed.yaml", 
+                "methods/RL/main.py", 
+                "mode=train", 
+                "model=qwen7",
+                "task=countdown2345", 
+                "task.train_size=1000",
+                "algorithm=grpo",
+                "algorithm.training.max_steps=1600",
+                // "algorithm.training.use_vllm=False"
+            ],
+            "env": {
+                "WANDB_PROJECT": "Sys2Bench-debug", 
+                "ROOT_PATH": "/nvme-data/jacob/Sys2Bench", 
+                "CUDA_VISIBLE_DEVICES": "6,7" 
+            },
+            "justMyCode": false
+        }
+    ]
+}
