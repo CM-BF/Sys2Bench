@@ -1766,45 +1766,63 @@ completions = completions0_5B + completions1_5B + completions3B
 
 import re
 from typing import List
+from transformers import PreTrainedTokenizerFast, AutoTokenizer
+import torch
 
-# CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?]")
-CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?](?= |\Z)")
+tokenizer = AutoTokenizer.from_pretrained(
+    'Qwen/Qwen2.5-0.5B-Instruct',
+    trust_remote_code=True
+)
 
 
-def split_thoughts(text: str, min_length=5) -> List[str]:
-    pieces = []
-    cursor = 0
-    curr_chunk = ""
+def split_thoughts(
+    text: str, 
+    tokenizer: PreTrainedTokenizerFast,
+    min_length: int=5
+) -> list[str]:
+    """Splits a completion into its constituent thoughts."""
+
+    # Regex for finding thought boundaries.
+    # CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?]")
+    CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?](?= |\Z)")
+    thoughts = []
+    thoughts_ids = []
+    def tokenize(t: str):
+        return tokenizer(text=t, return_tensors="pt", add_special_tokens=False).input_ids[0]
+    ids = tokenize(text)
+    text_cursor = token_cursor = 0
     for m in CANDIDATE_RE.finditer(text):
-        curr_chunk += text[cursor:m.end()]
-        if len(curr_chunk.split()) > min_length:
-            pieces.append(curr_chunk)
-            curr_chunk = ""
-        cursor = m.end()
-    if cursor < len(text):
-        curr_chunk += text[cursor:]
-    if curr_chunk:
-        pieces.append(curr_chunk)
-    return pieces
 
+        # Jump to the end of the next candidate thought and tokenize it
+        text_cursor_end = m.end()
+        if text_cursor_end <= text_cursor:
+            continue 
+        new_thought = text[text_cursor:text_cursor_end]
+        new_thought_ids = tokenize(new_thought)
 
-# %%
-from pprint import pp
+        # Sometimes, the thought boundary is in the middle of a token,
+        # so we need to extend the thought until the tokenized ids match
+        while not new_thought_ids.equal(ids[token_cursor:len(new_thought_ids) + token_cursor]):
+            text_cursor_end += 1
+            new_thought = text[text_cursor:text_cursor_end]
+            new_thought_ids = tokenize(new_thought)
 
-completions = completions1_5B
+        # If the thought is long enough, add it to the thought list
+        if len(new_thought.split()) > min_length:
+            thoughts.append(new_thought)
+            thoughts_ids.append(new_thought_ids)
+            token_cursor += len(new_thought_ids)
+            text_cursor = text_cursor_end
 
-for completion in completions:
-    thoughts = split_thoughts(completion)
-    print("=" * 80)
-    print()
-    pp(completion)
-    print()
-    for thought in thoughts:
-        print(f">>> {thought}")
-    print()
-    print()
+    # Add any remaining text to the final thought
+    new_thought = text[text_cursor:]
+    if new_thought:
+        thoughts[-1] += new_thought
+        thoughts_ids[-1] = torch.cat((thoughts_ids[-1], tokenize(new_thought)))
+
+    # Verify that the thoughts reconstruct the original text
     joined_thoughts = "".join(thoughts)
-    if joined_thoughts != completion: #  and False:
+    if joined_thoughts != text:
         print("!!! MISMATCH !!!")
         print()
         print("ORIGINAL:")
@@ -1814,6 +1832,30 @@ for completion in completions:
         print(joined_thoughts)
         print()
         raise ValueError("Mismatch")
+
+    # Verify that the token ids reconstruct the original ids
+    joined_ids = torch.cat(thoughts_ids)
+    if not joined_ids.equal(ids):
+        raise ValueError(f"Mismatch in token ids: {joined_ids} != {ids}")
+
+    return thoughts, thoughts_ids
+
+
+# %%
+from pprint import pp
+
+completions = completions1_5B
+
+for completion in completions:
+    thoughts = split_thoughts(text=completion, tokenizer=tokenizer)[0]
+    print("=" * 80)
+    print()
+    pp(completion)
+    print()
+    for thought in thoughts:
+        print(f">>> {thought}")
+    print()
+    print()
 
 
 # %%
