@@ -1831,6 +1831,9 @@ def split_thoughts(
         print("JOINED:")
         print(joined_thoughts)
         print()
+        print("ORIGINAL IDS:")
+        print(ids)
+        print()
         raise ValueError("Mismatch")
 
     # Verify that the token ids reconstruct the original ids
