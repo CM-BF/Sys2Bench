@@ -795,33 +795,30 @@ f'{sum(p.numel() for p in model.parameters()):,}'
 import torch
 from typing import Union, Any
 
-from trl.data_utils import apply_chat_template, is_conversational, maybe_apply_chat_template
 import re 
 
 from transformers import Trainer
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.masking_utils import sdpa_mask_recent_torch
 import re
-
-def tokenize_prompts(
-    tokenizer: PreTrainedTokenizerFast,
-    prompts_text: list[str],        
-):
-    prompt_inputs = tokenizer(
-        text=prompts_text, 
-        return_tensors="pt", 
-        padding=True, 
-        padding_side="left", 
-        add_special_tokens=False
-    )
-    return prompt_inputs["input_ids"], prompt_inputs["attention_mask"]
-
 from typing import Union
+from transformers import BatchEncoding
+from torch.nn.utils.rnn import pad_sequence
+from trl.trainer.utils import selective_log_softmax
+from pprint import pp
+from tqdm import tqdm 
+import textwrap
+
+PROMPT_IDS = 'prompt_inputs'
+PROMPT_MASK = 'prompt_attention_mask'
+THOUGHT_IDS = 'thought_ids'
+ANSWER_IDS = 'answer_ids'
 
 def split_thoughts(
     completion_ids: Union[list[int], torch.tensor], 
     tokenizer: PreTrainedTokenizerFast,
-    min_length: int=5
+    min_length: int=5,
+    verbose: bool=False
 ) -> list[str]:
     """Splits a completion into its constituent thoughts."""
     if isinstance(completion_ids, list):
@@ -832,14 +829,14 @@ def split_thoughts(
     CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?](?= |\Z)")
     thoughts = []
     thoughts_ids = []
-    text = tokenizer.decode(completion_ids)
+    completion = tokenizer.decode(completion_ids)
     text_cursor = token_cursor = 0
-    for m in CANDIDATE_RE.finditer(text):
+    for m in CANDIDATE_RE.finditer(completion):
 
         # Get the next candidate thought
         if text_cursor >= m.end():
             continue
-        new_thought = text[text_cursor:m.end()]
+        new_thought = completion[text_cursor:m.end()]
  
         # If the thought is long enough, add it to the thought list
         if len(new_thought.split()) > min_length:
@@ -849,7 +846,7 @@ def split_thoughts(
             # may not exactly match the tokenized new_thought
             # e.g., instead of predicting the token for 'think', the model may predict the tokens for 'th' and 'ink' 
             L = token_cursor
-            R = L + len(new_thought)
+            R = len(completion_ids)
             while L < R:
                 M = (L + R) // 2
                 token_cursor_end = M + 1
@@ -898,7 +895,7 @@ def split_thoughts(
             text_cursor += len(decoded)
 
     # Add any remaining text to the final thought
-    new_thought = text[text_cursor:]
+    new_thought = completion[text_cursor:]
     if new_thought:
         thoughts[-1] += new_thought
         thoughts_ids[-1] = torch.cat([thoughts_ids[-1], completion_ids[token_cursor:]])
@@ -908,11 +905,11 @@ def split_thoughts(
 
     # Verify that the thoughts reconstruct the original text
     joined_thoughts = "".join(thoughts)
-    if joined_thoughts != text:
+    if joined_thoughts != completion:
         print("!!! MISMATCH !!!")
         print()
         print("ORIGINAL:")
-        print(text)
+        print(completion)
         print()
         print("JOINED:")
         print(joined_thoughts)
@@ -923,6 +920,16 @@ def split_thoughts(
     joined_ids = torch.cat(thoughts_ids)
     if not joined_ids.equal(completion_ids):
         raise ValueError(f"Mismatch in token ids: {joined_ids} != {completion_ids}")
+
+    if verbose:
+        print("=" * 40 + f" {i} " + "=" * 40)
+        print()
+        pp(completion)
+        print()
+        for thought in thoughts:
+            print(f">>> {thought}")
+        print()
+        print()
 
     return thoughts, thoughts_ids
 
@@ -939,12 +946,23 @@ def tokenize_thoughts(
             completion_ids=ids,
             tokenizer=tokenizer,
         )
+
+        # Verify that the tokenized thoughts match the provided completion ids and text
         completion_thought_ids_joined = torch.cat(completion_thoughts_ids)
         if not completion_thought_ids_joined.equal(torch.tensor(ids)):
             raise ValueError("Mismatch between provided and computed completion ids")
+        thoughts_joined = "".join(completion_thoughts)
+
+        # Completions don't include the EOS token, so remove it if we added it
+        if thoughts_joined.endswith(tokenizer.eos_token):
+            thoughts_joined = thoughts_joined[:-len(tokenizer.eos_token)]
+        if thoughts_joined != completion:
+            raise ValueError("Mismatch between provided and computed completion text")
+        
         thoughts.append(completion_thoughts)
         thoughts_ids.append(completion_thoughts_ids)
-    return thoughts, thoughts_ids
+
+    return thoughts_ids
 
 def tokenize_answers(
     answers: list[str],
@@ -960,302 +978,226 @@ def tokenize_answers(
         )
     return tokenized_answers
 
-def init_causal_mask(
-    prompt_ids: torch.Tensor,
-    prompt_masks: torch.Tensor,
-    thought_ids: list[list[torch.tensor]],
-    answer_ids: list[torch.tensor],
-) -> torch.Tensor:
-    """
-    Creates causal attention mask for inputs with interleaved thoughts and answers.
-    Prevents thoughts from attending to interleaved answers.    
-    """
-    device = answer_ids[0].device
 
-    # Create padding mask for thoughts interleaved with answers
-    seq_len, padding_amounts = get_seq_len_and_padding_amount(
-        thought_ids=thought_ids,
-        answer_ids=answer_ids,
-    )
-    batch_size = len(padding_amounts)
-    thought_answer_mask = torch.ones(
-        (batch_size, seq_len), device=device, dtype=torch.bool
-    )
-    for batch_idx in range(batch_size):
-        thought_answer_mask[batch_idx, -padding_amounts[batch_idx]:] = False
-
-    # Initialize full causal attention mask
-    # This mask still needs to be modified to prevent thoughts from attending to interleaved answers
-    attn_mask = torch.cat([prompt_masks.bool(), thought_answer_mask], dim=1)
-    cache_position = torch.arange(0, seq_len, device=device)
-    attn_mask = sdpa_mask_recent_torch(
-        batch_size=batch_size,
-        cache_position=cache_position,
-        kv_length=seq_len,
-        attention_mask=attn_mask,
-    )
-
-    # Create input sequences by interleaving thoughts and answers
-    # Update attention mask to prevent thoughts from attending to interleaved answers
-    input_ids_ls = []
-    thought_end_inds = [] # Thought boundaries
-    answer_begin_inds = []
-    for batch_idx in range(batch_size):
-        prompt = prompt_ids[batch_idx]
-        thoughts = thought_ids[batch_idx]
-        answer = answer_ids[batch_idx]
-        input_ids = [prompt]
-        input_ids_original = [prompt]
-        num_answer_tokens = len(answer)
-        cursor_w_answers = cursor = len(prompt)
-        mask = attn_mask[batch_idx]
-        thought_end_idx = []
-        answer_begin_idx = []
-        for thought in thoughts:
-            cursor += len(thought)
-            cursor_w_answers += len(thought) + num_answer_tokens
-            thought_end_idx.append(cursor - 1)
-            answer_begin_idx.append(cursor)
-            input_ids.extend([thought, answer])
-            input_ids_original.append(thought)
-            next_thought_begin = cursor + num_answer_tokens
-            attn_mask[batch_idx, :, next_thought_begin:, cursor:next_thought_begin] = False
-
-        input_ids = torch.cat(input_ids)
-        assert len(input_ids) == cursor_w_answers
-        input_ids_original = torch.cat(input_ids_original)
-        assert sum(len(ids) for ids in input_ids_original) == cursor
-        input_ids_ls.append(input_ids)
-        thought_end_inds.append(thought_end_idx)
-        answer_begin_inds.append(answer_begin_idx)
-
-    return mask    
-
-def get_seq_len_and_padding_amount(
-    thought_ids: list[list[torch.tensor]],
-    answer_ids: list[torch.tensor],
-) -> tuple[int, int]:
-    """Calculates the total sequence length and padding amounts for each example."""
-    response_lengths = []
-    assert len(thought_ids) == len(answer_ids)
-    for completion, answer in zip(thought_ids, answer_ids):
-
-        # Input sequences have three components:
-        # 1. prompt tokens
-        # 2. thought tokens (all thoughts in the completion)
-        # 3. answer tokens (the answer repeated after each thought)
-        num_answer_tokens = len(answer)
-        num_thoughts = len(completion)
-        total_answer_tokens = num_answer_tokens * num_thoughts
-        total_thought_tokens = sum([len(t) for t in completion])
-        total_tokens = total_thought_tokens + total_answer_tokens
-        response_lengths.append(total_tokens)
-
-    # Compute amount of padding we need to add
-    max_response_length = max(response_lengths)
-    padding_amounts = [max_response_length - rl for rl in response_lengths]
-    return max_response_length, padding_amounts
-
-
-def prepare_inputs(
+def tokenize_inputs(
     tokenizer: PreTrainedTokenizerFast, 
     prompts: list[str], 
     completions: list[str], 
-    expression: list[str],
     completion_ids: list[list[int]],
+    answers: list[str],
 ) -> dict[str, Union[torch.Tensor, Any]]:
 
-    prompt_ids, prompt_mask = tokenize_prompts(
-        tokenizer=tokenizer,
-        prompts_text=prompts
+    prompt_inputs: BatchEncoding = tokenizer(
+        text=prompts, 
+        return_tensors="pt", 
+        padding=True, 
+        padding_side="left", 
+        add_special_tokens=False
     )
 
-    thoughts, thought_ids = tokenize_thoughts(
+    thought_ids: list[list[torch.Tensor]] = tokenize_thoughts(
         completions=completions,
         tokenizer=tokenizer,
         completion_ids=completion_ids,
     )
 
-    answer_ids = tokenize_answers(
-        answers=expression,
+    answer_ids: list[torch.Tensor] = tokenize_answers(
+        answers=answers,
         tokenizer=tokenizer,
     )
-
-    prompt_completion_answer_ids__prompt_completion_answer_attn_mask = init_causal_mask(
-        prompt_ids=prompt_ids,
-        prompt_masks=prompt_mask,
-        thought_ids=thought_ids,
-        answer_ids=answer_ids,
-    )
-
-# %%
-from pprint import pp
-
-for i, ids in enumerate(reward_inputs['completion_ids'][13:]):
-    thoughts, thought_ids = split_thoughts(
-        completion_ids=ids,
-        tokenizer=tokenizer,
-    )
-    print("=" * 40 + f" {i} " + "=" * 40)
-    print()
-    completion = tokenizer.decode(ids)
-    pp(completion)
-    print()
-    for thought in thoughts:
-        print(f">>> {thought}")
-    print()
-    print()
-
-
-
-# %%
-prepare_inputs(
-    tokenizer=tokenizer,
-    prompts=reward_inputs['prompts'],
-    completions=reward_inputs['completions'],
-    expression=reward_inputs['expression'],
-    completion_ids=reward_inputs['completion_ids'],
-)
-
-# %%
-"""    # Join thoughts with 
-
-    # Mask everything after the first EOS token
-    is_eos = completion_ids == trainer.processing_class.eos_token_id
-    eos_idx = torch.full((is_eos.size(0),), is_eos.size(1), dtype=torch.long, device=device)
-    eos_idx[is_eos.any(dim=1)] = is_eos.int().argmax(dim=1)[is_eos.any(dim=1)]
-    sequence_indices = torch.arange(is_eos.size(1), device=device).expand(is_eos.size(0), -1)
-    completion_mask = (sequence_indices <= eos_idx.unsqueeze(1)).int()
-
-    # Convert tensor to a list of lists of token IDs. This will be passed to the reward function, avoiding the need
-    # to re-tokenize completions if the reward is computed from tokens.
-    completion_ids_list = [
-        [id.item() for id, m in zip(row, mask_row) if m] for row, mask_row in zip(completion_ids, completion_mask)
-    ]
-
-    # Sum along sequence dimension (dim=1) to get completion length per sequence, used for logging
-    completion_lengths = completion_mask.sum(1)
-
-    # If mask_truncated_completions is enabled, zero out truncated completions in completion_mask
-    if trainer.mask_truncated_completions:
-        truncated_completions = ~is_eos.any(dim=1)
-        completion_mask = completion_mask * (~truncated_completions).unsqueeze(1).int()
-
-    # Concatenate prompt_mask with completion_mask for logit computation
-    attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)  # (B, P+C)
-
-    logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
-    batch_size = trainer.args.per_device_train_batch_size if mode == "train" else trainer.args.per_device_eval_batch_size
-
-    with torch.no_grad():
-        # When using num_iterations == 1 and steps_per_generation <= gradient_accumulation_steps
-        # old_per_token_logps == per_token_logps, so we can skip it's computation here, and use
-        # per_token_logps.detach() instead.
-        if trainer.num_iterations > 1 or trainer.args.steps_per_generation > trainer.args.gradient_accumulation_steps:
-            old_per_token_logps = trainer._get_per_token_logps(
-                trainer.model, prompt_completion_ids, attention_mask, logits_to_keep, batch_size
-            )
-        else:
-            old_per_token_logps = None
-
-        # Compute the per-token log probabilities for the reference model
-        if trainer.beta != 0.0:
-            if trainer.ref_model is not None:
-                ref_per_token_logps = trainer._get_per_token_logps(
-                    trainer.ref_model, prompt_completion_ids, attention_mask, logits_to_keep
-                )
-            else:
-                with trainer.accelerator.unwrap_model(trainer.model).disable_adapter():
-                    ref_per_token_logps = trainer._get_per_token_logps(
-                        trainer.model, prompt_completion_ids, attention_mask, logits_to_keep
-                    )
-        else:
-            ref_per_token_logps = None
-
-    # Decode the generated completions
-    completions_text = trainer.processing_class.batch_decode(completion_ids, skip_special_tokens=True)
-    if is_conversational(inputs[0]):
-        completions = []
-        for prompt, completion in zip(prompts, completions_text):
-            bootstrap = prompt.pop()["content"] if prompt[-1]["role"] == "assistant" else ""
-            completions.append([{"role": "assistant", "content": bootstrap + completion}])
-    else:
-        completions = completions_text
-
-    # Calculate rewards for each reward function. rewards_per_func aggregates rewards across all processes. This is
-    # important because rewards will be normalized per group, and completions are distributed. We will later slice
-    # rewards_per_func to extract each process's subset.
-    rewards_per_func = trainer._calculate_rewards(inputs, prompts, completions, completion_ids_list)
-
-    # Apply weights to each reward function's output and sum
-    rewards = (rewards_per_func * trainer.reward_weights.to(device).unsqueeze(0)).nansum(dim=1)
-
-    # Compute grouped-wise rewards
-    mean_grouped_rewards = rewards.view(-1, trainer.num_generations).mean(dim=1)
-    std_grouped_rewards = rewards.view(-1, trainer.num_generations).std(dim=1)
-    is_std_zero = torch.isclose(std_grouped_rewards, torch.zeros_like(std_grouped_rewards))
-
-    # Normalize the rewards to compute the advantages
-    mean_grouped_rewards = mean_grouped_rewards.repeat_interleave(trainer.num_generations, dim=0)
-    std_grouped_rewards = std_grouped_rewards.repeat_interleave(trainer.num_generations, dim=0)
-    advantages = rewards - mean_grouped_rewards
-    if trainer.scale_rewards:
-        advantages = advantages / (std_grouped_rewards + 1e-4)
-
-    # Slice to keep only the local part of the data
-    process_slice = slice(
-        trainer.accelerator.process_index * len(prompts),
-        (trainer.accelerator.process_index + 1) * len(prompts),
-    )
-    all_process_advantages = advantages.clone()  # keep the aggregated advantages for logging
-    advantages = advantages[process_slice]
-
-    # Log the metrics
-    if mode == "train":
-        trainer.state.num_input_tokens_seen += trainer.accelerator.gather(attention_mask.sum()).sum().item()
-    trainer._metrics[mode]["num_tokens"] = [trainer.state.num_input_tokens_seen]
-
-    # Log completion lengths, mean, min, max
-    agg_completion_lengths = trainer.accelerator.gather(completion_lengths)
-    trainer._metrics[mode]["completions/mean_length"].append(agg_completion_lengths.float().mean().item())
-    trainer._metrics[mode]["completions/min_length"].append(agg_completion_lengths.float().min().item())
-    trainer._metrics[mode]["completions/max_length"].append(agg_completion_lengths.float().max().item())
-
-    # Identify sequences that terminated with EOS and log their lengths
-    agg_terminated_with_eos = trainer.accelerator.gather(is_eos.any(dim=1))
-    term_completion_lengths = agg_completion_lengths[agg_terminated_with_eos]
-    clipped_completions_ratio = 1 - len(term_completion_lengths) / len(agg_completion_lengths)
-    trainer._metrics[mode]["completions/clipped_ratio"].append(clipped_completions_ratio)
-    if len(term_completion_lengths) == 0:  # edge case where no terminated sequences are found
-        term_completion_lengths = torch.zeros(1, device=device)
-    trainer._metrics[mode]["completions/mean_terminated_length"].append(term_completion_lengths.float().mean().item())
-    trainer._metrics[mode]["completions/min_terminated_length"].append(term_completion_lengths.float().min().item())
-    trainer._metrics[mode]["completions/max_terminated_length"].append(term_completion_lengths.float().max().item())
-
-    # Calculate mean reward per function, but only for samples where the function was applied (non-NaN values)
-    for i, reward_func_name in enumerate(trainer.reward_func_names):
-        mean_rewards = torch.nanmean(rewards_per_func[:, i]).item()
-        trainer._metrics[mode][f"rewards/{reward_func_name}/mean"].append(mean_rewards)
-        std_rewards = nanstd(rewards_per_func[:, i]).item()
-        trainer._metrics[mode][f"rewards/{reward_func_name}/std"].append(std_rewards)
-    trainer._metrics[mode]["reward"].append(mean_grouped_rewards.mean().item())
-    trainer._metrics[mode]["reward_std"].append(std_grouped_rewards.mean().item())
-    trainer._metrics[mode]["frac_reward_zero_std"].append(is_std_zero.float().mean().item())
-
-    # Log prompt and completion texts
-    trainer._textual_logs["prompt"].extend(gather_object(prompts_text))
-    trainer._textual_logs["completion"].extend(gather_object(completions_text))
-    for i, name in enumerate(trainer.reward_func_names):
-        trainer._textual_logs["rewards"][name].extend(rewards_per_func[:, i].tolist())
-    trainer._textual_logs["advantages"].extend(all_process_advantages.tolist())
 
     return {
-        "prompt_ids": prompt_ids,
-        "prompt_mask": prompt_mask,
-        "completion_ids": completion_ids,
-        "completion_mask": completion_mask,
-        "advantages": advantages,
-        "old_per_token_logps": old_per_token_logps,
-        "ref_per_token_logps": ref_per_token_logps,
+        PROMPT_IDS: prompt_inputs.input_ids,
+        PROMPT_MASK: prompt_inputs.attention_mask,
+        THOUGHT_IDS: thought_ids,
+        ANSWER_IDS: answer_ids,
     }
-"""
+
+@torch.no_grad()
+def get_per_token_logps(
+        model: torch.nn.Module, 
+        input_ids: torch.Tensor, 
+        attention_mask: torch.Tensor, 
+        logits_to_keep: int,
+        batch_size: int=None,
+        temperature: float=1.0,
+    ) -> torch.Tensor:
+    batch_size = batch_size or input_ids.size(0)  # Chunk inputs into smaller batches to reduce memory peak
+    all_logps = []
+    for i in range(0, input_ids.size(0), batch_size):
+        input_ids_batch = input_ids[i : i + batch_size]
+        attention_mask_batch = attention_mask[i : i + batch_size]
+
+        # We add 1 to `logits_to_keep` because the last logits of the sequence is later excluded
+        logits = model(
+            input_ids=input_ids_batch, attention_mask=attention_mask_batch, logits_to_keep=logits_to_keep + 1
+        ).logits
+        logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
+        input_ids_batch = input_ids_batch[:, -logits_to_keep:]
+        # Divide logits by sampling temperature.
+        # See https://huggingface.co/blog/the_n_implementation_details_of_rlhf_with_ppo#policy-training-implementation-details
+        logits = logits / temperature  # TODO
+        logps = selective_log_softmax(logits, input_ids_batch)  # compute logprobs for the input tokens
+        all_logps.append(logps)
+    return torch.cat(all_logps, dim=0)
+
+def pad_and_mask(
+    sequences: list[torch.Tensor],
+    tokenizer: PreTrainedTokenizerFast
+):
+    padded_sequences = pad_sequence(
+        sequences=sequences,
+        batch_first=True,
+        padding_value=tokenizer.pad_token_id,
+    )
+    mask = (padded_sequences != tokenizer.pad_token_id).int()
+    return padded_sequences, mask
+
+def compute_CoT_rewards(
+    prompts: list[str],
+    completions: list[str],
+    answers: list[str],
+    completion_ids: list[list[int]],
+    model: torch.nn.Module,
+    tokenizer: PreTrainedTokenizerFast,
+    device: torch.device, 
+    verbose: bool=False,
+):
+
+    # Tokenize prompts and answers; partition completions into thoughts and tokenize
+    input_ids = tokenize_inputs(
+        tokenizer=tokenizer,
+        prompts=prompts,
+        completions=completions,
+        completion_ids=completion_ids,
+        answers=answers,
+    )
+    prompt_ids: torch.Tensor = input_ids[PROMPT_IDS]
+    prompt_mask: torch.Tensor = input_ids[PROMPT_MASK]
+    thought_ids_list: list[list[torch.Tensor]] = input_ids[THOUGHT_IDS]
+    answer_ids_list: list[torch.Tensor] = input_ids[ANSWER_IDS]
+
+    # Pad answers to the same length
+    answer_ids, answer_mask = pad_and_mask(
+        sequences=answer_ids_list,
+        tokenizer=tokenizer,
+    )
+    logits_to_keep = answer_ids.shape[1]
+    assert (prompt_ids != tokenizer.pad_token_id).equal(prompt_mask)
+
+    # Evaluate the probability of the answer at each point in the chain of thought 
+    per_token_answer_ps_list = []
+    avg_answer_ps_list = []
+    thought_end_indices = [[] for _ in range(len(thought_ids_list))]
+    batch_size = len(answer_ids)
+    num_thoughts = [len(t) for t in thought_ids_list]
+    max_num_thoughts = max(num_thoughts)
+    for thought_idx in tqdm(range(max_num_thoughts + 1)):
+ 
+        # The first iteration (thought_idx == 0) corresponds to no CoT
+        if thought_idx == 0:
+            thought_ids = torch.Tensor(batch_size, 0).int()
+            thought_mask = torch.Tensor(batch_size, 0).int()
+        else:
+            thought_ids = []
+            for batch_idx in range(batch_size):
+                curr_thought_list = thought_ids_list[batch_idx]
+                curr_thought = torch.cat(curr_thought_list[:thought_idx])
+                thought_ids.append(curr_thought)
+
+                # Track the end index of each thought for reward assignment later
+                if thought_idx <= len(curr_thought_list):
+                    thought_end_indices[batch_idx].append(len(curr_thought) - 1)
+            thought_ids, thought_mask = pad_and_mask(
+                sequences=thought_ids,
+                tokenizer=tokenizer,
+            )
+
+        # Compute probability of answer given the first `thought_idx` thoughts
+        input_ids = torch.cat([prompt_ids, thought_ids, answer_ids], dim=1).to(device)
+        attention_mask = torch.cat([prompt_mask, thought_mask, answer_mask], dim=1).to(device)
+        per_token_answer_logps = get_per_token_logps(
+            model=model, 
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            logits_to_keep=logits_to_keep,
+        )
+
+        # Average the probability of each token in the answer
+        per_token_answer_ps = per_token_answer_logps.exp().cpu()
+        avg_answer_ps = (per_token_answer_ps * answer_mask).sum(dim=1) / answer_mask.sum(dim=1)
+        per_token_answer_ps_list.append(per_token_answer_ps)
+        avg_answer_ps_list.append(avg_answer_ps)
+
+        # print_idx = -1
+        # print("-" * 40 + f" thought {thought_idx} " + "-" * 40)
+        # print(thought_idx)
+        # print(tokenizer.decode(torch.cat([thought_ids[print_idx], answer_ids[print_idx]]), skip_special_tokens=True))
+        # for p, id_ in zip(per_token_answer_ps[print_idx], answer_ids[print_idx]):
+        #     print(f"{p:.3f} {tokenizer.decode(id_.unsqueeze(0))}")
+        # logits_to_keep = input_ids.shape[1] - 1
+        # per_token_logps_full = get_per_token_logps(
+        #     model=model, 
+        #     input_ids=input_ids, 
+        #     attention_mask=attention_mask, 
+        #     logits_to_keep=logits_to_keep,
+        # )
+        # assert per_token_logps_full[:, -answer_ids.shape[1]:].equal(per_token_logps)
+
+    # Compute the increase in answer probability at each thought step
+    avg_answer_ps = torch.stack(avg_answer_ps_list, dim=1)
+    delta_avg_answer_ps = avg_answer_ps[:, 1:] - avg_answer_ps[:, :-1]
+
+    # Assign rewards at the end of each thought
+    linewidth=80
+    reward_tensor = torch.zeros(thought_ids.shape)
+    for batch_idx in range(batch_size):
+        end_indices = thought_end_indices[batch_idx]
+        delta_prob = delta_avg_answer_ps[batch_idx]
+        if verbose:
+            curr_thought_ids = thought_ids[batch_idx]
+            curr_prompt_ids = prompt_ids[batch_idx]
+            curr_answer_ids = answer_ids[batch_idx]
+            curr_prompt_text = tokenizer.decode(curr_prompt_ids, skip_special_tokens=True).strip()
+            curr_answer_text = tokenizer.decode(curr_answer_ids, skip_special_tokens=True).strip()
+            print("-" * 40 + f" batch {batch_idx} " + "-" * 40)
+            print()
+            print(f"Prompt: {curr_prompt_text}")
+            print()
+            print(f"Answer: {curr_answer_text}")
+        for i, end_idx in enumerate(end_indices):
+            reward_tensor[batch_idx, end_idx] = delta_prob[i]
+            if verbose:
+                start_idx = 0 if i == 0 else end_indices[i - 1] + 1
+                curr_thought_tokens = curr_thought_ids[start_idx:end_idx + 1]
+                curr_thought_text = tokenizer.decode(curr_thought_tokens, skip_special_tokens=True).strip()
+                print()
+                print(f'Thought: "{textwrap.fill(curr_thought_text, width=linewidth)}"')
+                print(f'Reward: {reward_tensor[batch_idx, end_idx]:.4f}')
+    return reward_tensor
+
+# %%
+
+for i, ids in enumerate(reward_inputs['completion_ids'][13:]):
+    thoughts, thought_ids_list = split_thoughts(
+        completion_ids=ids,
+        tokenizer=tokenizer,
+        verbose=True
+    )
+
+# %%
+device = torch.device("cuda:5")
+model.to(device)
+# %%
+
+reward_tensor = compute_CoT_rewards(
+    prompts=reward_inputs['prompts'],
+    completions=reward_inputs['completions'],
+    answers=reward_inputs['expression'],
+    completion_ids=reward_inputs['completion_ids'],
+    model=model,
+    tokenizer=tokenizer,
+    device=device,
+    verbose=True,
+)
+# %%
