@@ -820,36 +820,72 @@ def tokenize_prompts(
 def split_thoughts(
     text: str, 
     tokenizer: PreTrainedTokenizerFast,
+    add_eos: bool=False,
     min_length: int=5
 ) -> list[str]:
     """Splits a completion into its constituent thoughts."""
-    # Regex for finding candidate thought boundaries.
+
+    # Regex for finding thought boundaries.
     # CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?]")
     CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?](?= |\Z)")
     thoughts = []
-    thoughts_tokenized = []
+    thoughts_ids = []
     def tokenize(t: str):
         return tokenizer(text=t, return_tensors="pt", add_special_tokens=False).input_ids[0]
-    cursor = 0
-    curr_thought = ""
-    
+    ids = tokenize(text)
+    text_cursor = token_cursor = 0
     for m in CANDIDATE_RE.finditer(text):
 
-        # Jump to the end of the first candidate thought
-        curr_thought += text[cursor:m.end()]
+        # Jump to the end of the next candidate thought and tokenize it
+        text_cursor_end = m.end()
+        if text_cursor_end <= text_cursor:
+            continue 
+        new_thought = text[text_cursor:text_cursor_end]
+        new_thought_ids = tokenize(new_thought)
 
-        # If the thought is long enough, tokenize it
-        if len(curr_thought.split()) > min_length:
-            thoughts.append(curr_thought)
-            thoughts_tokenized.append(tokenize(curr_thought))
-            curr_thought = ""
-        cursor = m.end()
-    if cursor < len(text):
-        curr_thought += text[cursor:]
-    if curr_thought:
-        thoughts.append(curr_thought)
-        thoughts_tokenized.append(tokenize(curr_thought))
-    return thoughts, thoughts_tokenized
+        # Sometimes, the thought boundary is in the middle of a token,
+        # so we need to extend the thought until the tokenized ids match
+        while not new_thought_ids.equal(ids[token_cursor:len(new_thought_ids) + token_cursor]):
+            text_cursor_end += 1
+            new_thought = text[text_cursor:text_cursor_end]
+            new_thought_ids = tokenize(new_thought)
+
+        # If the thought is long enough, add it to the thought list
+        if len(new_thought.split()) > min_length:
+            thoughts.append(new_thought)
+            thoughts_ids.append(new_thought_ids)
+            token_cursor += len(new_thought_ids)
+            text_cursor = text_cursor_end
+
+    # Add any remaining text to the final thought
+    new_thought = text[text_cursor:]
+    if new_thought:
+        thoughts[-1] += new_thought
+        thoughts_ids[-1] = torch.cat((thoughts_ids[-1], tokenize(new_thought)))
+
+    # Verify that the thoughts reconstruct the original text
+    joined_thoughts = "".join(thoughts)
+    if joined_thoughts != text:
+        print("!!! MISMATCH !!!")
+        print()
+        print("ORIGINAL:")
+        print(text)
+        print()
+        print("JOINED:")
+        print(joined_thoughts)
+        print()
+        raise ValueError("Mismatch")
+
+    # Verify that the token ids reconstruct the original ids
+    joined_ids = torch.cat(thoughts_ids)
+    if not joined_ids.equal(ids):
+        raise ValueError(f"Mismatch in token ids: {joined_ids} != {ids}")
+
+    if add_eos and thoughts_ids[-1][-1] != tokenizer.eos_token_id:
+        thoughts_ids[-1] = torch.cat((thoughts_ids[-1], torch.tensor([tokenizer.eos_token_id])))
+        thoughts[-1] += tokenizer.eos_token
+
+    return thoughts, thoughts_ids
 
 def tokenize_thoughts(
     completions: list[str],
@@ -863,9 +899,11 @@ def tokenize_thoughts(
         completion_thoughts, completion_thoughts_ids = split_thoughts(
             text=completion,
             tokenizer=tokenizer,
+            add_eos=ids[-1] == tokenizer.eos_token_id
         )
-        assert completion == "".join([tokenizer.decode(t) for t in completion_thoughts_ids])
-        assert completion == tokenizer.decode(torch.cat(completion_thoughts_ids)) 
+        completion_thought_ids_joined = torch.cat(completion_thoughts_ids)
+        if not completion_thought_ids_joined.equal(torch.tensor(ids)):
+            raise ValueError("Mismatch between provided and computed completion ids")
         thoughts.append(completion_thoughts)
         thoughts_ids.append(completion_thoughts_ids)
     return thoughts, thoughts_ids
