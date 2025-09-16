@@ -816,52 +816,95 @@ def tokenize_prompts(
     )
     return prompt_inputs["input_ids"], prompt_inputs["attention_mask"]
 
+from typing import Union
 
 def split_thoughts(
-    text: str, 
+    completion_ids: Union[list[int], torch.tensor], 
     tokenizer: PreTrainedTokenizerFast,
-    add_eos: bool=False,
     min_length: int=5
 ) -> list[str]:
     """Splits a completion into its constituent thoughts."""
+    if isinstance(completion_ids, list):
+        completion_ids = torch.tensor(completion_ids)
 
     # Regex for finding thought boundaries.
     # CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?]")
     CANDIDATE_RE = re.compile(r"</think>|</answer>|\r?\n+|[.!?](?= |\Z)")
     thoughts = []
     thoughts_ids = []
-    def tokenize(t: str):
-        return tokenizer(text=t, return_tensors="pt", add_special_tokens=False).input_ids[0]
-    ids = tokenize(text)
+    text = tokenizer.decode(completion_ids)
     text_cursor = token_cursor = 0
     for m in CANDIDATE_RE.finditer(text):
 
-        # Jump to the end of the next candidate thought and tokenize it
-        text_cursor_end = m.end()
-        if text_cursor_end <= text_cursor:
-            continue 
-        new_thought = text[text_cursor:text_cursor_end]
-        new_thought_ids = tokenize(new_thought)
-
-        # Sometimes, the thought boundary is in the middle of a token,
-        # so we need to extend the thought until the tokenized ids match
-        while not new_thought_ids.equal(ids[token_cursor:len(new_thought_ids) + token_cursor]):
-            text_cursor_end += 1
-            new_thought = text[text_cursor:text_cursor_end]
-            new_thought_ids = tokenize(new_thought)
-
+        # Get the next candidate thought
+        if text_cursor >= m.end():
+            continue
+        new_thought = text[text_cursor:m.end()]
+ 
         # If the thought is long enough, add it to the thought list
         if len(new_thought.split()) > min_length:
-            thoughts.append(new_thought)
-            thoughts_ids.append(new_thought_ids)
-            token_cursor += len(new_thought_ids)
-            text_cursor = text_cursor_end
+
+            # Match the text version of the thought to the corresponding completion IDs
+            # The reason for binary searching is because the completion IDs predicted by the model
+            # may not exactly match the tokenized new_thought
+            # e.g., instead of predicting the token for 'think', the model may predict the tokens for 'th' and 'ink' 
+            L = token_cursor
+            R = L + len(new_thought)
+            while L < R:
+                M = (L + R) // 2
+                token_cursor_end = M + 1
+                decoded = tokenizer.decode(
+                    completion_ids[token_cursor:token_cursor_end]
+                )
+                if len(decoded) == len(new_thought):
+                    break
+                if len(decoded) > len(new_thought):
+                    R = M
+                else:
+                    L = M + 1
+            
+            # Check if we exited the loop without finding an exact match
+            if L == R:
+
+                # If we have, then we need to include an additional token, as the final text
+                # in new_thought is only half of a token (e.g, final text is '>' but the token is '>\n') 
+                if len(decoded) < len(new_thought):
+                    assert new_thought.startswith(decoded)
+                    token_cursor_end = L + 1
+                    decoded = tokenizer.decode(
+                        completion_ids[token_cursor:token_cursor_end]
+                    )
+                    assert len(decoded) > len(new_thought)
+                    assert decoded.startswith(new_thought)
+                else:
+                    assert len(decoded) > len(new_thought)
+                    assert decoded.startswith(new_thought)
+                    decoded_too_short = tokenizer.decode(
+                        completion_ids[token_cursor:token_cursor_end - 1]
+                    )
+                    assert len(decoded_too_short) < len(new_thought)
+                    assert new_thought.startswith(decoded_too_short)
+            else:
+                assert len(decoded) == len(new_thought)
+                assert decoded == new_thought
+
+            # Store thoughts and thought token IDs, update cursors
+            thoughts.append(decoded)
+            thoughts_ids.append(completion_ids[token_cursor:token_cursor_end])
+            assert decoded == tokenizer.decode(
+                thoughts_ids[-1]
+            )
+            token_cursor = token_cursor_end
+            text_cursor += len(decoded)
 
     # Add any remaining text to the final thought
     new_thought = text[text_cursor:]
     if new_thought:
         thoughts[-1] += new_thought
-        thoughts_ids[-1] = torch.cat((thoughts_ids[-1], tokenize(new_thought)))
+        thoughts_ids[-1] = torch.cat([thoughts_ids[-1], completion_ids[token_cursor:]])
+        assert thoughts[-1] == tokenizer.decode(
+                thoughts_ids[-1]
+        )
 
     # Verify that the thoughts reconstruct the original text
     joined_thoughts = "".join(thoughts)
@@ -878,12 +921,8 @@ def split_thoughts(
 
     # Verify that the token ids reconstruct the original ids
     joined_ids = torch.cat(thoughts_ids)
-    if not joined_ids.equal(ids):
-        raise ValueError(f"Mismatch in token ids: {joined_ids} != {ids}")
-
-    if add_eos and thoughts_ids[-1][-1] != tokenizer.eos_token_id:
-        thoughts_ids[-1] = torch.cat((thoughts_ids[-1], torch.tensor([tokenizer.eos_token_id])))
-        thoughts[-1] += tokenizer.eos_token
+    if not joined_ids.equal(completion_ids):
+        raise ValueError(f"Mismatch in token ids: {joined_ids} != {completion_ids}")
 
     return thoughts, thoughts_ids
 
@@ -897,9 +936,8 @@ def tokenize_thoughts(
     thoughts_ids = []
     for completion, ids in zip(completions, completion_ids):
         completion_thoughts, completion_thoughts_ids = split_thoughts(
-            text=completion,
+            completion_ids=ids,
             tokenizer=tokenizer,
-            add_eos=ids[-1] == tokenizer.eos_token_id
         )
         completion_thought_ids_joined = torch.cat(completion_thoughts_ids)
         if not completion_thought_ids_joined.equal(torch.tensor(ids)):
@@ -1049,6 +1087,26 @@ def prepare_inputs(
         thought_ids=thought_ids,
         answer_ids=answer_ids,
     )
+
+# %%
+from pprint import pp
+
+for i, ids in enumerate(reward_inputs['completion_ids'][13:]):
+    thoughts, thought_ids = split_thoughts(
+        completion_ids=ids,
+        tokenizer=tokenizer,
+    )
+    print("=" * 40 + f" {i} " + "=" * 40)
+    print()
+    completion = tokenizer.decode(ids)
+    pp(completion)
+    print()
+    for thought in thoughts:
+        print(f">>> {thought}")
+    print()
+    print()
+
+
 
 # %%
 prepare_inputs(
