@@ -1,737 +1,719 @@
 # %%
 
-reward_inputs = {'prompts': ['<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+reward_inputs = {
+    'prompts': ['<|im_start|>system\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [32, 6, 31, 3], create an equation that equals '
-             '10. You can use basic arithmetic operations (+, -, *, /) and '
-             'each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>',
              '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the '
-             'reasoning process in the mind and then provides the user with '
-             'the answer.\n'
+             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
              '<|im_end|>\n'
              '<|im_start|>user\n'
-             'Using the numbers [24, 38, 52, 60], create an equation that '
-             'equals 98. You can use basic arithmetic operations (+, -, *, /) '
-             'and each number can only be used once. Show your work in <think> '
-             '</think> tags. And return the final answer in <answer> </answer> '
-             'tags, for example <answer> (1 + 2) / 3 </answer>.<|im_end|>\n'
+             'Using the numbers [56, 68, 85, 18], create an equation that equals 57. You can use basic arithmetic operations (+, -, *, /) and each number can '
+             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
+             '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
              '<think>'],
- 'completions': ["First, let's consider that we can use each number only once "
-                 'and basic arithmetic operations. We need to get 10 out of '
-                 'the numbers 32, 6, 31, 3. We need to think creatively about '
-                 'which number to use in which operation to reach the '
-                 'target.</think>\n'
-                 'Since 31 is closest to 32, may I try subtracting 31 from 32 '
-                 'first? This would give us 1, and then adding 3 creates a '
-                 'situation that might lead us to our target.\n'
-                 '<answer> (32 - 31) + 3 = 2 + 3 = 5 </answer>\n'
-                 'Not quite there. Perhaps we should reconsider our approach; '
-                 'let me try multiplying 6 and 3 to get 18, and then subtract '
-                 'that from 32 to get the desired result:\n'
-                 '<answer> 32 - (6 * 3) = 32 - 18 = 14 </answer>\n'
-                 'Still not right. Let me now try adding 6 and 3, and then '
-                 'subtract that from 32. This would leave us with an operation '
-                 'on 31 that is close to 10:\n'
-                 '<answer> (32 - (6 + 3)) = 32 - 9 = 23 </answer>\n'
-                 'Lastly, let me try combining these results by adding the '
-                 'products from two previous operations:\n'
-                 '<answer> (32 - 9) + (6 * 3) = 23 + 18 = 41 </answer>\n'
-                 'None of these combinations have worked so far. I believe I '
-                 'have reached a dead end. Let me reconsider:\n'
-                 'If I multiply 6 and 3 to get 18 and subtract that from 32, I '
-                 "get 14. Now, if I add that to 31's value, 18 + 31 = 49, "
-                 'which is far from 10.\n'
-                 'But if I modify slightly, I can think of,\n'
-                 '<answer> (3 * 6) + (32 - 31) = 18 + 1 = 19 </answer>\n'
-                 '19 is still not 10, I try a different approach:\n'
-                 '<answer> (31 + 6) - 32 + 3 = 37 - 32 + 3 = 5 + 3 = 8 '
-                 '</answer>\n'
-                 'I am close, but not quite there',
-                 'Since our goal is to create an equation that equals 10 using '
-                 'the numbers 32, 6, 31, and 3 exactly once with basic '
-                 'arithmetic operations, I should consider combinations that '
-                 'might give me close to the result. Using division as a '
-                 'method to reduce the number, since 32 and 31 are fairly '
-                 'large and 6 and 3 are small numbers.</think>\n'
-                 'Dividing 32 by 3 will give me a number close to 10, but not '
-                 "exactly 10. Let's try:\n"
-                 '<answer> (32 / 3) + 3 - 6 </answer>\n'
-                 "Now I'll calculate this expression:\n"
-                 '<answer> (10.666...) + 3 - 6 </answer>\n'
-                 'The result is approximately 7.666..., which is not exactly '
-                 '10. It seems I need to reassess my strategy. Given I need an '
-                 'exact result of 10, it might best to use multiplication or '
-                 'other operations to modify the number rather than division. '
+ 'completions': [' We need to create an equation using the numbers 70, 72, 80, and 23 exactly once each, which equals 59. We have the basic arithmetic '
+                 'operations: addition (+), subtraction (-), multiplication (*), and division (/). We need to be careful about the order of operations. We '
+                 'should consider how we can manipulate these numbers.\n'
+                 '\n'
+                 "First, let's consider that 23 is a bit of a special number since it's small and can be used to adjust our target number, 59. We should "
+                 'examine subtraction as a potential way to reach 59 or near it.\n'
+                 '\n'
+                 "Let's take away 23 from 80:\n"
+                 '80 - 23 = 57\n'
+                 '\n'
+                 "Now our target has dropped down to 59 - 57 = 2. We need to find a way to get 2 from 72 and 70. Let's consider division:\n"
+                 '72 / 36 = 2\n'
+                 '\n'
+                 "Assuming 70 / 35 = 2 isn't allowed, we need to use 70 in our equation. But 70 ÷ 3.5 isn't available since it could not be simplified further "
+                 'while using the numbers as whole. Thus, we use a valid division operation:\n'
+                 '70 / 35 = 2\n'
+                 '\n'
+                 'So now our equation includes:\n'
+                 '80 - 23 - (70 / 35) = 59\n'
+                 '\n'
+                 'Notice that the division (70 / 35) within the parentheses simplifies to 2. </think>\n'
+                 '<answer> 80 - 23 - (70 / 35) </answer>',
+                 " We need to use each of the numbers 70, 72, 80, and 23 exactly once to get a result of 59. Each operation can only be used once. Let's start "
+                 'by calculating sums and differences between these numbers to see if we can get close to 59.\n'
+                 "Considering subtraction: If we use 80 - 72, we get 8. But this doesn't help directly as we need the result to be 59.\n"
+                 'Considering addition, if we try 70 + 72 - 80 - 23, we calculate it as follows:\n'
+                 '70 + 72 = 142\n'
+                 '142 - 80 = 62\n'
+                 '62 - 23 = 39\n'
+                 'We now have 39, but we need 59. This means our initial subtraction needs adjustment, since subtraction will keep us lower than we need.\n'
+                 "Let's also consider multiplication and division. 70/80 = 0.875, 80/70 = a bit less than 1, 72/23 = 3.13, 23/70 = a bit less than 0.3. None "
+                 'of these produce a result close to 59, as they are either too small or too large.</think>\n'
+                 "In <think> </think> tags, I've tried calculation options but could not find a combination of basic arithmetic operations that apply to all "
+                 'numbers exactly once to yield 59 directly. However, I can still find a pattern or combination that suits the equation. Let me revisit using '
+                 'a different perspective after exploiting the arithmetic operations more effectively.\n'
+                 'My next idea is to directly resolve the arithmetic in a different order. Instead of trial and error, we should focus on manipulating the '
+                 "numbers in a cogited cycle. Let's try:\n"
+                 '(72 - 70) * 23 / 80\n'
+                 'This results in:\n'
+                 '(2) * 23 / 80\n'
+                 '46 / 80\n'
+                 '0.575\n'
+                 'Again, not right. Perhaps my interopration was flawed. \n'
+                 '(Thought here for possible misuse in angles) This operation still does not yield 59. \n'
+                 "Aha! Let's envision using the modulo operation to adjust the result. \n"
+                 "Let's attempt this augmented:\n"
+                 '(23 % 80) / (72 - 70)\n'
+                 'Numbers ',
+                 ' Given numbers: 70, 72, 80, and 23.\n'
+                 'We need to form an equation that equals 59 using each number exactly once and only using the operations of addition, subtraction, '
+                 'multiplication, and division once.\n'
+                 '\n'
+                 "Let's start with the larger numbers to see what we can do initially. Dividing 80 by 23 seems reasonable, as it will give us a number close "
+                 'to 3.\n'
+                 '\n'
+                 '80 / 23 = 3.4782608695...\n'
+                 '\n'
+                 'From this, the closest integer is 3. If we subtract this from 23, we get:\n'
+                 '23 - 3 = 20.\n'
+                 '\n'
+                 "Now, let's divide 72 by 3:\n"
+                 '72 / 3 = 24.\n'
+                 '\n'
+                 'Our goal is 59. If we add 24 and 34, we get:\n'
+                 '24 + 34 = 58.\n'
+                 '\n'
+                 'We need one more unit to reach 59. Notice that if we subtract:\n'
+                 '23 - 3 - 30 = 0\n'
+                 '\n'
+                 'We see that using the 70 and subtracting 30 will work:\n'
+                 '23 - 3 - 30 = -10.\n'
+                 '\n'
+                 'But we need to add to get to 59, not subtract. So we take another look at simplifying the 23, 24 -> 24 + 3 = 27, and adding subtraction '
+                 'using the 70:\n'
+                 '70 - 23 = 47, this is close to 34 to get to 59, when adding:\n'
+                 '\n'
+                 '24 + 3 + 47 - 16 = 59.\n'
+                 '\n'
+                 'But the terms -30 and 16 introduce complications. Using simpler, conservative operations, we realize:\n'
+                 '70 - 23 = 47, and completing 24 + 3 = 27:\n'
+                 '27 + 32 = 59 is inefficient.\n'
+                 '\n'
+                 'Upon re-examination, 24 + 70 - 23 = 71; subtracting 2 so we match 59:\n'
+                 '72 - 3 = 69, giving 58, and 1 reduces:\n'
+                 '69 - 1 = 68, close:\n'
+                 '\n'
+                 '69 - 1 = 59.\n'
+                 '\n'
+                 'That is simple operationally: </think>\n'
+                 '<answer> 72 - 23 + 1',
+                 ' I need to manipulate the numbers 70, 72, 80, and 23 using basic arithmetic operations so that the result is 59. \n'
+                 'The key numbers are 80 and 23, as they are quite far from 59. A subtraction from 80 could help. If I subtract 23 from 80, I get 57. From '
+                 "there, I'll need to adjust it to 59, which means an addition of 2. \n"
+                 'So, 80 - 23 equals 57. To get to 59, I need 2. The numbers 23 and 72 have 23, so I can use 72 - 23 = 49 and then add 2 to 49 to get 59. \n'
+                 'That means I can use these operations on 72, 23, and the final subtraction from 80 to get to 59.\n'
                  '</think>\n'
-                 "Let's try considering multiplication:\n"
-                 '<answer> 32 / 31 - 6 + 3 - 32 </answer>\n'
-                 'Obviously this does not work since the order of operations '
-                 'and the values do not lead to 10.\n'
+                 '<answer> (72 - 23) + (80 - 70) </answer>',
+                 ' We have to use the numbers 70, 72, 80, and 23 exactly once to get 59.\n'
+                 'One approach is to start by looking at the target number and think about how to use the highest and lowest numbers available to most quickly '
+                 'reach or get close to the target.\n'
+                 "72 - 80 gives -8, which is a big negative number and far from 59. We can't use subtraction alone.\n"
+                 "Perhaps we can multiply or add one of the numbers. 70 could be a strong base but it's too high.\n"
+                 'Dividing might help. 23 * 2 = 46 is manageable, and subtracting that reduces the value more effectively.\n'
+                 "Then 80 - 23 = 57, and 57 - 46 = 11. We're close but not close enough.\n"
+                 'Another approach is to start with 72 and subtracting 23 to get something close, then multiply by 0.2 (0.2 * 57) so we adjust the value.\n'
+                 "Let's break it down:\n"
+                 '80 - 23 = 57\n'
+                 'Then 57 / 10 = 5.7 (round it to 5 as per available simple operations)\n'
+                 'We need to get from 5.7 to 59. Multiplying 5.7 by 11 gives us 62.7 which is close to 59.\n'
+                 "However, we don't have 11 in our number set. We need to interpolate. \n"
+                 '57 * 0.9 = 51.3, close but not enough,\n'
+                 '57 * 1.1 = 62.7 too much.\n'
+                 '\n'
+                 'Given our constrained numbers, a clever combination: \n'
+                 '(80 - 70) * 72 / 23 + 72/70 = 59\n'
+                 '\n'
+                 "Let's check the equation: \n"
+                 '- First (80 - 70) = 10\n'
+                 '- Then 10 * 72 = 720\n'
+                 '- Then 720 / 23 ≈ 31.3\n'
+                 '- 72/70 ≈ 1.03\n'
+                 '- Add them together:\n'
+                 '720 / 23 + 72/70 ≈ 31.3 + 1.03 = 32.33\n'
+                 'This is not 5',
+                 ' We have the numbers 70, 72, 80, 23. We need to create an equation using these numbers exactly once, to achieve a result of 59.\n'
+                 'One effective way to think about this is to try to use operations that can lead to subtraction or a round number around 59.\n'
+                 'If we attempt to use the largest numbers first and then modify their outcomes with smaller numbers, we might get closer to the target. \n'
+                 'Considering 72 and 23 especially, we might subtract 23 from 72 to get 49. But we need to adjust to reach 59. Adding 10 to 49 does the '
+                 'trick.\n'
+                 'So, the equation would look something like (72 - 23) + X = 59.\n'
+                 'Simplifying (72 - 23) we have 49, so (49 + X) = 59.\n'
+                 'That means X = 59 - 49, which is 10.\n'
+                 'Now we know we need 10, and we have the remaining number 70. We need to use it to create 10.\n'
+                 "Let's see how... If we divide 70 by 7, we get 10.\n"
+                 'So the equation works out to be: 70 / 7 + 72 - 23 = 59.\n'
+                 '</think>\n'
+                 '<answer> 70 / 7 + 72 - 23 </answer>',
+                 " Since we are looking for an equation that results in 59, and we're limited to using each number [70, 72, 80, 23] only once, the goal is to "
+                 'manipulate these numbers through basic arithmetic operations. One possible way to approach this is to start with some straightforward '
+                 "calculations and see if we can arrive at 59. Let's consider the known numbers and try combining them in different ways. Maybe the difference "
+                 "between some numbers will yield something close to 59. Let's try 80 - 23 to get 57, then see if manipulating 70 and 72 will reach 59. "
+                 '</think>\n'
+                 'We have 80 - 23 = 57. We need to end up with 59. Now, we need to adjust 57 to get to 59. One way to do this is by using 72 - 70 = 2. Then '
+                 'adding this 2 to 57 will give 59. \n'
+                 "Let's formulate this:\n"
+                 '<answer> (80 - 23) + (72 - 70) </answer>',
+                 ' We have four given numbers: 70, 72, 80, and 23. Our goal is to use each number exactly once and employ basic arithmetic operations to reach '
+                 'the result of 59. \n'
+                 '\n'
+                 'If we look at the given numbers, first considering the equation structure, it seems unlikely that simple addition or subtraction could lead '
+                 'us to 59 due to the gap still remaining in such operations with the numbers given. So, we need to think of more complex operations using '
+                 'multiplication and division, because they can help reduce the numbers more efficiently.\n'
+                 '\n'
+                 "Let's consider the calculation step-by-step by adding and subtracting one set of numbers, then using division to get as close as possible to "
+                 "59. Let's try:\n"
+                 '(72 + 80) / 70 = 152 / 70 which is slightly more than 2.\n'
+                 'Next, subtract 23:\n'
+                 '152 / 70 - 23 = 2.1714 - 23 which is too small.\n'
+                 'What seems more strategic could be:\n'
+                 '72 + 23 - (80 / 70) = 95 - 1.1429 = 93.8571 which is still not correct.\n'
+                 '\n'
                  "Let's try another combination:\n"
-                 '<answer> 32 / 3 + 6 - 31 </answer>\n'
-                 "Let's calculate:\n"
-                 '<answer> (10.666...) + 6 - 31 = 17 - 31 = -14 </answer>\n'
-                 '-14 is not the goal.\n'
-                 "Let's try another straightforward combination:\n"
-                 '<answer> 32 / 6 + 31 - 3 </answer>\n'
-                 "Let's calculate:\n"
-                 '<answer> (5.333...) + 31 - 3 = 36.333... - 3 = 33.333... '
+                 '72 + 70 - 80 - 23 = 69 - 23 = 46. Now, we need to reduce it to 59, we need to use multiplication next, thus we recognize:\n'
+                 '72 * (80 / 23) = 72 * 3.4783 = 249.7896 which is very close but not 59; the remaining operation should be a subtweighted subtraction or '
+                 'addition. </think>\n'
+                 '\n'
+                 'Now, after considering, the equation must be:\n'
+                 '<answer> 72 - 23 + 70 / 80 </answer>\n'
                  '</answer>\n'
-                 '33.333... does not reach 10 either.\n'
-                 'Considering just the numbers given, the closest I can get '
-                 'logically to 10 is not a straight addition or subtraction of '
-                 'all numbers due to inherent divisions giving approximations. '
-                 'My method of trying both basic operations and realizing the '
-                 'key must be in how I combine the numbers properly appears to '
-                 'have been inefficient. \n'
-                 'Given the problem constraints and the basic principles of '
-                 'arithmetic operations, it seems such an equation cannot be '
-                 'formed which equals exactly 10',
-                 ' I need to combine the numbers using basic arithmetic '
-                 'operations to get 10. The numbers given are [32, 6, 31, 3]. '
-                 "I'll try to perform the operations in a way that free me up "
-                 'to use the numbers as needed. Initially, the numbers seem '
-                 'unaligned with direct operation results leading to 10. '
+                 '\n'
+                 "Let's plug it back for checking:\n"
+                 '<think> 72 - 23 + 70 / 80 = 49 + 0.875 = 59.875. </think>\n'
+                 '\n'
+                 "Upon a closer look at this, it's not precisely 59, but given the constraints of using all numbers once and available operations, the closest "
+                 'is probably <answer> 72 - 23 + 70 / 80 </',
+                 " I need to create an equation using the numbers 56, 68, 85, and 18 that results in 57. I can utilize each number only once. Let's start by "
+                 'considering if plugging numbers directly or reducing them through arithmetic operations will lead to the right result.\n'
+                 'If I divide 18 by 3, that results in 6. Right after that, I could potentially subtract or add some numbers to get closer to my target of 57. '
+                 'I also consider addition between some of the larger numbers.</think>\n'
+                 'Based on careful consideration, the equation that uses each of the numbers exactly once and equals 57 should be:\n'
+                 '<answer> 85 - 68 + 56 / 18 </answer>\n'
                  '</think>\n'
-                 "Now, let's try combining numbers in a different manner:\n"
-                 '- I notice that 32 and 31, when combined can give me 33 or '
-                 '31. However, the math operations with the other numbers '
-                 "don't yield 10.\n"
-                 '- Instead, I recall 31 - 3 = 28.\n'
-                 '- Now I need a way to further use 6 and 1 to make 2. This '
-                 'would give me 28 - 10 = 18.\n'
-                 '- But the appropriate subtraction involving 6 and 1 is 6 - 1 '
-                 '= 5.\n'
-                 'This explanation seems incorrect. Let me try another '
-                 'approach:\n'
-                 '- I observe that if I combine 3 and 6, they give 9.\n'
-                 '- 32 - 9 = 23.\n'
-                 '- 23 - 3 = 20.\n'
-                 '- Now, we need 10 more, so 20 - 10 = 0.\n'
-                 "However, this doesn't align with using all numbers once. "
-                 'Revisiting the possibilities:\n'
-                 '- 31 - 3 = 28.\n'
-                 '- 32 - 28 = 4.\n'
-                 '- No built-in ways to get to 10 with these remaining results '
-                 'using 6 or 3.\n'
-                 'Given this exploration, it appears that the task requires a '
-                 'unique combination or a specific sequence not revealed by my '
-                 'steps. However, by applying a logical approach and '
-                 'disregarding direct combinations involving all inputs, we '
-                 'can try to find a solution:\n'
-                 '- Considering 6 * 1 = 6, but we need a result of 0.\n'
-                 '- Revisiting all, combining 31 - 3 = 28, and 32 - 28 = 4 '
-                 "doesn't lead to 10 from remaining numbers.\n"
-                 'Considering these limitations, it seems no equation '
-                 'combining 32, 6, 31, 3 with basic operations once can result '
-                 'in 10.\n'
+                 'Let me break it down to verify:\n'
+                 '- 56 / 18 = 3.111...\n'
+                 '- 68 - 3.111... = 64.888...\n'
+                 '- 85 - 64.888... = 20.111...\n'
+                 '- 20.111... + 56 / 18 = 57\n'
+                 "It seems the operation flagged is slightly incorrect due to rounding. Let's do a quick check:\n"
+                 '- 56 / 18 = 3.111... (exact decimal division)\n'
+                 '- 68 - 3.111... = 64.888...\n'
+                 '- 85 - 64.888... = 20.111...\n'
+                 '- 20.111... + 3.111... = 53.222...\n'
+                 "This still doesn't reach 57. Let's adjust the way we use the numbers. Revisiting the idea of addition might be better:\n"
+                 '<answer> 68 + (85 - 56 - 18 / 2) </answer>\n'
                  '</think>\n'
-                 "Given this scenario, let's try an alternative, "
-                 'out-of-the-box approach using basic arithmetic but '
-                 'redefining the available operators in a different manner,',
-                 'Firstly, I think about the numbers that should be '
-                 'manipulated to get close to 10. Number 32 is a large number '
-                 'and could easily be the result of a multiplication if '
-                 'possible. Number 6 is a good number for addition or '
-                 'subtraction easily. The number 31 is closer to 32 than 6, so '
-                 'I can subtract or add it or use it in a division scenario. '
-                 "Number 3 is a smaller number that won't make a huge "
-                 'difference by itself.</think>\n'
-                 'We want the result to be 10. If we look at the options '
-                 'placed at hand, using 32 and reducing it by some amount will '
-                 'likely give us that. Given 31 is a close number to 32, if we '
-                 'subtract 31 from 32, we get 1.\n'
-                 '\n'
-                 'Now 3 is left, and we can use this for our equation. \n'
-                 'Combining these, it seems 32 - 31 + 3 could work as 1 + 3 = '
-                 "4, but we know this doesn't equal 10. We need to think in "
-                 'terms of multiplication or division.\n'
-                 '\n'
-                 'If we use the remaining number (31) as the divisor and the '
-                 'other numbers (32, 6, 3) as the dividend, we may get closer '
-                 'to the desired answer.\n'
-                 '\n'
-                 'Using division, (32 / 32 * 3) + 6 puts us in the vicinity of '
-                 'the target.\n'
-                 "Let's calculate: (32 / 32) * 3 is actually 3, plus 6 gives "
-                 '9.\n'
-                 '\n'
-                 'Another approach could be to try (6 * 3) + (32 / 31). Since '
-                 "this will involve division, let's see it in action.\n"
                  '</think>\n'
-                 '<answer>(6 * 3) + (32 / 31)</answer>',
-                 'First, I need to determine how to combine the numbers 32, 6, '
-                 '31, and 3 to equal 10. A good place to start is adding a '
-                 'number to another to get close to 10. I notice that 32 and '
-                 '31 are very close to 33, and 31 + 3 = 34, which is a good '
-                 'candidate because we can then find a way to reduce it. '
-                 'Subtracting 6 seems like a smart choice as it will get us '
-                 'slightly below 34 to attain 10. So we have: </think>\n'
-                 '<answer>(31 + 3) - 6</answer>',
-                 ' We need to create an equation using the numbers 32, 6, 31, '
-                 'and 3 once each, such that the result equals 10. \n'
-                 "Let's first consider the operations that can help us achieve "
-                 'the required result. Multiplication and division can help '
-                 'reduce large numbers, while addition and subtraction can '
-                 'help adjust the result. \n'
-                 'Considering the target number to be 10, we might look at '
-                 'combinations of addition and subtraction that could work '
-                 "well with our numbers, keeping in mind that we've only "
-                 'twelve possible combinations of the numbers and operations '
-                 '(3 operations * 4 numbers * (4! permutations). \n'
-                 'One potential approach would be to try to reduce or combine '
-                 'numbers into a value close to 10, and then adjust with the '
-                 'remaining operations.</think>\n'
-                 'Given the numbers, one way to approach this is to reduce the '
-                 'number 32 as much as possible, then tweak the rest:\n'
-                 '<answer> (32 - 31) / 3 + 6 </answer>\n'
-                 "Now, let's break down how this works:\n"
-                 '- 32 - 31 = 1\n'
-                 '- 1 / 3 = 0.3 recurring\n'
-                 '- 0.3 recurring + 6 = 6.3 recurring\n'
-                 'It appears that this approach did not lead us to the number '
-                 "10. Let's try a different combination of operations with the "
-                 'numbers:\n'
-                 '<answer> 32 / 3 - 6 + 31 </answer>\n'
-                 'Breaking this down:\n'
-                 '- 32 / 3 ≈ 10.66 recurring\n'
-                 '- 10.66 - 6 ≈ 4.66\n'
-                 '- 4.66 + 31 = 35.66\n'
-                 "This also does not match our target of 10. Let's try a "
-                 'different route:\n'
-                 '<answer> 32 / 31 + 6 - 3 </answer>\n'
-                 'Breaking this down:\n'
-                 '- 32 / 31 ≈ 1\n'
-                 '- 1 + 6 = 7\n'
-                 '- 7 - 3 = 4\n'
-                 "Still, this is not correct. Let's try one last combination:\n"
-                 '<answer> 32 / 31 + 6 / 3 </answer>\n'
-                 'Breaking this down:\n'
-                 '- 32 / 31 ≈ 1\n'
-                 '- 6 / 3 = 2\n'
-                 '- 1 + 2 = 3\n'
-                 'The previous attempts are close',
-                 ' I need to find a combination of the numbers 32, 6, 31, and '
-                 '3 that fits into an arithmetic equation equating to 10. I '
-                 'will try using combinations of multiplication, division, '
-                 'addition, and subtraction to see which one equals 10. Since '
-                 '10 is a small number, I will start with basic combinations '
-                 'focusing on multiplication and division first. Division can '
-                 'potentially get me closer to 10 by making the numbers '
-                 "smaller, so let's consider that first.</think>\n"
-                 'After thorough consideration:\n'
-                 '<answer> (32 / 31) + 3 + 6 </answer>\n'
+                 'Let me confirm the revised equation:\n'
+                 '- 18 / 2 = 9\n'
+                 '- 85 - 56 - 9 = 20\n'
+                 '- 68 + 20 = 88\n'
                  '\n'
-                 "I noticed that utilizing that order works. Let's break it "
-                 'down:\n'
-                 '- 32 / 31 ≈ 1.032 (bringing it closer to 1)\n'
-                 '- Then I add 3, which makes it 4.032\n'
-                 '- Finally, adding 6 to 4.032 equals 10.032, which is very '
-                 'close to our target of 10 when rounding.\n'
+                 'The equation 68 + (85 - 56 - 18 / 2) correctly uses all the numbers exactly once and equals 88.\n'
+                 'Since the original target of 57 cannot',
+                 'Firstly, 57 is very close to 56 and 68 which are both given numbers. One way to get to 57 is by adding or subtracting a number by 1. Knowing '
+                 'that all numbers can only be used once, 18 can be the number by which to subtract 56 to get 57. But the numbers are 56, 68, 85, and 18, none '
+                 "of which are 1, and subtracting 18 from 56 won't lead us to 68 or 85. So, that doesn't work.</think>\n"
+                 'A different approach might explore dividing operations since dividing can help balance the equation using the higher numbers (68 and 85). '
+                 "Sixty-eight divided by 1.5 can potentially give us 45.33... or 57 with rounding or approximate means. But 1.5 isn't an integer. However, it "
+                 'offers insight that division especially with 18 as a factor may be possible.\n'
+                 'Consider the numbers 68, 18, and 85. If 68 divided by 1.5 equals 45 and we subtract 18 from it, we might approach 57. However, 18 divided by '
+                 '1.5 equals 12, so 68 - 12 = 56, and 56 + 1 = 57.\n'
+                 "This gives us three numbers to work with: 68, 18, and 1. And the fourth is left as we set initially. For this equation, let's reframe using "
+                 'basic arithmetic operations.\n'
+                 '</think>\n'
+                 '<answer> (68 - 18 + 1) / 1 </answer>\n'
+                 'This equation translates to: ((68 - 18) + 1) / 1, which simplifies to 56 + 1, which equals 57. Since all operations should be performed in '
+                 'the order they appear, this gives us the final answer: (57 / 1) = 57.',
+                 'Firstly, 57 can be expressed as 50 + 7, so one of the combinations would involve this. One simple way is to express 50 as a combination of '
+                 'the numbers 56, 68, and 18, and then combine it with 7 using the operations available. Now, 56 - 18 = 38 and 68 - 18 = 50, so we can combine '
+                 "these to make 38 + 50. We now need 7, which could have been the third number left over as a whole or as part of another number. Let's try to "
+                 'fit 56 as 38 + 18 and then add 7, as 38 + 18 + 7 = 63, which simplifies to 50 + 7 when 18 is subtracted.</think>\n'
+                 '<answer>(56 - 18) + (68 - 18 - 7)</answer>',
+                 ' I need to form an equation using the numbers 56, 68, 85, and 18, with all operations being basic arithmetic, and each digit used exactly '
+                 'once. The target number is 57. </think>\n'
+                 'Considering the target number 57, it seems close to the number 56. I can subtract 1 from 56, which would give me 57. \n'
+                 "Using the number 18, I can subtract 18 from 56, but that would result in 38, not 57. Instead, I'll see if I can use division or other "
+                 'manipulations. </think>\n'
+                 'I realize I can divide 56 by 9 (which uses 56 and leaves me with 9 on the other side), and if I subtract or add 9 appropriately, I can get '
+                 "close to 57. Actually, dividing by 9 may yield a decimal, which isn't ideal. Subtracting or adding 18 from 56 or 85 might not work given the "
+                 "format I'm looking for.\n"
+                 "Let's try another approach. If I consider the equation in a more creative way, I might think about adding or subtracting smaller numbers to "
+                 '56. Since 18 could be an opponent, I might need to offset it somehow.\n'
+                 "I'll test the equation: (68 - 85) / 18 + 56.\n"
+                 '</think>\n'
+                 'Now, let me calculate this equation.\n'
+                 '<answer> (68 - 85) / 18 + 56 </answer> = -17 / 18 + 56.\n'
+                 "Let's evaluate this: -17 / 18 = -0.9444...\n"
+                 '-0.9444... + 56 = 55.0556...\n'
+                 'The result is not exactly 57, which suggests I need to re-evaluate the numbers and operations.\n'
+                 "After further consideration, I realize I need to carefully account for all possible operations and combinations. Let's try another "
+                 'approach.\n'
+                 '(think) Re-evaluating, I realize that if I use the number 68 to help reach our target, I can look for a proper way to use 56, 85, and 18 to '
+                 'offset and reach 57. </think>\n'
+                 'A possible mix could be using addition or multiplication creatively to hold the final sum.\n'
                  '\n'
-                 'Since the problem specifies the numbers can only be used '
-                 "once, the operations' order is sensible, thus the final "
-                 'equation is:\n'
-                 '<answer> (32 / 31) + 3 + 6 </answer>\n'
+                 'So, let me test',
+                 "Firstly, I notice that 57 is close to the sum of 68 and 18, which gives 86. That's above 57. Subtracting 29 from 86 would get us close to "
+                 '57, and 29 happens to be the sum of 56 - 28 = 56 - 85 + 18. Therefore, I can use these numbers to form an equation. We can start with 68 - '
+                 '(56 - 85 + 18) and subtract 29.</think>\n'
+                 '<answer> 68 - (56 - 85 + 18) - 29 </answer>',
+                 "First, I will see if I can use the numbers directly to get close to 57. Oftentimes with these equations, such a simple strategy works. I'll "
+                 'try to reach a number close to 57 by combining two of the numbers. The numbers 56 and 18 add up to 74, which is too high. 68 and 85 sum to '
+                 '153, which is also too high. </think>\n'
                  '\n'
-                 'And the answer to the equation is <answer> 10 </answer>.',
-                 ' I need to come up with an equation using the given numbers '
-                 '32, 6, 31, and 3 that equals 10. One important strategy is '
-                 'to think about possible combinations of arithmetic '
-                 "operations that can lead me to this target value. Let's "
-                 'start with number manipulations and see how that can work '
-                 'out. </think>\n'
-                 '<answer> (32 + 31 - 32) / 3 </answer>\n'
-                 '</think>\n'
-                 "Now, let's verify the logic behind this equation.\n"
-                 '</think>\n'
-                 "<think> First, I'll calculate the addition inside the "
-                 'bracket: \n'
-                 '32 + 31 = 63. \n'
-                 "Then I'll subtract 32 from the result:\n"
-                 '63 - 32 = 31. \n'
-                 "Finally, I'll divide the result by 3:\n"
-                 '31 / 3 = 10.3333 (which rounds to 10 when considering the '
-                 'operations and order). \n'
-                 'This equation satisfies the condition of using each number '
-                 'exactly once and resulting in 10. </think>\n'
-                 '<answer> (32 + 31 - 32) / 3 </answer>',
-                 ' First, I will examine each number to see if I can find any '
-                 'combination that may work. Adding the smaller numbers might '
-                 'give a 30 or less, which will need to be made up for by '
-                 'larger operations or numbers. Multiplication and division '
-                 'could help in adjusting the sums or differences to get 98.\n'
-                 "Considering the target 98, let's see if I can use the larger "
-                 'numbers to make this work, as they will have the most '
-                 'influence on the equation. Combining 60 and 38 can get '
-                 'close. If we subtract 38 from 60, that gives 22. However, '
-                 "we'll need two numbers with a product or sum of 44 to reach "
-                 '98. Next up, 24 and 52. Both numbers add up to 76, which '
-                 'seems too high. </think>\n'
-                 '<think> Given the constraint that all numbers must be used '
-                 'only once, another idea is to use exponentiation as an '
-                 'additional unary operation. This would allow for a large '
-                 'increase in value, like multiplying three numbers by 2 '
-                 'combined, to reach 98. 52 can potentially be squared to '
-                 'reach 2704, which seems too high.\n'
-                 "However, let's continue exploring with the remaining numbers "
-                 'by aligning them appropriately with the basic operations. If '
-                 'we see any combinations, perhaps a useful tool is to use 38 '
-                 'as a medium component. For instance, dividing 60 by 2 (not '
-                 'available) or doubling one of the smaller numbers seems '
-                 'promising.\n'
-                 "Let's try subtracting 38 from 52 first, giving 14. With 24, "
-                 "we'll try to reach 84 or 60/2 to sum 98. Dividing 60 by 2 "
-                 'and adding 24 does work, giving us two 30s. We are at 90 '
-                 'with these combinations.\n'
-                 'Applying a multiplier such as adding 2 from 38 and placing '
-                 "next to 24 means we'd get 26 (38 + 2). Now the remaining 24 "
-                 'needs to sum to 98 - 26 = 72. For 24 and 12, working with 12 '
-                 'from 38 (stated to be 26) can multiply to 38 - 26 = 12 and '
-                 'add to get 52 (already used) further calculation shows this '
-                 'point leads nowhere as using a simple',
-                 "First I'll consider the most straightforward operations. "
-                 'Given the target number 98, we need to think about a '
-                 'combination of the given numbers. Considering the numbers 24 '
-                 'and 74, if we can generate 74 using 38 and 52, the equation '
-                 'might be 24 + (52 - 38) = 98. </think>\n'
-                 'We can calculate 24 + (52 - 38) and check if it equals 98:\n'
-                 '<answer>24 + (52 - 38)</answer> \n'
-                 "Let's do the arithmetic:\n"
-                 '24 + (52 - 38) = 24 + 14 = 38\n'
-                 "We see that the calculation does not equal 98. Let's explore "
-                 'other possibilities: </think> Considering we need to reach '
-                 '98, a viable alternative would be using multiplication and '
-                 'subtraction. We can make use of 24 and 4, derived from 38 '
-                 'and 52 in yet another combination. </think>\n'
-                 'Using 24 * 4 = 96 and then just 2 to meet the needed 98:\n'
-                 '<answer>24 * 4 + 2</answer>\n'
-                 'The arithmetic for this would be:\n'
-                 '24 * 4 + 2 = 96 + 2 = 98\n'
-                 'This matches our target number. So the solution is '
-                 '<answer>24 * 4 + 2</answer>.',
-                 ' I need to use each number (24, 38, 52, and 60) exactly once '
-                 'to reach the target of 98 using basic arithmetic operations. '
-                 "Looking at the numbers, 52 is the largest, so it's a useful "
-                 'starting point. Adding it to 46 would give a nice target, '
-                 "but 46 isn't in our set. Removing 4 from 24 gives 20, and 52 "
-                 '+ 20 equals 72, bringing us closer to 98. Next, to get from '
-                 '72 to 98, we need 26. We can obtain 26 with (38 - 52). Thus, '
-                 'the equation would be 52 + 20 + (38 - 52), which simplifies '
-                 'to 52 + 20 - 52 + 38. This simplifies to 20 + 38, which '
-                 'equals the desired 58 plus 40, ultimately resulting in 98. '
-                 '</think>\n'
-                 '<answer> (52 + 20 + (38 - 52)) / 2 = 98 </answer>',
-                 ' To create an equation using the numbers 24, 38, 52, and 60 '
-                 "that equals 98, I'll first consider combinations of "
-                 'operations and numbers they can be combined with. One '
-                 'efficient way could be multiplication followed by '
-                 'subtraction or addition. Starting with multiplication since '
-                 "it scales the numbers more effectively. Let's try:</think>\n"
-                 '<answer> (52 * 60) - 38 - 24 </answer>\n'
-                 'Let me verify this step-by-step:\n'
-                 "<think> First, I'll multiply 52 and 60. </think>\n"
-                 '<answer> 3120 </answer>\n'
-                 "<think> Next, I'll subtract 38 from the result. </think>\n"
-                 '<answer> 3082 </answer>\n'
-                 "<think> Finally, I'll subtract 24 from the outcome. "
-                 '</think>\n'
-                 '<answer> 3058 - 24 = 3034 </answer>\n'
-                 "Now, this result is far away from our target of 98. Let's "
-                 "try another approach by focusing more on division. Let's "
-                 'divide 52 by 24, and then use the resulting value along with '
-                 'the remaining two numbers.\n'
-                 '<answer> 52 / 24 + 60 - 38 </answer>\n'
-                 'Let me verify this step-by-step again:\n'
-                 "<think> Let's divide 52 by 24 first. </think>\n"
-                 '<answer> 2.1667 (approximately) </answer>\n'
-                 '<think> Then add 60 to this value. </think>\n'
-                 '<answer> 2.1667 + 60 = 62.1667 </answer>\n'
-                 '<think> Next, subtract 38 from it. </think>\n'
-                 '<answer> 62.1667 - 38 = 24.1667 </answer>\n'
-                 "This is also not correct. Let's try the initial approach a "
-                 'bit differently, focusing on the operation performed before '
-                 'division for 52/24.\n'
-                 '<answer> (60 - 24) * 2 + 38 </answer>\n'
-                 'Let me verify this step-by-step again:\n'
-                 '<think> First, subtraction of 24 from 60. </think>\n'
-                 '<answer> 36 </answer>\n'
-                 '<think> Then, multiplying the result by 2. </think>\n'
-                 '<answer> 36 * 2 = ',
-                 ' Considering the numbers we have, 52 seems slightly larger '
-                 'than the others. Using subtraction might lead us to bring '
-                 'down the number to a more manageable level. If we subtract '
-                 '24 from 52, we get 28. Now we need another number that can '
-                 'bring the equation to 98 with 28. The next number we have is '
-                 '60, and 60 minus 28 equals 32. Now we need 66 to make 98 (98 '
-                 '- 32 = 66). Looking at the remaining numbers, we can achieve '
-                 '66 by multiplying 24 by 2.5, which is the same as dividing '
-                 'by 2 and then multiplying by 5. Hence, to get from 24 to 60, '
-                 'we need to divide 24 by 2, which leaves us with 12. But we '
-                 'need 60, not 12. So, we have to think differently.</think>\n'
-                 "Instead, let's focus on using the numbers in order and their "
-                 'sum, which is 154 (24 + 38 + 52 + 60). We can reduce the sum '
-                 'to our target:\n'
-                 '<answer> (52 - 24) * 2 + 60 / 52 </answer>\n'
-                 'Let me verify:\n'
-                 '<think> First, we calculate 52 - 24 which equals 28.\n'
-                 'Then, multiplying 28 by 2 gives us 56.\n'
-                 'Now, we calculate 60 / 52 which is approximately 1.15.\n'
-                 'Finally, we add 56 and 1.15, which gives us 57.15 (slightly '
-                 'less than 98).\n'
-                 'This indicates a direct use of the numbers or combination '
-                 'might not work as initially thought, but we can try another '
-                 'approach.</think>\n'
-                 'After re-checking, one approach that works is:\n'
-                 '<answer> 60 - (24 - 38) </answer>\n'
-                 "Let's verify this:\n"
-                 '<think> We first evaluate the subtraction inside the '
-                 'parenthesis: 24 - 38 = -14.\n'
-                 'Then we subtract -14 from 60, which is the same as adding 14 '
-                 'to 60.\n'
-                 'Therefore, 60 - (-14) = 60 + 14 = 74 (which is not 98).\n'
-                 'We realize this approach',
-                 'First, I need to find a combination of two numbers so that '
-                 'their sum or difference equals 98. However, the largest sum '
-                 'we can get with the options is 52 + 60 = 112, which is too '
-                 'high. So, one of the numbers must be subtracted from 98. '
-                 "Let's try subtracting smaller numbers from 98: 98 - 24 = 74, "
-                 '98 - 38 = 60, and 98 - 52 = 46. We need 46 or 60. 46 is less '
-                 "suitable as it isn't in our set. That leaves us with "
-                 '60.</think>\n'
-                 'Now, since the remaining number is 60 and we have 24, 38, '
-                 'and 52 left each only once, we need to use multiplication or '
-                 'division to get 24 from 60. Dividing 60 by 2 gives us 30, '
-                 'which with 38 as is gives us 48. Further, multiplying 48 by '
-                 '24 is 1152, clearly too large. Instead, we might want to do '
-                 "60/2*24 should give 24, since the 52 and 38 remain. Let's "
-                 'test this.\n'
-                 '<answer> (60 / 2) * 24 - 38 </answer>\n'
-                 '</think> Solving this, we get:\n'
-                 '<answer> (60 / 2) * 24 - 38 = 30 * 24 - 38 = 720 - 38 = 682 '
-                 '- 38 = 644 - 38 = 606 - 38 = 568 - 38 = 530 - 38 = 492 - 38 '
-                 '= 454 - 38 = 416 - 38 = 378 - 38 = 340 - 38 = 302 - 38 = 264 '
-                 '- 38 = 226 - 38 = 188 - 38 = 150 - 38 = 112 - 38 = 74 - 38 = '
-                 '36 - 3',
-                 ' We want to use the numbers [24, 38, 52, 60] to make an '
-                 'equation equal to 98. We can try different combinations of '
-                 'the operations and numbers. One approach is to use division, '
-                 'since it can potentially reduce the value of a larger number '
-                 "to a smaller one, allowing us to get closer to 98. Let's "
-                 'look at the numbers: 60/52 seems to be a reasonable '
-                 'candidate to reduce 60 further, thinking that 52 could be '
-                 'used in some arithmetic next. Pairing this with the other '
-                 'numbers, we can test: 60/52 + 38 + 24. Remembering to use '
-                 'each number only once, and restricting ourselves to only '
-                 'basic arithmetic operations, this seems feasible. </think>\n'
-                 "Let's calculate it out: <answer> (60 / 52) + 38 + 24 "
-                 '</answer>\n'
-                 "</think> Now, let's perform the calculation: <answer> (60 / "
-                 '52) + 38 + 24 = 1.1538 + 38 + 24 = 1.15 + 62 = 63.15 '
-                 '</answer>\n'
-                 '</think> The number 63.15 is not 98, so I need to find '
-                 "another arrangement. Let's try another combination involving "
-                 'multiplication and addition: (52 - 38) * 60 / 24 + 24.\n'
-                 "Let's calculate it:  \n"
-                 '<answer> (52 - 38) * 60 / 24 + 24 </answer>\n'
-                 '</think> Perform the calculation:  \n'
-                 '<answer> (14 * 60) / 24 + 24 </answer>\n'
-                 '<answer> 840 / 24 + 24 </answer>\n'
-                 '<answer> 35 + 24 </answer>\n'
-                 '<answer> 59 </answer> \n'
-                 "This also doesn't give us the result 98. Let's give another "
-                 'trial: \n'
+                 "Next, I notice that 68 - 18 = 50, which is close to 57. Then, I'll use division and subtraction to make a fine adjustment. \n"
+                 '<answer>(68 - 18) / 56 + 85 - 68 = 57</answer> \n'
                  '\n'
-                 "(now, let's try another combination): (52 + 24) * (60 / "
-                 '38).\n'
+                 'However, on calculation, this results in:\n'
+                 '<answer>50 / 56 + 85 - 68 = 4.2857 + 85 - 68 ≈ 21.2857 <answer>\n'
                  '\n'
-                 "Let's calculate it:  \n"
-                 '<answer> (52 + 24) * (60 / 38) </answer>\n'
+                 "This doesn't result in 57, so I need to rethink my approach. Let's try 85 - 68 = 17. Then, I can add 18 and subtract 56 to get close to 57.\n"
+                 '<answer>(85 - 68) + 18 - 56 = 57</answer>\n'
+                 '\n'
+                 "Now, let's verify this equation.\n"
                  '</think>\n'
-                 'Perform the calculation:  \n'
-                 '<answer> 76 * (60 /',
-                 "First, let's consider the target number 98. We have four "
-                 'numbers: 24, 38, 52, and 60 which we need to use to reach '
-                 '98. We can start with a mix of operations like addition, '
-                 'subtraction, and multiplication. Considering the largest '
-                 "number is 60, it's a good idea to start with 60 to reduce "
-                 'the gap to 38.</think>\n'
-                 'We can try forming an equation like:\n'
-                 '(60 - ) * or + \n'
-                 'We know 60 - one of the other numbers will presumably yield '
-                 'us the correct sufix to obtain 98 after further numerical '
-                 'operations.\n'
-                 '<think>The multiplication or addition sign is tricky here '
-                 'because adding the number 60 earlier would already sum up a '
-                 'large number. Instead, subtraction is more suitable once we '
-                 "calculate an appropriate subtrahend. Let's leave this as 60 "
-                 '- _ now and multiply/add later if needed.</think>\n'
-                 'We need a large subtrahend to reduce 60 to a number close to '
-                 'but less than 38 that we can then add to reach 98.\n'
-                 '<think>Looking at the numbers. Subtraction by 22 (38 - 16 '
-                 "which equals 22) using 38 would give us 28 (60 - 38). Let's "
-                 'try:\n'
-                 '60 - 38 * </think>\n'
-                 'Hmm, 38 * 2 is already 76, and we need a smaller number to '
-                 'reach 98. Another subtrahend might work better.\n'
-                 "Instead, let's try:\n"
-                 '60 - 24 + </think> Here, 60 - 24 equals 36. Now we need to '
-                 'find a number such that:\n'
-                 '36 + _ = 98.\n'
-                 '<answer>36 + 62</answer> is incorrect, because 62 is not in '
-                 "our list. It seems the previous steps need revamping. Let's "
-                 'go back and simplify.\n'
-                 '<answer>60 - 24 + 38</answer>\n'
-                 'This gives us 60 - 24 = 36 and 36 + 38 = 74 which is still '
-                 'too low, but 60 - 24 + 52 would be appropriate:\n'
-                 '<answer>60 - 24 + 52</answer>\n'
-                 'This equation equals 98 because:\n'
-                 '98 = 60'],
- 'expression': ['(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((32 - 31) + 6) + 3)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)',
-                '(((52 - 38) + 60) + 24)'],
-'completion_ids': [
-        [5338, 11, 1077, 594, 2908, 429, 582, 646, 990, 1817, 1372, 1172, 3055, 323, 6770, 34784, 7525, 13, 1205, 1184, 311, 633, 220, 16, 15, 700, 315, 279, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 220, 18, 13, 1205, 1184, 311, 1744, 92296, 911, 892, 1372, 311, 990, 304, 892, 5666, 311, 5545, 279, 2169, 3918, 26865, 397, 12549, 220, 18, 16, 374, 18093, 311, 220, 18, 17, 11, 1231, 358, 1430, 32256, 287, 220, 18, 16, 504, 220, 18, 17, 1156, 30, 1096, 1035, 2968, 601, 220, 16, 11, 323, 1221, 7842, 220, 18, 11450, 264, 6534, 429, 2578, 2990, 601, 311, 1039, 2169, 624, 27, 9217, 29, 320, 18, 17, 481, 220, 18, 16, 8, 488, 220, 18, 284, 220, 17, 488, 220, 18, 284, 220, 20, 690, 9217, 397, 2623, 5008, 1052, 13, 18765, 582, 1265, 39075, 1039, 5486, 26, 1077, 752, 1430, 84192, 220, 21, 323, 220, 18, 311, 633, 220, 16, 23, 11, 323, 1221, 32256, 429, 504, 220, 18, 17, 311, 633, 279, 12685, 1102, 510, 27, 9217, 29, 220, 18, 17, 481, 320, 21, 353, 220, 18, 8, 284, 220, 18, 17, 481, 220, 16, 23, 284, 220, 16, 19, 690, 9217, 397, 23322, 537, 1290, 13, 6771, 752, 1431, 1430, 7842, 220, 21, 323, 220, 18, 11, 323, 1221, 32256, 429, 504, 220, 18, 17, 13, 1096, 1035, 5274, 601, 448, 458, 5666, 389, 220, 18, 16, 429, 374, 3265, 311, 220, 16, 15, 510, 27, 9217, 29, 320, 18, 17, 481, 320, 21, 488, 220, 18, 593, 284, 220, 18, 17, 481, 220, 24, 284, 220, 17, 18, 690, 9217, 397, 80486, 11, 1077, 752, 1430, 34171, 1493, 3059, 553, 7842, 279, 3871, 504, 1378, 3681, 7525, 510, 27, 9217, 29, 320, 18, 17, 481, 220, 24, 8, 488, 320, 21, 353, 220, 18, 8, 284, 220, 17, 18, 488, 220, 16, 23, 284, 220, 19, 16, 690, 9217, 397, 4064, 315, 1493, 27459, 614, 6439, 773, 3041, 13, 358, 4411, 358, 614, 8643, 264, 5593, 835, 13, 6771, 752, 39075, 510, 2679, 358, 30270, 220, 21, 323, 220, 18, 311, 633, 220, 16, 23, 323, 32256, 429, 504, 220, 18, 17, 11, 358, 633, 220, 16, 19, 13, 4695, 11, 421, 358, 912, 429, 311, 220, 18, 16, 594, 897, 11, 220, 16, 23, 488, 220, 18, 16, 284, 220, 19, 24, 11, 892, 374, 3041, 504, 220, 16, 15, 624, 3983, 421, 358, 5602, 10078, 11, 358, 646, 1744, 315, 345, 27, 9217, 29, 320, 18, 353, 220, 21, 8, 488, 320, 18, 17, 481, 220, 18, 16, 8, 284, 220, 16, 23, 488, 220, 16, 284, 220, 16, 24, 690, 9217, 397, 16, 24, 374, 2058, 537, 220, 16, 15, 11, 358, 1430, 264, 2155, 5486, 510, 27, 9217, 29, 320, 18, 16, 488, 220, 21, 8, 481, 220, 18, 17, 488, 220, 18, 284, 220, 18, 22, 481, 220, 18, 17, 488, 220, 18, 284, 220, 20, 488, 220, 18, 284, 220, 23, 690, 9217, 397, 40, 1079, 3265, 11, 714, 537, 5008, 1052] ,
-        [12549, 1039, 5795, 374, 311, 1855, 458, 23606, 429, 16819, 220, 16, 15, 1667, 279, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 323, 220, 18, 6896, 3055, 448, 6770, 34784, 7525, 11, 358, 1265, 2908, 27459, 429, 2578, 2968, 752, 3265, 311, 279, 1102, 13, 12091, 12804, 438, 264, 1714, 311, 7949, 279, 1372, 11, 2474, 220, 18, 17, 323, 220, 18, 16, 525, 14138, 3460, 323, 220, 21, 323, 220, 18, 525, 2613, 5109, 3918, 26865, 397, 12509, 6577, 220, 18, 17, 553, 220, 18, 686, 2968, 752, 264, 1372, 3265, 311, 220, 16, 15, 11, 714, 537, 6896, 220, 16, 15, 13, 6771, 594, 1430, 510, 27, 9217, 29, 320, 18, 17, 608, 220, 18, 8, 488, 220, 18, 481, 220, 21, 690, 9217, 397, 7039, 358, 3278, 11047, 419, 7493, 510, 27, 9217, 29, 320, 16, 15, 13, 21, 21, 21, 32574, 488, 220, 18, 481, 220, 21, 690, 9217, 397, 785, 1102, 374, 13187, 220, 22, 13, 21, 21, 21, 39768, 892, 374, 537, 6896, 220, 16, 15, 13, 1084, 4977, 358, 1184, 311, 31734, 433, 847, 8282, 13, 16246, 358, 1184, 458, 4734, 1102, 315, 220, 16, 15, 11, 432, 2578, 1850, 311, 990, 46444, 476, 1008, 7525, 311, 5602, 279, 1372, 4751, 1091, 12804, 13, 690, 26865, 397, 10061, 594, 1430, 12831, 46444, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 18, 16, 481, 220, 21, 488, 220, 18, 481, 220, 18, 17, 690, 9217, 397, 48214, 419, 1558, 537, 975, 2474, 279, 1973, 315, 7525, 323, 279, 2750, 653, 537, 2990, 311, 220, 16, 15, 624, 10061, 594, 1430, 2441, 10601, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 18, 488, 220, 21, 481, 220, 18, 16, 690, 9217, 397, 10061, 594, 11047, 510, 27, 9217, 29, 320, 16, 15, 13, 21, 21, 21, 32574, 488, 220, 21, 481, 220, 18, 16, 284, 220, 16, 22, 481, 220, 18, 16, 284, 481, 16, 19, 690, 9217, 397, 12, 16, 19, 374, 537, 279, 5795, 624, 10061, 594, 1430, 2441, 30339, 10601, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 21, 488, 220, 18, 16, 481, 220, 18, 690, 9217, 397, 10061, 594, 11047, 510, 27, 9217, 29, 320, 20, 13, 18, 18, 18, 32574, 488, 220, 18, 16, 481, 220, 18, 284, 220, 18, 21, 13, 18, 18, 18, 1112, 481, 220, 18, 284, 220, 18, 18, 13, 18, 18, 18, 1112, 690, 9217, 397, 18, 18, 13, 18, 18, 18, 1112, 1558, 537, 5545, 220, 16, 15, 2987, 624, 82796, 1101, 279, 5109, 2661, 11, 279, 18093, 358, 646, 633, 73045, 311, 220, 16, 15, 374, 537, 264, 7678, 5256, 476, 75240, 315, 678, 5109, 4152, 311, 36988, 36501, 7086, 9848, 96376, 13, 3017, 1714, 315, 4460, 2176, 6770, 7525, 323, 43014, 279, 1376, 1969, 387, 304, 1246, 358, 15963, 279, 5109, 10277, 7952, 311, 614, 1012, 63381, 13, 715, 22043, 279, 3491, 16982, 323, 279, 6770, 16170, 315, 34784, 7525, 11, 432, 4977, 1741, 458, 23606, 4157, 387, 14122, 892, 16819, 6896, 220, 16, 15] ,
-        [358, 1184, 311, 15963, 279, 5109, 1667, 6770, 34784, 7525, 311, 633, 220, 16, 15, 13, 576, 5109, 2661, 525, 508, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 220, 18, 936, 358, 3278, 1430, 311, 2736, 279, 7525, 304, 264, 1616, 429, 1910, 752, 705, 311, 990, 279, 5109, 438, 4362, 13, 58556, 11, 279, 5109, 2803, 650, 47142, 448, 2118, 5666, 3059, 6388, 311, 220, 16, 15, 13, 690, 26865, 397, 7039, 11, 1077, 594, 1430, 34171, 5109, 304, 264, 2155, 11566, 510, 12, 358, 5293, 429, 220, 18, 17, 323, 220, 18, 16, 11, 979, 10856, 646, 2968, 752, 220, 18, 18, 476, 220, 18, 16, 13, 4354, 11, 279, 6888, 7525, 448, 279, 1008, 5109, 1513, 944, 7540, 220, 16, 15, 624, 12, 12090, 11, 358, 19091, 220, 18, 16, 481, 220, 18, 284, 220, 17, 23, 624, 12, 4695, 358, 1184, 264, 1616, 311, 4623, 990, 220, 21, 323, 220, 16, 311, 1281, 220, 17, 13, 1096, 1035, 2968, 752, 220, 17, 23, 481, 220, 16, 15, 284, 220, 16, 23, 624, 12, 1988, 279, 8311, 75240, 15860, 220, 21, 323, 220, 16, 374, 220, 21, 481, 220, 16, 284, 220, 20, 624, 1986, 16148, 4977, 15114, 13, 6771, 752, 1430, 2441, 5486, 510, 12, 358, 22986, 429, 421, 358, 15963, 220, 18, 323, 220, 21, 11, 807, 2968, 220, 24, 624, 12, 220, 18, 17, 481, 220, 24, 284, 220, 17, 18, 624, 12, 220, 17, 18, 481, 220, 18, 284, 220, 17, 15, 624, 12, 4695, 11, 582, 1184, 220, 16, 15, 803, 11, 773, 220, 17, 15, 481, 220, 16, 15, 284, 220, 15, 624, 11209, 11, 419, 3171, 944, 5285, 448, 1667, 678, 5109, 3055, 13, 1032, 2682, 5853, 279, 23607, 510, 12, 220, 18, 16, 481, 220, 18, 284, 220, 17, 23, 624, 12, 220, 18, 17, 481, 220, 17, 23, 284, 220, 19, 624, 12, 2308, 5798, 3419, 5510, 311, 633, 311, 220, 16, 15, 448, 1493, 9664, 3059, 1667, 220, 21, 476, 220, 18, 624, 22043, 419, 26403, 11, 432, 7952, 429, 279, 3383, 7460, 264, 4911, 10601, 476, 264, 3151, 8500, 537, 10457, 553, 847, 7354, 13, 4354, 11, 553, 18950, 264, 19819, 5486, 323, 42803, 28410, 2118, 27459, 15860, 678, 11127, 11, 582, 646, 1430, 311, 1477, 264, 6291, 510, 12, 55777, 220, 21, 353, 220, 16, 284, 220, 21, 11, 714, 582, 1184, 264, 1102, 315, 220, 15, 624, 12, 1032, 2682, 5853, 678, 11, 34171, 220, 18, 16, 481, 220, 18, 284, 220, 17, 23, 11, 323, 220, 18, 17, 481, 220, 17, 23, 284, 220, 19, 3171, 944, 2990, 311, 220, 16, 15, 504, 9664, 5109, 624, 82796, 1493, 9481, 11, 432, 4977, 902, 23606, 34171, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 220, 18, 448, 6770, 7525, 3055, 646, 1102, 304, 220, 16, 15, 624, 522, 26865, 397, 22043, 419, 15048, 11, 1077, 594, 1430, 458, 10555, 11, 700, 8668, 10603, 12625, 5486, 1667, 6770, 34784, 714, 312, 750, 5740, 279, 2500, 19624, 304, 264, 2155, 11566, 11] ,
-        [5338, 398, 11, 358, 1744, 911, 279, 5109, 429, 1265, 387, 54215, 311, 633, 3265, 311, 220, 16, 15, 13, 5624, 220, 18, 17, 374, 264, 3460, 1372, 323, 1410, 6707, 387, 279, 1102, 315, 264, 46444, 421, 3204, 13, 5624, 220, 21, 374, 264, 1661, 1372, 369, 5256, 476, 75240, 6707, 13, 576, 1372, 220, 18, 16, 374, 12128, 311, 220, 18, 17, 1091, 220, 21, 11, 773, 358, 646, 32256, 476, 912, 432, 476, 990, 432, 304, 264, 12804, 15048, 13, 5624, 220, 18, 374, 264, 9155, 1372, 429, 2765, 944, 1281, 264, 6765, 6672, 553, 5086, 3918, 26865, 397, 1654, 1366, 279, 1102, 311, 387, 220, 16, 15, 13, 1416, 582, 1401, 518, 279, 2606, 9099, 518, 1424, 11, 1667, 220, 18, 17, 323, 17719, 432, 553, 1045, 3311, 686, 4363, 2968, 601, 429, 13, 16246, 220, 18, 16, 374, 264, 3265, 1372, 311, 220, 18, 17, 11, 421, 582, 32256, 220, 18, 16, 504, 220, 18, 17, 11, 582, 633, 220, 16, 382, 7039, 220, 18, 374, 2115, 11, 323, 582, 646, 990, 419, 369, 1039, 23606, 13, 715, 36192, 5740, 1493, 11, 432, 4977, 220, 18, 17, 481, 220, 18, 16, 488, 220, 18, 1410, 975, 438, 220, 16, 488, 220, 18, 284, 220, 19, 11, 714, 582, 1414, 419, 3171, 944, 6144, 220, 16, 15, 13, 1205, 1184, 311, 1744, 304, 3793, 315, 46444, 476, 12804, 382, 2679, 582, 990, 279, 9664, 1372, 320, 18, 16, 8, 438, 279, 49109, 323, 279, 1008, 5109, 320, 18, 17, 11, 220, 21, 11, 220, 18, 8, 438, 279, 45880, 11, 582, 1231, 633, 12128, 311, 279, 12685, 4226, 382, 16429, 12804, 11, 320, 18, 17, 608, 220, 18, 17, 353, 220, 18, 8, 488, 220, 21, 9521, 601, 304, 279, 52751, 315, 279, 2169, 624, 10061, 594, 11047, 25, 320, 18, 17, 608, 220, 18, 17, 8, 353, 220, 18, 374, 3520, 220, 18, 11, 5519, 220, 21, 6696, 220, 24, 382, 14037, 5486, 1410, 387, 311, 1430, 320, 21, 353, 220, 18, 8, 488, 320, 18, 17, 608, 220, 18, 16, 568, 8704, 419, 686, 21058, 12804, 11, 1077, 594, 1490, 432, 304, 1917, 624, 522, 26865, 397, 27, 9217, 2235, 21, 353, 220, 18, 8, 488, 320, 18, 17, 608, 220, 18, 16, 12533, 9217, 29, 151645] ,
-        [5338, 11, 358, 1184, 311, 8253, 1246, 311, 15963, 279, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 323, 220, 18, 311, 6144, 220, 16, 15, 13, 362, 1661, 1992, 311, 1191, 374, 7842, 264, 1372, 311, 2441, 311, 633, 3265, 311, 220, 16, 15, 13, 358, 5293, 429, 220, 18, 17, 323, 220, 18, 16, 525, 1602, 3265, 311, 220, 18, 18, 11, 323, 220, 18, 16, 488, 220, 18, 284, 220, 18, 19, 11, 892, 374, 264, 1661, 9144, 1576, 582, 646, 1221, 1477, 264, 1616, 311, 7949, 432, 13, 93210, 287, 220, 21, 4977, 1075, 264, 7785, 5754, 438, 432, 686, 633, 601, 10078, 3685, 220, 18, 19, 311, 35761, 220, 16, 15, 13, 2055, 582, 614, 25, 690, 26865, 397, 27, 9217, 2235, 18, 16, 488, 220, 18, 8, 481, 220, 21, 522, 9217, 29, 151645] ,
-        [1205, 1184, 311, 1855, 458, 23606, 1667, 279, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 323, 220, 18, 3055, 1817, 11, 1741, 429, 279, 1102, 16819, 220, 16, 15, 13, 715, 10061, 594, 1156, 2908, 279, 7525, 429, 646, 1492, 601, 11075, 279, 2567, 1102, 13, 58712, 1693, 323, 12804, 646, 1492, 7949, 3460, 5109, 11, 1393, 5256, 323, 75240, 646, 1492, 7500, 279, 1102, 13, 715, 82796, 279, 2169, 1372, 311, 387, 220, 16, 15, 11, 582, 2578, 1401, 518, 27459, 315, 5256, 323, 75240, 429, 1410, 975, 1632, 448, 1039, 5109, 11, 10282, 304, 3971, 429, 582, 3003, 1172, 29235, 3204, 27459, 315, 279, 5109, 323, 7525, 320, 18, 7525, 353, 220, 19, 5109, 353, 320, 19, 0, 71949, 568, 715, 3966, 4650, 5486, 1035, 387, 311, 1430, 311, 7949, 476, 15963, 5109, 1119, 264, 897, 3265, 311, 220, 16, 15, 11, 323, 1221, 7500, 448, 279, 9664, 7525, 3918, 339, 766, 397, 22043, 279, 5109, 11, 825, 1616, 311, 5486, 419, 374, 311, 7949, 279, 1372, 220, 18, 17, 438, 1753, 438, 3204, 11, 1221, 51043, 279, 2732, 510, 27, 9217, 29, 320, 18, 17, 481, 220, 18, 16, 8, 608, 220, 18, 488, 220, 21, 690, 9217, 397, 7039, 11, 1077, 594, 1438, 1495, 1246, 419, 4278, 510, 12, 220, 18, 17, 481, 220, 18, 16, 284, 220, 16, 198, 12, 220, 16, 608, 220, 18, 284, 220, 15, 13, 18, 45250, 198, 12, 220, 15, 13, 18, 45250, 488, 220, 21, 284, 220, 21, 13, 18, 45250, 198, 2132, 7952, 429, 419, 5486, 1521, 537, 2990, 601, 311, 279, 1372, 220, 16, 15, 13, 6771, 594, 1430, 264, 2155, 10601, 315, 7525, 448, 279, 5109, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 18, 481, 220, 21, 488, 220, 18, 16, 690, 9217, 397, 60179, 419, 1495, 510, 12, 220, 18, 17, 608, 220, 18, 21103, 230, 220, 16, 15, 13, 21, 21, 45250, 198, 12, 220, 16, 15, 13, 21, 21, 481, 220, 21, 21103, 230, 220, 19, 13, 21, 21, 198, 12, 220, 19, 13, 21, 21, 488, 220, 18, 16, 284, 220, 18, 20, 13, 21, 21, 198, 1986, 1083, 1558, 537, 2432, 1039, 2169, 315, 220, 16, 15, 13, 6771, 594, 1430, 264, 2155, 6021, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 18, 16, 488, 220, 21, 481, 220, 18, 690, 9217, 397, 60179, 419, 1495, 510, 12, 220, 18, 17, 608, 220, 18, 16, 21103, 230, 220, 16, 198, 12, 220, 16, 488, 220, 21, 284, 220, 22, 198, 12, 220, 22, 481, 220, 18, 284, 220, 19, 198, 23322, 11, 419, 374, 537, 4396, 13, 6771, 594, 1430, 825, 1537, 10601, 510, 27, 9217, 29, 220, 18, 17, 608, 220, 18, 16, 488, 220, 21, 608, 220, 18, 690, 9217, 397, 60179, 419, 1495, 510, 12, 220, 18, 17, 608, 220, 18, 16, 21103, 230, 220, 16, 198, 12, 220, 21, 608, 220, 18, 284, 220, 17, 198, 12, 220, 16, 488, 220, 17, 284, 220, 18, 198, 785, 3681, 13553, 525, 3265] ,
-        [358, 1184, 311, 1477, 264, 10601, 315, 279, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 323, 220, 18, 429, 18304, 1119, 458, 34784, 23606, 3232, 1095, 311, 220, 16, 15, 13, 358, 686, 1430, 1667, 27459, 315, 46444, 11, 12804, 11, 5256, 11, 323, 75240, 311, 1490, 892, 825, 16819, 220, 16, 15, 13, 8704, 220, 16, 15, 374, 264, 2613, 1372, 11, 358, 686, 1191, 448, 6770, 27459, 21080, 389, 46444, 323, 12804, 1156, 13, 14489, 646, 13581, 633, 752, 12128, 311, 220, 16, 15, 553, 3259, 279, 5109, 9155, 11, 773, 1077, 594, 2908, 429, 1156, 3918, 26865, 397, 6025, 17423, 17879, 510, 27, 9217, 29, 320, 18, 17, 608, 220, 18, 16, 8, 488, 220, 18, 488, 220, 21, 690, 9217, 1339, 40, 13686, 429, 34888, 429, 1973, 4278, 13, 6771, 594, 1438, 432, 1495, 510, 12, 220, 18, 17, 608, 220, 18, 16, 21103, 230, 220, 16, 13, 15, 18, 17, 320, 79988, 432, 12128, 311, 220, 16, 340, 12, 5005, 358, 912, 220, 18, 11, 892, 3643, 432, 220, 19, 13, 15, 18, 17, 198, 12, 17375, 11, 7842, 220, 21, 311, 220, 19, 13, 15, 18, 17, 16819, 220, 16, 15, 13, 15, 18, 17, 11, 892, 374, 1602, 3265, 311, 1039, 2169, 315, 220, 16, 15, 979, 51562, 382, 12549, 279, 3491, 29102, 279, 5109, 646, 1172, 387, 1483, 3055, 11, 279, 7525, 6, 1973, 374, 37661, 11, 8450, 279, 1590, 23606, 374, 510, 27, 9217, 29, 320, 18, 17, 608, 220, 18, 16, 8, 488, 220, 18, 488, 220, 21, 690, 9217, 1339, 3036, 279, 4226, 311, 279, 23606, 374, 366, 9217, 29, 220, 16, 15, 690, 9217, 14276, 151645] ,
-        [358, 1184, 311, 2525, 705, 448, 458, 23606, 1667, 279, 2661, 5109, 220, 18, 17, 11, 220, 21, 11, 220, 18, 16, 11, 323, 220, 18, 429, 16819, 220, 16, 15, 13, 3776, 2989, 8282, 374, 311, 1744, 911, 3204, 27459, 315, 34784, 7525, 429, 646, 2990, 752, 311, 419, 2169, 897, 13, 6771, 594, 1191, 448, 1372, 14609, 7455, 323, 1490, 1246, 429, 646, 975, 700, 13, 690, 26865, 397, 27, 9217, 29, 320, 18, 17, 488, 220, 18, 16, 481, 220, 18, 17, 8, 608, 220, 18, 690, 9217, 397, 522, 26865, 397, 7039, 11, 1077, 594, 10146, 279, 12218, 4815, 419, 23606, 624, 522, 26865, 397, 27, 26865, 29, 5512, 11, 358, 3278, 11047, 279, 5256, 4766, 279, 31642, 25, 715, 18, 17, 488, 220, 18, 16, 284, 220, 21, 18, 13, 715, 12209, 358, 3278, 32256, 220, 18, 17, 504, 279, 1102, 510, 21, 18, 481, 220, 18, 17, 284, 220, 18, 16, 13, 715, 23949, 11, 358, 3278, 21749, 279, 1102, 553, 220, 18, 510, 18, 16, 608, 220, 18, 284, 220, 16, 15, 13, 18, 18, 18, 18, 320, 8206, 19531, 311, 220, 16, 15, 979, 12831, 279, 7525, 323, 1973, 568, 715, 1986, 23606, 67901, 279, 2971, 315, 1667, 1817, 1372, 6896, 3055, 323, 12942, 304, 220, 16, 15, 13, 690, 26865, 397, 27, 9217, 29, 320, 18, 17, 488, 220, 18, 16, 481, 220, 18, 17, 8, 608, 220, 18, 690, 9217, 29, 151645] ,
-        [5512, 11, 358, 686, 20961, 1817, 1372, 311, 1490, 421, 358, 646, 1477, 894, 10601, 429, 1231, 975, 13, 30370, 279, 9155, 5109, 2578, 2968, 264, 220, 18, 15, 476, 2686, 11, 892, 686, 1184, 311, 387, 1865, 705, 369, 553, 8131, 7525, 476, 5109, 13, 58712, 1693, 323, 12804, 1410, 1492, 304, 42368, 279, 36398, 476, 11799, 311, 633, 220, 24, 23, 624, 82796, 279, 2169, 220, 24, 23, 11, 1077, 594, 1490, 421, 358, 646, 990, 279, 8131, 5109, 311, 1281, 419, 975, 11, 438, 807, 686, 614, 279, 1429, 10173, 389, 279, 23606, 13, 22454, 5740, 220, 21, 15, 323, 220, 18, 23, 646, 633, 3265, 13, 1416, 582, 32256, 220, 18, 23, 504, 220, 21, 15, 11, 429, 6696, 220, 17, 17, 13, 4354, 11, 582, 3278, 1184, 1378, 5109, 448, 264, 1985, 476, 2629, 315, 220, 19, 19, 311, 5545, 220, 24, 23, 13, 9295, 705, 11, 220, 17, 19, 323, 220, 20, 17, 13, 11733, 5109, 912, 705, 311, 220, 22, 21, 11, 892, 4977, 2238, 1550, 13, 690, 26865, 397, 13708, 766, 29, 16246, 279, 21568, 429, 678, 5109, 1969, 387, 1483, 1172, 3055, 11, 2441, 4522, 374, 311, 990, 27690, 7101, 438, 458, 5107, 75678, 5666, 13, 1096, 1035, 2138, 369, 264, 3460, 5263, 304, 897, 11, 1075, 84192, 2326, 5109, 553, 220, 17, 10856, 11, 311, 5545, 220, 24, 23, 13, 220, 20, 17, 646, 13581, 387, 52263, 311, 5545, 220, 17, 22, 15, 19, 11, 892, 4977, 2238, 1550, 624, 11209, 11, 1077, 594, 3060, 23966, 448, 279, 9664, 5109, 553, 5285, 287, 1105, 34901, 448, 279, 6770, 7525, 13, 1416, 582, 1490, 894, 27459, 11, 8365, 264, 5390, 5392, 374, 311, 990, 220, 18, 23, 438, 264, 11051, 3692, 13, 1752, 2867, 11, 49702, 220, 21, 15, 553, 220, 17, 320, 1921, 2500, 8, 476, 59015, 825, 315, 279, 9155, 5109, 4977, 25383, 624, 10061, 594, 1430, 32256, 287, 220, 18, 23, 504, 220, 20, 17, 1156, 11, 7086, 220, 16, 19, 13, 3085, 220, 17, 19, 11, 582, 3278, 1430, 311, 5545, 220, 23, 19, 476, 220, 21, 15, 14, 17, 311, 2629, 220, 24, 23, 13, 8765, 6577, 220, 21, 15, 553, 220, 17, 323, 7842, 220, 17, 19, 1558, 975, 11, 7086, 601, 1378, 220, 18, 15, 82, 13, 1205, 525, 518, 220, 24, 15, 448, 1493, 27459, 624, 2164, 6711, 264, 30559, 1741, 438, 7842, 220, 17, 504, 220, 18, 23, 323, 24047, 1790, 311, 220, 17, 19, 3363, 582, 4172, 633, 220, 17, 21, 320, 18, 23, 488, 220, 17, 568, 4695, 279, 9664, 220, 17, 19, 3880, 311, 2629, 311, 220, 24, 23, 481, 220, 17, 21, 284, 220, 22, 17, 13, 1752, 220, 17, 19, 323, 220, 16, 17, 11, 3238, 448, 220, 16, 17, 504, 220, 18, 23, 320, 267, 657, 311, 387, 220, 17, 21, 8, 646, 30270, 311, 220, 18, 23, 481, 220, 17, 21, 284, 220, 16, 17, 323, 912, 311, 633, 220, 20, 17, 320, 45484, 1483, 8, 4623, 21937, 4933, 419, 1459, 11508, 27112, 438, 1667, 264, 4285] ,
-        [5338, 358, 3278, 2908, 279, 1429, 30339, 7525, 13, 16246, 279, 2169, 1372, 220, 24, 23, 11, 582, 1184, 311, 1744, 911, 264, 10601, 315, 279, 2661, 5109, 13, 55777, 279, 5109, 220, 17, 19, 323, 220, 22, 19, 11, 421, 582, 646, 6923, 220, 22, 19, 1667, 220, 18, 23, 323, 220, 20, 17, 11, 279, 23606, 2578, 387, 220, 17, 19, 488, 320, 20, 17, 481, 220, 18, 23, 8, 284, 220, 24, 23, 13, 690, 26865, 397, 1654, 646, 11047, 220, 17, 19, 488, 320, 20, 17, 481, 220, 18, 23, 8, 323, 1779, 421, 432, 16819, 220, 24, 23, 510, 27, 9217, 29, 17, 19, 488, 320, 20, 17, 481, 220, 18, 23, 12533, 9217, 29, 715, 10061, 594, 653, 279, 34784, 510, 17, 19, 488, 320, 20, 17, 481, 220, 18, 23, 8, 284, 220, 17, 19, 488, 220, 16, 19, 284, 220, 18, 23, 198, 1654, 1490, 429, 279, 21937, 1558, 537, 6144, 220, 24, 23, 13, 6771, 594, 13186, 1008, 23607, 25, 690, 26865, 29, 55777, 582, 1184, 311, 5545, 220, 24, 23, 11, 264, 30428, 10555, 1035, 387, 1667, 46444, 323, 75240, 13, 1205, 646, 1281, 990, 315, 220, 17, 19, 323, 220, 19, 11, 14257, 504, 220, 18, 23, 323, 220, 20, 17, 304, 3602, 2441, 10601, 13, 690, 26865, 397, 16429, 220, 17, 19, 353, 220, 19, 284, 220, 24, 21, 323, 1221, 1101, 220, 17, 311, 3367, 279, 4362, 220, 24, 23, 510, 27, 9217, 29, 17, 19, 353, 220, 19, 488, 220, 17, 522, 9217, 397, 785, 34784, 369, 419, 1035, 387, 510, 17, 19, 353, 220, 19, 488, 220, 17, 284, 220, 24, 21, 488, 220, 17, 284, 220, 24, 23, 198, 1986, 9071, 1039, 2169, 1372, 13, 2055, 279, 6291, 374, 366, 9217, 29, 17, 19, 353, 220, 19, 488, 220, 17, 522, 9217, 14276, 151645] ,
-        [358, 1184, 311, 990, 1817, 1372, 320, 17, 19, 11, 220, 18, 23, 11, 220, 20, 17, 11, 323, 220, 21, 15, 8, 6896, 3055, 311, 5545, 279, 2169, 315, 220, 24, 23, 1667, 6770, 34784, 7525, 13, 21131, 518, 279, 5109, 11, 220, 20, 17, 374, 279, 7772, 11, 773, 432, 594, 264, 5390, 5916, 1459, 13, 30370, 432, 311, 220, 19, 21, 1035, 2968, 264, 6419, 2169, 11, 714, 220, 19, 21, 4436, 944, 304, 1039, 738, 13, 66703, 220, 19, 504, 220, 17, 19, 6696, 220, 17, 15, 11, 323, 220, 20, 17, 488, 220, 17, 15, 16819, 220, 22, 17, 11, 12678, 601, 12128, 311, 220, 24, 23, 13, 9295, 11, 311, 633, 504, 220, 22, 17, 311, 220, 24, 23, 11, 582, 1184, 220, 17, 21, 13, 1205, 646, 6851, 220, 17, 21, 448, 320, 18, 23, 481, 220, 20, 17, 568, 14301, 11, 279, 23606, 1035, 387, 220, 20, 17, 488, 220, 17, 15, 488, 320, 18, 23, 481, 220, 20, 17, 701, 892, 15491, 9606, 311, 220, 20, 17, 488, 220, 17, 15, 481, 220, 20, 17, 488, 220, 18, 23, 13, 1096, 15491, 9606, 311, 220, 17, 15, 488, 220, 18, 23, 11, 892, 16819, 279, 12685, 220, 20, 23, 5519, 220, 19, 15, 11, 13653, 12942, 304, 220, 24, 23, 13, 690, 26865, 397, 27, 9217, 29, 320, 20, 17, 488, 220, 17, 15, 488, 320, 18, 23, 481, 220, 20, 17, 593, 608, 220, 17, 284, 220, 24, 23, 690, 9217, 29, 151645] ,
-        [2014, 1855, 458, 23606, 1667, 279, 5109, 220, 17, 19, 11, 220, 18, 23, 11, 220, 20, 17, 11, 323, 220, 21, 15, 429, 16819, 220, 24, 23, 11, 358, 3278, 1156, 2908, 27459, 315, 7525, 323, 5109, 807, 646, 387, 10856, 448, 13, 3776, 11050, 1616, 1410, 387, 46444, 8110, 553, 75240, 476, 5256, 13, 27657, 448, 46444, 2474, 432, 28405, 279, 5109, 803, 13444, 13, 6771, 594, 1430, 7764, 26865, 397, 27, 9217, 29, 320, 20, 17, 353, 220, 21, 15, 8, 481, 220, 18, 23, 481, 220, 17, 19, 690, 9217, 397, 10061, 752, 10146, 419, 3019, 14319, 29208, 510, 27, 26865, 29, 5512, 11, 358, 3278, 30270, 220, 20, 17, 323, 220, 21, 15, 13, 690, 26865, 397, 27, 9217, 29, 220, 18, 16, 17, 15, 690, 9217, 397, 27, 26865, 29, 9295, 11, 358, 3278, 32256, 220, 18, 23, 504, 279, 1102, 13, 690, 26865, 397, 27, 9217, 29, 220, 18, 15, 23, 17, 690, 9217, 397, 27, 26865, 29, 17375, 11, 358, 3278, 32256, 220, 17, 19, 504, 279, 15274, 13, 690, 26865, 397, 27, 9217, 29, 220, 18, 15, 20, 23, 481, 220, 17, 19, 284, 220, 18, 15, 18, 19, 690, 9217, 397, 7039, 11, 419, 1102, 374, 3041, 3123, 504, 1039, 2169, 315, 220, 24, 23, 13, 6771, 594, 1430, 2441, 5486, 553, 21080, 803, 389, 12804, 13, 6771, 594, 21749, 220, 20, 17, 553, 220, 17, 19, 11, 323, 1221, 990, 279, 12942, 897, 3156, 448, 279, 9664, 1378, 5109, 624, 27, 9217, 29, 220, 20, 17, 608, 220, 17, 19, 488, 220, 21, 15, 481, 220, 18, 23, 690, 9217, 397, 10061, 752, 10146, 419, 3019, 14319, 29208, 1549, 510, 27, 26865, 29, 6771, 594, 21749, 220, 20, 17, 553, 220, 17, 19, 1156, 13, 690, 26865, 397, 27, 9217, 29, 220, 17, 13, 16, 21, 21, 22, 320, 96736, 8, 690, 9217, 397, 27, 26865, 29, 5005, 912, 220, 21, 15, 311, 419, 897, 13, 690, 26865, 397, 27, 9217, 29, 220, 17, 13, 16, 21, 21, 22, 488, 220, 21, 15, 284, 220, 21, 17, 13, 16, 21, 21, 22, 690, 9217, 397, 27, 26865, 29, 9295, 11, 32256, 220, 18, 23, 504, 432, 13, 690, 26865, 397, 27, 9217, 29, 220, 21, 17, 13, 16, 21, 21, 22, 481, 220, 18, 23, 284, 220, 17, 19, 13, 16, 21, 21, 22, 690, 9217, 397, 1986, 374, 1083, 537, 4396, 13, 6771, 594, 1430, 279, 2856, 5486, 264, 2699, 21303, 11, 21080, 389, 279, 5666, 10660, 1573, 12804, 369, 220, 20, 17, 14, 17, 19, 624, 27, 9217, 29, 320, 21, 15, 481, 220, 17, 19, 8, 353, 220, 17, 488, 220, 18, 23, 690, 9217, 397, 10061, 752, 10146, 419, 3019, 14319, 29208, 1549, 510, 27, 26865, 29, 5512, 11, 75240, 315, 220, 17, 19, 504, 220, 21, 15, 13, 690, 26865, 397, 27, 9217, 29, 220, 18, 21, 690, 9217, 397, 27, 26865, 29, 5005, 11, 84192, 279, 1102, 553, 220, 17, 13, 690, 26865, 397, 27, 9217, 29, 220, 18, 21, 353, 220, 17, 284, 220] ,
-        [55777, 279, 5109, 582, 614, 11, 220, 20, 17, 4977, 10078, 8131, 1091, 279, 3800, 13, 12091, 75240, 2578, 2990, 601, 311, 4446, 1495, 279, 1372, 311, 264, 803, 70028, 2188, 13, 1416, 582, 32256, 220, 17, 19, 504, 220, 20, 17, 11, 582, 633, 220, 17, 23, 13, 4695, 582, 1184, 2441, 1372, 429, 646, 4446, 279, 23606, 311, 220, 24, 23, 448, 220, 17, 23, 13, 576, 1790, 1372, 582, 614, 374, 220, 21, 15, 11, 323, 220, 21, 15, 27283, 220, 17, 23, 16819, 220, 18, 17, 13, 4695, 582, 1184, 220, 21, 21, 311, 1281, 220, 24, 23, 320, 24, 23, 481, 220, 18, 17, 284, 220, 21, 21, 568, 21131, 518, 279, 9664, 5109, 11, 582, 646, 11075, 220, 21, 21, 553, 84192, 220, 17, 19, 553, 220, 17, 13, 20, 11, 892, 374, 279, 1852, 438, 49702, 553, 220, 17, 323, 1221, 84192, 553, 220, 20, 13, 31040, 11, 311, 633, 504, 220, 17, 19, 311, 220, 21, 15, 11, 582, 1184, 311, 21749, 220, 17, 19, 553, 220, 17, 11, 892, 10901, 601, 448, 220, 16, 17, 13, 1988, 582, 1184, 220, 21, 15, 11, 537, 220, 16, 17, 13, 2055, 11, 582, 614, 311, 1744, 21303, 3918, 26865, 397, 30787, 11, 1077, 594, 5244, 389, 1667, 279, 5109, 304, 1973, 323, 862, 2629, 11, 892, 374, 220, 16, 20, 19, 320, 17, 19, 488, 220, 18, 23, 488, 220, 20, 17, 488, 220, 21, 15, 568, 1205, 646, 7949, 279, 2629, 311, 1039, 2169, 510, 27, 9217, 29, 320, 20, 17, 481, 220, 17, 19, 8, 353, 220, 17, 488, 220, 21, 15, 608, 220, 20, 17, 690, 9217, 397, 10061, 752, 10146, 510, 27, 26865, 29, 5512, 11, 582, 11047, 220, 20, 17, 481, 220, 17, 19, 892, 16819, 220, 17, 23, 624, 12209, 11, 84192, 220, 17, 23, 553, 220, 17, 6696, 601, 220, 20, 21, 624, 7039, 11, 582, 11047, 220, 21, 15, 608, 220, 20, 17, 892, 374, 13187, 220, 16, 13, 16, 20, 624, 23949, 11, 582, 912, 220, 20, 21, 323, 220, 16, 13, 16, 20, 11, 892, 6696, 601, 220, 20, 22, 13, 16, 20, 320, 3226, 71948, 2686, 1091, 220, 24, 23, 4292, 1986, 14807, 264, 2118, 990, 315, 279, 5109, 476, 10601, 2578, 537, 975, 438, 15102, 3381, 11, 714, 582, 646, 1430, 2441, 5486, 3918, 26865, 397, 6025, 312, 15934, 287, 11, 825, 5486, 429, 4278, 374, 510, 27, 9217, 29, 220, 21, 15, 481, 320, 17, 19, 481, 220, 18, 23, 8, 690, 9217, 397, 10061, 594, 10146, 419, 510, 27, 26865, 29, 1205, 1156, 15442, 279, 75240, 4766, 279, 95356, 25, 220, 17, 19, 481, 220, 18, 23, 284, 481, 16, 19, 624, 12209, 582, 32256, 481, 16, 19, 504, 220, 21, 15, 11, 892, 374, 279, 1852, 438, 7842, 220, 16, 19, 311, 220, 21, 15, 624, 54815, 11, 220, 21, 15, 481, 10293, 16, 19, 8, 284, 220, 21, 15, 488, 220, 16, 19, 284, 220, 22, 19, 320, 8206, 374, 537, 220, 24, 23, 4292, 1654, 13083, 419, 5486] ,
-        [5338, 11, 358, 1184, 311, 1477, 264, 10601, 315, 1378, 5109, 773, 429, 862, 2629, 476, 6672, 16819, 220, 24, 23, 13, 4354, 11, 279, 7772, 2629, 582, 646, 633, 448, 279, 2606, 374, 220, 20, 17, 488, 220, 21, 15, 284, 220, 16, 16, 17, 11, 892, 374, 2238, 1550, 13, 2055, 11, 825, 315, 279, 5109, 1969, 387, 32256, 291, 504, 220, 24, 23, 13, 6771, 594, 1430, 32256, 287, 9155, 5109, 504, 220, 24, 23, 25, 220, 24, 23, 481, 220, 17, 19, 284, 220, 22, 19, 11, 220, 24, 23, 481, 220, 18, 23, 284, 220, 21, 15, 11, 323, 220, 24, 23, 481, 220, 20, 17, 284, 220, 19, 21, 13, 1205, 1184, 220, 19, 21, 476, 220, 21, 15, 13, 220, 19, 21, 374, 2686, 14452, 438, 432, 4436, 944, 304, 1039, 738, 13, 2938, 10901, 601, 448, 220, 21, 15, 3918, 339, 766, 397, 7039, 11, 2474, 279, 9664, 1372, 374, 220, 21, 15, 323, 582, 614, 220, 17, 19, 11, 220, 18, 23, 11, 323, 220, 20, 17, 2115, 1817, 1172, 3055, 11, 582, 1184, 311, 990, 46444, 476, 12804, 311, 633, 220, 17, 19, 504, 220, 21, 15, 13, 8765, 6577, 220, 21, 15, 553, 220, 17, 6696, 601, 220, 18, 15, 11, 892, 448, 220, 18, 23, 438, 374, 6696, 601, 220, 19, 23, 13, 15533, 11, 84192, 220, 19, 23, 553, 220, 17, 19, 374, 220, 16, 16, 20, 17, 11, 9355, 2238, 3460, 13, 12090, 11, 582, 2578, 1366, 311, 653, 220, 21, 15, 14, 17, 9, 17, 19, 1265, 2968, 220, 17, 19, 11, 2474, 279, 220, 20, 17, 323, 220, 18, 23, 7146, 13, 6771, 594, 1273, 419, 624, 27, 9217, 29, 320, 21, 15, 608, 220, 17, 8, 353, 220, 17, 19, 481, 220, 18, 23, 690, 9217, 397, 522, 26865, 29, 11473, 4405, 419, 11, 582, 633, 510, 27, 9217, 29, 320, 21, 15, 608, 220, 17, 8, 353, 220, 17, 19, 481, 220, 18, 23, 284, 220, 18, 15, 353, 220, 17, 19, 481, 220, 18, 23, 284, 220, 22, 17, 15, 481, 220, 18, 23, 284, 220, 21, 23, 17, 481, 220, 18, 23, 284, 220, 21, 19, 19, 481, 220, 18, 23, 284, 220, 21, 15, 21, 481, 220, 18, 23, 284, 220, 20, 21, 23, 481, 220, 18, 23, 284, 220, 20, 18, 15, 481, 220, 18, 23, 284, 220, 19, 24, 17, 481, 220, 18, 23, 284, 220, 19, 20, 19, 481, 220, 18, 23, 284, 220, 19, 16, 21, 481, 220, 18, 23, 284, 220, 18, 22, 23, 481, 220, 18, 23, 284, 220, 18, 19, 15, 481, 220, 18, 23, 284, 220, 18, 15, 17, 481, 220, 18, 23, 284, 220, 17, 21, 19, 481, 220, 18, 23, 284, 220, 17, 17, 21, 481, 220, 18, 23, 284, 220, 16, 23, 23, 481, 220, 18, 23, 284, 220, 16, 20, 15, 481, 220, 18, 23, 284, 220, 16, 16, 17, 481, 220, 18, 23, 284, 220, 22, 19, 481, 220, 18, 23, 284, 220, 18, 21, 481, 220, 18] ,
-        [1205, 1366, 311, 990, 279, 5109, 508, 17, 19, 11, 220, 18, 23, 11, 220, 20, 17, 11, 220, 21, 15, 60, 311, 1281, 458, 23606, 6144, 311, 220, 24, 23, 13, 1205, 646, 1430, 2155, 27459, 315, 279, 7525, 323, 5109, 13, 3776, 5486, 374, 311, 990, 12804, 11, 2474, 432, 646, 13581, 7949, 279, 897, 315, 264, 8131, 1372, 311, 264, 9155, 825, 11, 10693, 601, 311, 633, 12128, 311, 220, 24, 23, 13, 6771, 594, 1401, 518, 279, 5109, 25, 220, 21, 15, 14, 20, 17, 4977, 311, 387, 264, 13276, 9144, 311, 7949, 220, 21, 15, 4623, 11, 7274, 429, 220, 20, 17, 1410, 387, 1483, 304, 1045, 34784, 1790, 13, 25995, 287, 419, 448, 279, 1008, 5109, 11, 582, 646, 1273, 25, 220, 21, 15, 14, 20, 17, 488, 220, 18, 23, 488, 220, 17, 19, 13, 19881, 287, 311, 990, 1817, 1372, 1172, 3055, 11, 323, 64851, 13217, 311, 1172, 6770, 34784, 7525, 11, 419, 4977, 42203, 13, 690, 26865, 397, 10061, 594, 11047, 432, 700, 25, 366, 9217, 29, 320, 21, 15, 608, 220, 20, 17, 8, 488, 220, 18, 23, 488, 220, 17, 19, 690, 9217, 397, 522, 26865, 29, 4695, 11, 1077, 594, 2736, 279, 21937, 25, 366, 9217, 29, 320, 21, 15, 608, 220, 20, 17, 8, 488, 220, 18, 23, 488, 220, 17, 19, 284, 220, 16, 13, 16, 20, 18, 23, 488, 220, 18, 23, 488, 220, 17, 19, 284, 220, 16, 13, 16, 20, 488, 220, 21, 17, 284, 220, 21, 18, 13, 16, 20, 690, 9217, 397, 522, 26865, 29, 576, 1372, 220, 21, 18, 13, 16, 20, 374, 537, 220, 24, 23, 11, 773, 358, 1184, 311, 1477, 2441, 26112, 13, 6771, 594, 1430, 2441, 10601, 15860, 46444, 323, 5256, 25, 320, 20, 17, 481, 220, 18, 23, 8, 353, 220, 21, 15, 608, 220, 17, 19, 488, 220, 17, 19, 624, 10061, 594, 11047, 432, 25, 2303, 27, 9217, 29, 320, 20, 17, 481, 220, 18, 23, 8, 353, 220, 21, 15, 608, 220, 17, 19, 488, 220, 17, 19, 690, 9217, 397, 522, 26865, 29, 25001, 279, 21937, 25, 2303, 27, 9217, 29, 320, 16, 19, 353, 220, 21, 15, 8, 608, 220, 17, 19, 488, 220, 17, 19, 690, 9217, 397, 27, 9217, 29, 220, 23, 19, 15, 608, 220, 17, 19, 488, 220, 17, 19, 690, 9217, 397, 27, 9217, 29, 220, 18, 20, 488, 220, 17, 19, 690, 9217, 397, 27, 9217, 29, 220, 20, 24, 690, 9217, 29, 715, 1986, 1083, 3171, 944, 2968, 601, 279, 1102, 220, 24, 23, 13, 6771, 594, 2968, 2441, 9091, 25, 4710, 32263, 11, 1077, 594, 1430, 2441, 10601, 1648, 320, 20, 17, 488, 220, 17, 19, 8, 353, 320, 21, 15, 608, 220, 18, 23, 3593, 10061, 594, 11047, 432, 25, 2303, 27, 9217, 29, 320, 20, 17, 488, 220, 17, 19, 8, 353, 320, 21, 15, 608, 220, 18, 23, 8, 690, 9217, 397, 522, 26865, 397, 46951, 279, 21937, 25, 2303, 27, 9217, 29, 220, 22, 21, 353, 320, 21, 15, 608] ,
-        [5338, 11, 1077, 594, 2908, 279, 2169, 1372, 220, 24, 23, 13, 1205, 614, 3040, 5109, 25, 220, 17, 19, 11, 220, 18, 23, 11, 220, 20, 17, 11, 323, 220, 21, 15, 892, 582, 1184, 311, 990, 311, 5545, 220, 24, 23, 13, 1205, 646, 1191, 448, 264, 6514, 315, 7525, 1075, 5256, 11, 75240, 11, 323, 46444, 13, 55777, 279, 7772, 1372, 374, 220, 21, 15, 11, 432, 594, 264, 1661, 4522, 311, 1191, 448, 220, 21, 15, 311, 7949, 279, 12929, 311, 220, 18, 23, 3918, 26865, 397, 1654, 646, 1430, 29064, 458, 23606, 1075, 510, 7, 21, 15, 481, 873, 353, 476, 488, 715, 1654, 1414, 220, 21, 15, 481, 825, 315, 279, 1008, 5109, 686, 35448, 7540, 601, 279, 4396, 913, 5743, 311, 6851, 220, 24, 23, 1283, 4623, 34776, 7525, 624, 27, 26865, 16357, 46444, 476, 5256, 1841, 374, 33453, 1588, 1576, 7842, 279, 1372, 220, 21, 15, 6788, 1035, 2669, 2629, 705, 264, 3460, 1372, 13, 12090, 11, 75240, 374, 803, 14452, 3055, 582, 11047, 458, 8311, 1186, 376, 1466, 408, 13, 6771, 594, 5274, 419, 438, 220, 21, 15, 481, 716, 1431, 323, 30270, 19627, 2937, 421, 4362, 3918, 26865, 397, 1654, 1184, 264, 3460, 1186, 376, 1466, 408, 311, 7949, 220, 21, 15, 311, 264, 1372, 3265, 311, 714, 2686, 1091, 220, 18, 23, 429, 582, 646, 1221, 912, 311, 5545, 220, 24, 23, 624, 27, 26865, 29, 22464, 518, 279, 5109, 13, 3719, 26425, 553, 220, 17, 17, 320, 18, 23, 481, 220, 16, 21, 892, 16819, 220, 17, 17, 8, 1667, 220, 18, 23, 1035, 2968, 601, 220, 17, 23, 320, 21, 15, 481, 220, 18, 23, 568, 6771, 594, 1430, 510, 21, 15, 481, 220, 18, 23, 353, 690, 26865, 397, 80022, 11, 220, 18, 23, 353, 220, 17, 374, 2669, 220, 22, 21, 11, 323, 582, 1184, 264, 9155, 1372, 311, 5545, 220, 24, 23, 13, 13293, 1186, 376, 1466, 408, 2578, 975, 2664, 624, 30787, 11, 1077, 594, 1430, 510, 21, 15, 481, 220, 17, 19, 488, 690, 26865, 29, 5692, 11, 220, 21, 15, 481, 220, 17, 19, 16819, 220, 18, 21, 13, 4695, 582, 1184, 311, 1477, 264, 1372, 1741, 429, 510, 18, 21, 488, 716, 284, 220, 24, 23, 624, 27, 9217, 29, 18, 21, 488, 220, 21, 17, 522, 9217, 29, 374, 15114, 11, 1576, 220, 21, 17, 374, 537, 304, 1039, 1140, 13, 1084, 4977, 279, 3681, 7354, 1184, 5772, 30457, 13, 6771, 594, 728, 1182, 323, 39721, 624, 27, 9217, 29, 21, 15, 481, 220, 17, 19, 488, 220, 18, 23, 522, 9217, 397, 1986, 6696, 601, 220, 21, 15, 481, 220, 17, 19, 284, 220, 18, 21, 323, 220, 18, 21, 488, 220, 18, 23, 284, 220, 22, 19, 892, 374, 2058, 2238, 3347, 11, 714, 220, 21, 15, 481, 220, 17, 19, 488, 220, 20, 17, 1035, 387, 8311, 510, 27, 9217, 29, 21, 15, 481, 220, 17, 19, 488, 220, 20, 17, 522, 9217, 397, 1986, 23606, 16819, 220, 24, 23, 1576, 510, 24, 23, 284, 220, 21, 15] ,
-    ]
+                 '<answer>(85 - 68) + 18 - 56 = 57</answer>',
+                 "Firstly, the target number is 57. Looking at the list, the number 56 stands out as 57 - 1 from our list. Let's check if 56 and 1 can be "
+                 'derived from the others using the available operations (+, -, *, /).</think>\n'
+                 'We can express 57 - 56 as 1, but the challenge is to generate 1 using the remaining numbers and operators.\n'
+                 'Considering the number 18, dividing it by 68 could give us a substantial value, and subtracting a portion of that from 68 or 85 could help '
+                 'in achieving 57.\n'
+                 "Handling the division of 18 by 68, we get 18/68 = 0.2647 when approximated, which isn't precise for our target of 1. However, we likely can "
+                 'scale this to get our desired value by manipulating the operations and the numbers provided once.\n'
+                 '</think>\n'
+                 'Now the idea is clear:\n'
+                 '<answer> (85 - 68) / 18 * 1 + 56 </answer> which simplifies to <answer> 17/18 * 1 + 56 </answer>\n'
+                 'To reach 57:\n'
+                 '<answer> = (17/18) * 18 + 56 = 17 + 56 = 57 </answer>\n'
+                 '\n'
+                 'Thus, the expression correctly uses the numbers [56, 68, 85, 18] and the operations to equal 57.',
+                 ' I need to use the numbers 56, 68, 85, and 18 exactly once to get a result of 57. I should note that division can work with integers to '
+                 "yield whole numbers, but I'll also consider other operations.</think>\n"
+                 'Considering integer division and basic operations like addition, subtraction, multiplication, and division with whole numbers. Let me check '
+                 'different combinations:\n'
+                 '<answer> (85 + 18 - 68) / 56 </answer>\n'
+                 "I'll verify this:\n"
+                 '1. Start with the expression: (85 + 18 - 68) / 56\n'
+                 '2. Calculate the sum: 85 + 18 = 103\n'
+                 '3. Subtract 68 from 103: 103 - 68 = 35\n'
+                 '4. Finally, divide by 56: 35 / 56 = 0.625\n'
+                 "This doesn't quite work. Let's try another combination:\n"
+                 '\n'
+                 '<answer> (85 - 56) + (18 / 68) </answer>\n'
+                 "I'll verify:\n"
+                 '1. Start with the expression: (85 - 56) + (18 / 68)\n'
+                 '2. Difference between 85 and 56: 85 - 56 = 29\n'
+                 '3. Division 18 / 68 is approximately 0.2647 (using a calculator)\n'
+                 '4. Sum of 29 and 0.2647 is approximately 29.2647\n'
+                 "This isn't 57 either, but it's close enough in absolute terms. Since I need an exact solution, let's try another combination:\n"
+                 '\n'
+                 '<answer> (85 - 68) + 56 / 18 </answer>\n'
+                 "I'll verify:\n"
+                 '1. Start with the expression: (85 - 68) + 56 / 18\n'
+                 '2. Difference 85 - 68 = 17\n'
+                 '3. Division 56 / 18 is approximately 3.1111\n'
+                 '4. Adding 17 and 3.1111 = 20.1111\n'
+                 "Still not equal to 57. Let's try one more combination:\n"
+                 '\n'
+                 '<answer> (56 * 85 - 68 - 18)'],
+ 'expression': ['(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)',
+                '(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)', '(((68 + 18) + 56) - 85)', '(((68 + 18) + 56) - 85)',
+                '(((68 + 18) + 56) - 85)', '(((68 + 18) + 56) - 85)', '(((68 + 18) + 56) - 85)', '(((68 + 18) + 56) - 85)', '(((68 + 18) + 56) - 85)',
+                '(((68 + 18) + 56) - 85)'],
+ 'completion_ids': [[1205, 1184, 311, 1855, 458, 23606, 1667, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 6896, 3055, 1817,
+                     11, 892, 16819, 220, 20, 24, 13, 1205, 614, 279, 6770, 34784, 7525, 25, 5256, 17973, 701, 75240, 10293, 701, 46444, 4609, 701, 323, 12804,
+                     46225, 568, 1205, 1184, 311, 387, 16585, 911, 279, 1973, 315, 7525, 13, 1205, 1265, 2908, 1246, 582, 646, 36635, 1493, 5109, 382, 5338, 11,
+                     1077, 594, 2908, 429, 220, 17, 18, 374, 264, 2699, 315, 264, 3281, 1372, 2474, 432, 594, 2613, 323, 646, 387, 1483, 311, 7500, 1039, 2169,
+                     1372, 11, 220, 20, 24, 13, 1205, 1265, 20961, 75240, 438, 264, 4650, 1616, 311, 5545, 220, 20, 24, 476, 3143, 432, 382, 10061, 594, 1896,
+                     3123, 220, 17, 18, 504, 220, 23, 15, 510, 23, 15, 481, 220, 17, 18, 284, 220, 20, 22, 271, 7039, 1039, 2169, 702, 12226, 1495, 311, 220,
+                     20, 24, 481, 220, 20, 22, 284, 220, 17, 13, 1205, 1184, 311, 1477, 264, 1616, 311, 633, 220, 17, 504, 220, 22, 17, 323, 220, 22, 15, 13,
+                     6771, 594, 2908, 12804, 510, 22, 17, 608, 220, 18, 21, 284, 220, 17, 271, 5615, 29489, 220, 22, 15, 608, 220, 18, 20, 284, 220, 17, 4436,
+                     944, 5420, 11, 582, 1184, 311, 990, 220, 22, 15, 304, 1039, 23606, 13, 1988, 220, 22, 15, 1683, 115, 220, 18, 13, 20, 4436, 944, 2500,
+                     2474, 432, 1410, 537, 387, 43799, 4623, 1393, 1667, 279, 5109, 438, 4361, 13, 14301, 11, 582, 990, 264, 2697, 12804, 5666, 510, 22, 15,
+                     608, 220, 18, 20, 284, 220, 17, 271, 4416, 1431, 1039, 23606, 5646, 510, 23, 15, 481, 220, 17, 18, 481, 320, 22, 15, 608, 220, 18, 20, 8,
+                     284, 220, 20, 24, 271, 34193, 429, 279, 12804, 320, 22, 15, 608, 220, 18, 20, 8, 2878, 279, 73975, 15491, 9606, 311, 220, 17, 13, 690,
+                     26865, 397, 27, 9217, 29, 220, 23, 15, 481, 220, 17, 18, 481, 320, 22, 15, 608, 220, 18, 20, 8, 690, 9217, 29, 151645],
+                    [1205, 1184, 311, 990, 1817, 315, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 6896, 3055, 311, 633, 264,
+                     1102, 315, 220, 20, 24, 13, 8886, 5666, 646, 1172, 387, 1483, 3055, 13, 6771, 594, 1191, 553, 37614, 36398, 323, 11799, 1948, 1493, 5109,
+                     311, 1490, 421, 582, 646, 633, 3265, 311, 220, 20, 24, 624, 82796, 75240, 25, 1416, 582, 990, 220, 23, 15, 481, 220, 22, 17, 11, 582, 633,
+                     220, 23, 13, 1988, 419, 3171, 944, 1492, 5961, 438, 582, 1184, 279, 1102, 311, 387, 220, 20, 24, 624, 82796, 5256, 11, 421, 582, 1430, 220,
+                     22, 15, 488, 220, 22, 17, 481, 220, 23, 15, 481, 220, 17, 18, 11, 582, 11047, 432, 438, 11017, 510, 22, 15, 488, 220, 22, 17, 284, 220, 16,
+                     19, 17, 198, 16, 19, 17, 481, 220, 23, 15, 284, 220, 21, 17, 198, 21, 17, 481, 220, 17, 18, 284, 220, 18, 24, 198, 1654, 1431, 614, 220,
+                     18, 24, 11, 714, 582, 1184, 220, 20, 24, 13, 1096, 3363, 1039, 2856, 75240, 3880, 27075, 11, 2474, 75240, 686, 2506, 601, 4722, 1091, 582,
+                     1184, 624, 10061, 594, 1083, 2908, 46444, 323, 12804, 13, 220, 22, 15, 14, 23, 15, 284, 220, 15, 13, 23, 22, 20, 11, 220, 23, 15, 14, 22,
+                     15, 284, 264, 2699, 2686, 1091, 220, 16, 11, 220, 22, 17, 14, 17, 18, 284, 220, 18, 13, 16, 18, 11, 220, 17, 18, 14, 22, 15, 284, 264,
+                     2699, 2686, 1091, 220, 15, 13, 18, 13, 2240, 315, 1493, 8193, 264, 1102, 3265, 311, 220, 20, 24, 11, 438, 807, 525, 2987, 2238, 2613, 476,
+                     2238, 3460, 3918, 26865, 397, 641, 366, 26865, 29, 690, 26865, 29, 9492, 11, 358, 3003, 6679, 21937, 2606, 714, 1410, 537, 1477, 264,
+                     10601, 315, 6770, 34784, 7525, 429, 3796, 311, 678, 5109, 6896, 3055, 311, 7540, 220, 20, 24, 5961, 13, 4354, 11, 358, 646, 2058, 1477,
+                     264, 5383, 476, 10601, 429, 27976, 279, 23606, 13, 6771, 752, 64778, 1667, 264, 2155, 13057, 1283, 70601, 279, 34784, 7525, 803, 13444,
+                     624, 5050, 1790, 4522, 374, 311, 5961, 8830, 279, 34784, 304, 264, 2155, 1973, 13, 12090, 315, 9091, 323, 1465, 11, 582, 1265, 5244, 389,
+                     62514, 279, 5109, 304, 264, 61566, 1608, 10775, 13, 6771, 594, 1430, 510, 7, 22, 17, 481, 220, 22, 15, 8, 353, 220, 17, 18, 608, 220, 23,
+                     15, 198, 1986, 3059, 304, 510, 7, 17, 8, 353, 220, 17, 18, 608, 220, 23, 15, 198, 19, 21, 608, 220, 23, 15, 198, 15, 13, 20, 22, 20, 198,
+                     30385, 11, 537, 1290, 13, 18765, 847, 946, 453, 2165, 572, 46908, 13, 715, 7, 84169, 1588, 369, 3204, 61751, 304, 25941, 8, 1096, 5666,
+                     2058, 1558, 537, 7540, 220, 20, 24, 13, 715, 32, 4223, 0, 6771, 594, 47046, 1667, 279, 59864, 5666, 311, 7500, 279, 1102, 13, 715, 10061,
+                     594, 4774, 419, 55988, 510, 7, 17, 18, 1018, 220, 23, 15, 8, 608, 320, 22, 17, 481, 220, 22, 15, 340, 27237, 220],
+                    [16246, 5109, 25, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 624, 1654, 1184, 311, 1352, 458, 23606, 429, 16819,
+                     220, 20, 24, 1667, 1817, 1372, 6896, 3055, 323, 1172, 1667, 279, 7525, 315, 5256, 11, 75240, 11, 46444, 11, 323, 12804, 3055, 382, 10061,
+                     594, 1191, 448, 279, 8131, 5109, 311, 1490, 1128, 582, 646, 653, 15102, 13, 8765, 6577, 220, 23, 15, 553, 220, 17, 18, 4977, 13276, 11,
+                     438, 432, 686, 2968, 601, 264, 1372, 3265, 311, 220, 18, 382, 23, 15, 608, 220, 17, 18, 284, 220, 18, 13, 19, 22, 23, 17, 21, 15, 23, 21,
+                     24, 20, 2146, 3830, 419, 11, 279, 18093, 7546, 374, 220, 18, 13, 1416, 582, 32256, 419, 504, 220, 17, 18, 11, 582, 633, 510, 17, 18, 481,
+                     220, 18, 284, 220, 17, 15, 382, 7039, 11, 1077, 594, 21749, 220, 22, 17, 553, 220, 18, 510, 22, 17, 608, 220, 18, 284, 220, 17, 19, 382,
+                     7981, 5795, 374, 220, 20, 24, 13, 1416, 582, 912, 220, 17, 19, 323, 220, 18, 19, 11, 582, 633, 510, 17, 19, 488, 220, 18, 19, 284, 220, 20,
+                     23, 382, 1654, 1184, 825, 803, 4982, 311, 5545, 220, 20, 24, 13, 24742, 429, 421, 582, 32256, 510, 17, 18, 481, 220, 18, 481, 220, 18, 15,
+                     284, 220, 15, 271, 1654, 1490, 429, 1667, 279, 220, 22, 15, 323, 32256, 287, 220, 18, 15, 686, 975, 510, 17, 18, 481, 220, 18, 481, 220,
+                     18, 15, 284, 481, 16, 15, 382, 3983, 582, 1184, 311, 912, 311, 633, 311, 220, 20, 24, 11, 537, 32256, 13, 2055, 582, 1896, 2441, 1401, 518,
+                     15491, 7766, 279, 220, 17, 18, 11, 220, 17, 19, 1464, 220, 17, 19, 488, 220, 18, 284, 220, 17, 22, 11, 323, 7842, 75240, 1667, 279, 220,
+                     22, 15, 510, 22, 15, 481, 220, 17, 18, 284, 220, 19, 22, 11, 419, 374, 3265, 311, 220, 18, 19, 311, 633, 311, 220, 20, 24, 11, 979, 7842,
+                     1447, 17, 19, 488, 220, 18, 488, 220, 19, 22, 481, 220, 16, 21, 284, 220, 20, 24, 382, 3983, 279, 3793, 481, 18, 15, 323, 220, 16, 21,
+                     19131, 35405, 13, 12091, 34288, 11, 15332, 7525, 11, 582, 13083, 510, 22, 15, 481, 220, 17, 18, 284, 220, 19, 22, 11, 323, 26568, 220, 17,
+                     19, 488, 220, 18, 284, 220, 17, 22, 510, 17, 22, 488, 220, 18, 17, 284, 220, 20, 24, 374, 63381, 382, 49284, 312, 10187, 26837, 11, 220,
+                     17, 19, 488, 220, 22, 15, 481, 220, 17, 18, 284, 220, 22, 16, 26, 32256, 287, 220, 17, 773, 582, 2432, 220, 20, 24, 510, 22, 17, 481, 220,
+                     18, 284, 220, 21, 24, 11, 7086, 220, 20, 23, 11, 323, 220, 16, 25271, 510, 21, 24, 481, 220, 16, 284, 220, 21, 23, 11, 3265, 1447, 21, 24,
+                     481, 220, 16, 284, 220, 20, 24, 382, 4792, 374, 4285, 5666, 745, 25, 690, 26865, 397, 27, 9217, 29, 220, 22, 17, 481, 220, 17, 18, 488,
+                     220, 16],
+                    [358, 1184, 311, 36635, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 1667, 6770, 34784, 7525, 773, 429,
+                     279, 1102, 374, 220, 20, 24, 13, 715, 785, 1376, 5109, 525, 220, 23, 15, 323, 220, 17, 18, 11, 438, 807, 525, 5008, 3041, 504, 220, 20, 24,
+                     13, 362, 75240, 504, 220, 23, 15, 1410, 1492, 13, 1416, 358, 32256, 220, 17, 18, 504, 220, 23, 15, 11, 358, 633, 220, 20, 22, 13, 5542,
+                     1052, 11, 358, 3278, 1184, 311, 7500, 432, 311, 220, 20, 24, 11, 892, 3363, 458, 5256, 315, 220, 17, 13, 715, 4416, 11, 220, 23, 15, 481,
+                     220, 17, 18, 16819, 220, 20, 22, 13, 2014, 633, 311, 220, 20, 24, 11, 358, 1184, 220, 17, 13, 576, 5109, 220, 17, 18, 323, 220, 22, 17,
+                     614, 220, 17, 18, 11, 773, 358, 646, 990, 220, 22, 17, 481, 220, 17, 18, 284, 220, 19, 24, 323, 1221, 912, 220, 17, 311, 220, 19, 24, 311,
+                     633, 220, 20, 24, 13, 715, 4792, 3363, 358, 646, 990, 1493, 7525, 389, 220, 22, 17, 11, 220, 17, 18, 11, 323, 279, 1590, 75240, 504, 220,
+                     23, 15, 311, 633, 311, 220, 20, 24, 624, 522, 26865, 397, 27, 9217, 29, 320, 22, 17, 481, 220, 17, 18, 8, 488, 320, 23, 15, 481, 220, 22,
+                     15, 8, 690, 9217, 29, 151645],
+                    [1205, 614, 311, 990, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 6896, 3055, 311, 633, 220, 20, 24,
+                     624, 3966, 5486, 374, 311, 1191, 553, 3330, 518, 279, 2169, 1372, 323, 1744, 911, 1246, 311, 990, 279, 8426, 323, 15457, 5109, 2500, 311,
+                     1429, 6157, 5545, 476, 633, 3265, 311, 279, 2169, 624, 22, 17, 481, 220, 23, 15, 6696, 481, 23, 11, 892, 374, 264, 2409, 8225, 1372, 323,
+                     3041, 504, 220, 20, 24, 13, 1205, 646, 944, 990, 75240, 7484, 624, 31476, 582, 646, 30270, 476, 912, 825, 315, 279, 5109, 13, 220, 22, 15,
+                     1410, 387, 264, 3746, 2331, 714, 432, 594, 2238, 1550, 624, 12509, 6577, 2578, 1492, 13, 220, 17, 18, 353, 220, 17, 284, 220, 19, 21, 374,
+                     70028, 11, 323, 32256, 287, 429, 25271, 279, 897, 803, 13444, 624, 12209, 220, 23, 15, 481, 220, 17, 18, 284, 220, 20, 22, 11, 323, 220,
+                     20, 22, 481, 220, 19, 21, 284, 220, 16, 16, 13, 1205, 2299, 3265, 714, 537, 3265, 3322, 624, 14037, 5486, 374, 311, 1191, 448, 220, 22, 17,
+                     323, 32256, 287, 220, 17, 18, 311, 633, 2494, 3265, 11, 1221, 30270, 553, 220, 15, 13, 17, 320, 15, 13, 17, 353, 220, 20, 22, 8, 773, 582,
+                     7500, 279, 897, 624, 10061, 594, 1438, 432, 1495, 510, 23, 15, 481, 220, 17, 18, 284, 220, 20, 22, 198, 12209, 220, 20, 22, 608, 220, 16,
+                     15, 284, 220, 20, 13, 22, 320, 1049, 432, 311, 220, 20, 438, 817, 2500, 4285, 7525, 340, 1654, 1184, 311, 633, 504, 220, 20, 13, 22, 311,
+                     220, 20, 24, 13, 58712, 6711, 220, 20, 13, 22, 553, 220, 16, 16, 6696, 601, 220, 21, 17, 13, 22, 892, 374, 3265, 311, 220, 20, 24, 624,
+                     11209, 11, 582, 1513, 944, 614, 220, 16, 16, 304, 1039, 1372, 738, 13, 1205, 1184, 311, 59457, 13, 715, 20, 22, 353, 220, 15, 13, 24, 284,
+                     220, 20, 16, 13, 18, 11, 3265, 714, 537, 3322, 345, 20, 22, 353, 220, 16, 13, 16, 284, 220, 21, 17, 13, 22, 2238, 1753, 382, 22043, 1039,
+                     53752, 5109, 11, 264, 27699, 10601, 25, 715, 7, 23, 15, 481, 220, 22, 15, 8, 353, 220, 22, 17, 608, 220, 17, 18, 488, 220, 22, 17, 14, 22,
+                     15, 284, 220, 20, 24, 271, 10061, 594, 1779, 279, 23606, 25, 715, 12, 5512, 320, 23, 15, 481, 220, 22, 15, 8, 284, 220, 16, 15, 198, 12,
+                     5005, 220, 16, 15, 353, 220, 22, 17, 284, 220, 22, 17, 15, 198, 12, 5005, 220, 22, 17, 15, 608, 220, 17, 18, 21103, 230, 220, 18, 16, 13,
+                     18, 198, 12, 220, 22, 17, 14, 22, 15, 21103, 230, 220, 16, 13, 15, 18, 198, 12, 2691, 1105, 3786, 510, 22, 17, 15, 608, 220, 17, 18, 488,
+                     220, 22, 17, 14, 22, 15, 21103, 230, 220, 18, 16, 13, 18, 488, 220, 16, 13, 15, 18, 284, 220, 18, 17, 13, 18, 18, 198, 1986, 374, 537, 220,
+                     20],
+                    [1205, 614, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 220, 17, 18, 13, 1205, 1184, 311, 1855, 458, 23606, 1667, 1493,
+                     5109, 6896, 3055, 11, 311, 11075, 264, 1102, 315, 220, 20, 24, 624, 3966, 7373, 1616, 311, 1744, 911, 419, 374, 311, 1430, 311, 990, 7525,
+                     429, 646, 2990, 311, 75240, 476, 264, 4778, 1372, 2163, 220, 20, 24, 624, 2679, 582, 4774, 311, 990, 279, 7772, 5109, 1156, 323, 1221,
+                     5602, 862, 19554, 448, 9155, 5109, 11, 582, 2578, 633, 12128, 311, 279, 2169, 13, 715, 82796, 220, 22, 17, 323, 220, 17, 18, 5310, 11, 582,
+                     2578, 32256, 220, 17, 18, 504, 220, 22, 17, 311, 633, 220, 19, 24, 13, 1988, 582, 1184, 311, 7500, 311, 5545, 220, 20, 24, 13, 30370, 220,
+                     16, 15, 311, 220, 19, 24, 1558, 279, 14068, 624, 4416, 11, 279, 23606, 1035, 1401, 2494, 1075, 320, 22, 17, 481, 220, 17, 18, 8, 488, 1599,
+                     284, 220, 20, 24, 624, 50, 6383, 7766, 320, 22, 17, 481, 220, 17, 18, 8, 582, 614, 220, 19, 24, 11, 773, 320, 19, 24, 488, 1599, 8, 284,
+                     220, 20, 24, 624, 4792, 3363, 1599, 284, 220, 20, 24, 481, 220, 19, 24, 11, 892, 374, 220, 16, 15, 624, 7039, 582, 1414, 582, 1184, 220,
+                     16, 15, 11, 323, 582, 614, 279, 9664, 1372, 220, 22, 15, 13, 1205, 1184, 311, 990, 432, 311, 1855, 220, 16, 15, 624, 10061, 594, 1490,
+                     1246, 1112, 1416, 582, 21749, 220, 22, 15, 553, 220, 22, 11, 582, 633, 220, 16, 15, 624, 4416, 279, 23606, 4278, 700, 311, 387, 25, 220,
+                     22, 15, 608, 220, 22, 488, 220, 22, 17, 481, 220, 17, 18, 284, 220, 20, 24, 624, 522, 26865, 397, 27, 9217, 29, 220, 22, 15, 608, 220, 22,
+                     488, 220, 22, 17, 481, 220, 17, 18, 690, 9217, 29, 151645],
+                    [8704, 582, 525, 3330, 369, 458, 23606, 429, 3059, 304, 220, 20, 24, 11, 323, 582, 2299, 7199, 311, 1667, 1817, 1372, 508, 22, 15, 11, 220,
+                     22, 17, 11, 220, 23, 15, 11, 220, 17, 18, 60, 1172, 3055, 11, 279, 5795, 374, 311, 36635, 1493, 5109, 1526, 6770, 34784, 7525, 13, 3776,
+                     3204, 1616, 311, 5486, 419, 374, 311, 1191, 448, 1045, 30339, 28117, 323, 1490, 421, 582, 646, 17331, 518, 220, 20, 24, 13, 6771, 594,
+                     2908, 279, 3881, 5109, 323, 1430, 34171, 1105, 304, 2155, 5510, 13, 10696, 279, 6672, 1948, 1045, 5109, 686, 7540, 2494, 3265, 311, 220,
+                     20, 24, 13, 6771, 594, 1430, 220, 23, 15, 481, 220, 17, 18, 311, 633, 220, 20, 22, 11, 1221, 1490, 421, 62514, 220, 22, 15, 323, 220, 22,
+                     17, 686, 5545, 220, 20, 24, 13, 690, 26865, 397, 1654, 614, 220, 23, 15, 481, 220, 17, 18, 284, 220, 20, 22, 13, 1205, 1184, 311, 835, 705,
+                     448, 220, 20, 24, 13, 4695, 11, 582, 1184, 311, 7500, 220, 20, 22, 311, 633, 311, 220, 20, 24, 13, 3776, 1616, 311, 653, 419, 374, 553,
+                     1667, 220, 22, 17, 481, 220, 22, 15, 284, 220, 17, 13, 5005, 7842, 419, 220, 17, 311, 220, 20, 22, 686, 2968, 220, 20, 24, 13, 715, 10061,
+                     594, 88859, 419, 510, 27, 9217, 29, 320, 23, 15, 481, 220, 17, 18, 8, 488, 320, 22, 17, 481, 220, 22, 15, 8, 690, 9217, 29, 151645],
+                    [1205, 614, 3040, 2661, 5109, 25, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 13, 5633, 5795, 374, 311, 990, 1817,
+                     1372, 6896, 3055, 323, 3455, 6770, 34784, 7525, 311, 5545, 279, 1102, 315, 220, 20, 24, 13, 4710, 2679, 582, 1401, 518, 279, 2661, 5109,
+                     11, 1156, 12831, 279, 23606, 5944, 11, 432, 4977, 17367, 429, 4285, 5256, 476, 75240, 1410, 2990, 601, 311, 220, 20, 24, 4152, 311, 279,
+                     12929, 2058, 9664, 304, 1741, 7525, 448, 279, 5109, 2661, 13, 2055, 11, 582, 1184, 311, 1744, 315, 803, 6351, 7525, 1667, 46444, 323,
+                     12804, 11, 1576, 807, 646, 1492, 7949, 279, 5109, 803, 29720, 382, 10061, 594, 2908, 279, 21937, 3019, 14319, 29208, 553, 7842, 323, 32256,
+                     287, 825, 738, 315, 5109, 11, 1221, 1667, 12804, 311, 633, 438, 3265, 438, 3204, 311, 220, 20, 24, 13, 6771, 594, 1430, 510, 7, 22, 17,
+                     488, 220, 23, 15, 8, 608, 220, 22, 15, 284, 220, 16, 20, 17, 608, 220, 22, 15, 892, 374, 10078, 803, 1091, 220, 17, 624, 5847, 11, 32256,
+                     220, 17, 18, 510, 16, 20, 17, 608, 220, 22, 15, 481, 220, 17, 18, 284, 220, 17, 13, 16, 22, 16, 19, 481, 220, 17, 18, 892, 374, 2238, 2613,
+                     624, 3838, 4977, 803, 18580, 1410, 387, 510, 22, 17, 488, 220, 17, 18, 481, 320, 23, 15, 608, 220, 22, 15, 8, 284, 220, 24, 20, 481, 220,
+                     16, 13, 16, 19, 17, 24, 284, 220, 24, 18, 13, 23, 20, 22, 16, 892, 374, 2058, 537, 4396, 382, 10061, 594, 1430, 2441, 10601, 510, 22, 17,
+                     488, 220, 22, 15, 481, 220, 23, 15, 481, 220, 17, 18, 284, 220, 21, 24, 481, 220, 17, 18, 284, 220, 19, 21, 13, 4695, 11, 582, 1184, 311,
+                     7949, 432, 311, 220, 20, 24, 11, 582, 1184, 311, 990, 46444, 1790, 11, 8450, 582, 15282, 510, 22, 17, 353, 320, 23, 15, 608, 220, 17, 18,
+                     8, 284, 220, 22, 17, 353, 220, 18, 13, 19, 22, 23, 18, 284, 220, 17, 19, 24, 13, 22, 23, 24, 21, 892, 374, 1602, 3265, 714, 537, 220, 20,
+                     24, 26, 279, 9664, 5666, 1265, 387, 264, 41029, 79796, 75240, 476, 5256, 13, 690, 26865, 1339, 7039, 11, 1283, 12831, 11, 279, 23606, 1969,
+                     387, 510, 27, 9217, 29, 220, 22, 17, 481, 220, 17, 18, 488, 220, 22, 15, 608, 220, 23, 15, 690, 9217, 397, 522, 9217, 1339, 10061, 594,
+                     19633, 432, 1182, 369, 13295, 510, 27, 26865, 29, 220, 22, 17, 481, 220, 17, 18, 488, 220, 22, 15, 608, 220, 23, 15, 284, 220, 19, 24, 488,
+                     220, 15, 13, 23, 22, 20, 284, 220, 20, 24, 13, 23, 22, 20, 13, 690, 26865, 1339, 49284, 264, 12128, 1401, 518, 419, 11, 432, 594, 537,
+                     23638, 220, 20, 24, 11, 714, 2661, 279, 16982, 315, 1667, 678, 5109, 3055, 323, 2500, 7525, 11, 279, 18093, 374, 4658, 366, 9217, 29, 220,
+                     22, 17, 481, 220, 17, 18, 488, 220, 22, 15, 608, 220, 23, 15, 690],
+                    [358, 1184, 311, 1855, 458, 23606, 1667, 279, 5109, 220, 20, 21, 11, 220, 21, 23, 11, 220, 23, 20, 11, 323, 220, 16, 23, 429, 3059, 304,
+                     220, 20, 22, 13, 358, 646, 28066, 1817, 1372, 1172, 3055, 13, 6771, 594, 1191, 553, 12831, 421, 625, 35268, 5109, 5961, 476, 17719, 1105,
+                     1526, 34784, 7525, 686, 2990, 311, 279, 1290, 1102, 624, 2679, 358, 21749, 220, 16, 23, 553, 220, 18, 11, 429, 3059, 304, 220, 21, 13,
+                     10083, 1283, 429, 11, 358, 1410, 13581, 32256, 476, 912, 1045, 5109, 311, 633, 12128, 311, 847, 2169, 315, 220, 20, 22, 13, 358, 1083,
+                     2908, 5256, 1948, 1045, 315, 279, 8131, 5109, 3918, 26865, 397, 28715, 389, 16585, 17879, 11, 279, 23606, 429, 5711, 1817, 315, 279, 5109,
+                     6896, 3055, 323, 16819, 220, 20, 22, 1265, 387, 510, 27, 9217, 29, 220, 23, 20, 481, 220, 21, 23, 488, 220, 20, 21, 608, 220, 16, 23, 690,
+                     9217, 397, 522, 26865, 397, 10061, 752, 1438, 432, 1495, 311, 10146, 510, 12, 220, 20, 21, 608, 220, 16, 23, 284, 220, 18, 13, 16, 16, 16,
+                     9338, 12, 220, 21, 23, 481, 220, 18, 13, 16, 16, 16, 1112, 284, 220, 21, 19, 13, 23, 23, 23, 9338, 12, 220, 23, 20, 481, 220, 21, 19, 13,
+                     23, 23, 23, 1112, 284, 220, 17, 15, 13, 16, 16, 16, 9338, 12, 220, 17, 15, 13, 16, 16, 16, 1112, 488, 220, 20, 21, 608, 220, 16, 23, 284,
+                     220, 20, 22, 198, 2132, 4977, 279, 5666, 5181, 3556, 374, 10078, 15114, 4152, 311, 51562, 13, 6771, 594, 653, 264, 3974, 1779, 510, 12,
+                     220, 20, 21, 608, 220, 16, 23, 284, 220, 18, 13, 16, 16, 16, 1112, 320, 46385, 12122, 12804, 340, 12, 220, 21, 23, 481, 220, 18, 13, 16,
+                     16, 16, 1112, 284, 220, 21, 19, 13, 23, 23, 23, 9338, 12, 220, 23, 20, 481, 220, 21, 19, 13, 23, 23, 23, 1112, 284, 220, 17, 15, 13, 16,
+                     16, 16, 9338, 12, 220, 17, 15, 13, 16, 16, 16, 1112, 488, 220, 18, 13, 16, 16, 16, 1112, 284, 220, 20, 18, 13, 17, 17, 17, 9338, 1986,
+                     2058, 3171, 944, 5545, 220, 20, 22, 13, 6771, 594, 7500, 279, 1616, 582, 990, 279, 5109, 13, 1032, 2682, 5853, 279, 4522, 315, 5256, 2578,
+                     387, 2664, 510, 27, 9217, 29, 220, 21, 23, 488, 320, 23, 20, 481, 220, 20, 21, 481, 220, 16, 23, 608, 220, 17, 8, 690, 9217, 397, 522,
+                     26865, 397, 522, 26865, 397, 10061, 752, 7683, 279, 31728, 23606, 510, 12, 220, 16, 23, 608, 220, 17, 284, 220, 24, 198, 12, 220, 23, 20,
+                     481, 220, 20, 21, 481, 220, 24, 284, 220, 17, 15, 198, 12, 220, 21, 23, 488, 220, 17, 15, 284, 220, 23, 23, 271, 785, 23606, 220, 21, 23,
+                     488, 320, 23, 20, 481, 220, 20, 21, 481, 220, 16, 23, 608, 220, 17, 8, 12440, 5711, 678, 279, 5109, 6896, 3055, 323, 16819, 220, 23, 23,
+                     624, 12549, 279, 4024, 2169, 315, 220, 20, 22, 4157],
+                    [5338, 398, 11, 220, 20, 22, 374, 1602, 3265, 311, 220, 20, 21, 323, 220, 21, 23, 892, 525, 2176, 2661, 5109, 13, 3776, 1616, 311, 633, 311,
+                     220, 20, 22, 374, 553, 7842, 476, 32256, 287, 264, 1372, 553, 220, 16, 13, 57633, 429, 678, 5109, 646, 1172, 387, 1483, 3055, 11, 220, 16,
+                     23, 646, 387, 279, 1372, 553, 892, 311, 32256, 220, 20, 21, 311, 633, 220, 20, 22, 13, 1988, 279, 5109, 525, 220, 20, 21, 11, 220, 21, 23,
+                     11, 220, 23, 20, 11, 323, 220, 16, 23, 11, 6857, 315, 892, 525, 220, 16, 11, 323, 32256, 287, 220, 16, 23, 504, 220, 20, 21, 2765, 944,
+                     2990, 601, 311, 220, 21, 23, 476, 220, 23, 20, 13, 2055, 11, 429, 3171, 944, 975, 3918, 26865, 397, 32, 2155, 5486, 2578, 13186, 49702,
+                     7525, 2474, 49702, 646, 1492, 8172, 279, 23606, 1667, 279, 5080, 5109, 320, 21, 23, 323, 220, 23, 20, 568, 18680, 1881, 69715, 17779, 553,
+                     220, 16, 13, 20, 646, 13581, 2968, 601, 220, 19, 20, 13, 18, 18, 1112, 476, 220, 20, 22, 448, 51562, 476, 44868, 3363, 13, 1988, 220, 16,
+                     13, 20, 4436, 944, 458, 7546, 13, 4354, 11, 432, 6081, 20017, 429, 12804, 5310, 448, 220, 16, 23, 438, 264, 8168, 1231, 387, 3204, 624,
+                     37175, 279, 5109, 220, 21, 23, 11, 220, 16, 23, 11, 323, 220, 23, 20, 13, 1416, 220, 21, 23, 17779, 553, 220, 16, 13, 20, 16819, 220, 19,
+                     20, 323, 582, 32256, 220, 16, 23, 504, 432, 11, 582, 2578, 5486, 220, 20, 22, 13, 4354, 11, 220, 16, 23, 17779, 553, 220, 16, 13, 20,
+                     16819, 220, 16, 17, 11, 773, 220, 21, 23, 481, 220, 16, 17, 284, 220, 20, 21, 11, 323, 220, 20, 21, 488, 220, 16, 284, 220, 20, 22, 624,
+                     1986, 6696, 601, 2326, 5109, 311, 975, 448, 25, 220, 21, 23, 11, 220, 16, 23, 11, 323, 220, 16, 13, 1597, 279, 11737, 374, 2115, 438, 582,
+                     738, 15102, 13, 1752, 419, 23606, 11, 1077, 594, 312, 6763, 1667, 6770, 34784, 7525, 624, 522, 26865, 397, 27, 9217, 29, 320, 21, 23, 481,
+                     220, 16, 23, 488, 220, 16, 8, 608, 220, 16, 690, 9217, 397, 1986, 23606, 46918, 311, 25, 1781, 21, 23, 481, 220, 16, 23, 8, 488, 220, 16,
+                     8, 608, 220, 16, 11, 892, 15491, 9606, 311, 220, 20, 21, 488, 220, 16, 11, 892, 16819, 220, 20, 22, 13, 8704, 678, 7525, 1265, 387, 10660,
+                     304, 279, 1973, 807, 4994, 11, 419, 6696, 601, 279, 1590, 4226, 25, 320, 20, 22, 608, 220, 16, 8, 284, 220, 20, 22, 13, 151645],
+                    [5338, 398, 11, 220, 20, 22, 646, 387, 13302, 438, 220, 20, 15, 488, 220, 22, 11, 773, 825, 315, 279, 27459, 1035, 21058, 419, 13, 3776,
+                     4285, 1616, 374, 311, 3158, 220, 20, 15, 438, 264, 10601, 315, 279, 5109, 220, 20, 21, 11, 220, 21, 23, 11, 323, 220, 16, 23, 11, 323,
+                     1221, 15963, 432, 448, 220, 22, 1667, 279, 7525, 2500, 13, 4695, 11, 220, 20, 21, 481, 220, 16, 23, 284, 220, 18, 23, 323, 220, 21, 23,
+                     481, 220, 16, 23, 284, 220, 20, 15, 11, 773, 582, 646, 15963, 1493, 311, 1281, 220, 18, 23, 488, 220, 20, 15, 13, 1205, 1431, 1184, 220,
+                     22, 11, 892, 1410, 614, 1012, 279, 4843, 1372, 2115, 916, 438, 264, 4361, 476, 438, 949, 315, 2441, 1372, 13, 6771, 594, 1430, 311, 4946,
+                     220, 20, 21, 438, 220, 18, 23, 488, 220, 16, 23, 323, 1221, 912, 220, 22, 11, 438, 220, 18, 23, 488, 220, 16, 23, 488, 220, 22, 284, 220,
+                     21, 18, 11, 892, 15491, 9606, 311, 220, 20, 15, 488, 220, 22, 979, 220, 16, 23, 374, 32256, 291, 3918, 26865, 397, 27, 9217, 2235, 20, 21,
+                     481, 220, 16, 23, 8, 488, 320, 21, 23, 481, 220, 16, 23, 481, 220, 22, 12533, 9217, 29, 151645],
+                    [358, 1184, 311, 1352, 458, 23606, 1667, 279, 5109, 220, 20, 21, 11, 220, 21, 23, 11, 220, 23, 20, 11, 323, 220, 16, 23, 11, 448, 678, 7525,
+                     1660, 6770, 34784, 11, 323, 1817, 15723, 1483, 6896, 3055, 13, 576, 2169, 1372, 374, 220, 20, 22, 13, 690, 26865, 397, 82796, 279, 2169,
+                     1372, 220, 20, 22, 11, 432, 4977, 3265, 311, 279, 1372, 220, 20, 21, 13, 358, 646, 32256, 220, 16, 504, 220, 20, 21, 11, 892, 1035, 2968,
+                     752, 220, 20, 22, 13, 715, 16429, 279, 1372, 220, 16, 23, 11, 358, 646, 32256, 220, 16, 23, 504, 220, 20, 21, 11, 714, 429, 1035, 1102,
+                     304, 220, 18, 23, 11, 537, 220, 20, 22, 13, 12090, 11, 358, 3278, 1490, 421, 358, 646, 990, 12804, 476, 1008, 14609, 7455, 13, 690, 26865,
+                     397, 40, 13083, 358, 646, 21749, 220, 20, 21, 553, 220, 24, 320, 8206, 5711, 220, 20, 21, 323, 10901, 752, 448, 220, 24, 389, 279, 1008,
+                     3108, 701, 323, 421, 358, 32256, 476, 912, 220, 24, 34901, 11, 358, 646, 633, 3265, 311, 220, 20, 22, 13, 33763, 11, 49702, 553, 220, 24,
+                     1231, 7540, 264, 12122, 11, 892, 4436, 944, 10507, 13, 93210, 287, 476, 7842, 220, 16, 23, 504, 220, 20, 21, 476, 220, 23, 20, 2578, 537,
+                     975, 2661, 279, 3561, 358, 2776, 3330, 369, 624, 10061, 594, 1430, 2441, 5486, 13, 1416, 358, 2908, 279, 23606, 304, 264, 803, 11521, 1616,
+                     11, 358, 2578, 1744, 911, 7842, 476, 32256, 287, 9155, 5109, 311, 220, 20, 21, 13, 8704, 220, 16, 23, 1410, 387, 458, 14704, 11, 358, 2578,
+                     1184, 311, 4347, 432, 16925, 624, 40, 3278, 1273, 279, 23606, 25, 320, 21, 23, 481, 220, 23, 20, 8, 608, 220, 16, 23, 488, 220, 20, 21,
+                     624, 522, 26865, 397, 7039, 11, 1077, 752, 11047, 419, 23606, 624, 27, 9217, 29, 320, 21, 23, 481, 220, 23, 20, 8, 608, 220, 16, 23, 488,
+                     220, 20, 21, 690, 9217, 29, 284, 481, 16, 22, 608, 220, 16, 23, 488, 220, 20, 21, 624, 10061, 594, 15442, 419, 25, 481, 16, 22, 608, 220,
+                     16, 23, 284, 481, 15, 13, 24, 19, 19, 19, 9338, 12, 15, 13, 24, 19, 19, 19, 1112, 488, 220, 20, 21, 284, 220, 20, 20, 13, 15, 20, 20, 21,
+                     9338, 785, 1102, 374, 537, 6896, 220, 20, 22, 11, 892, 13230, 358, 1184, 311, 312, 5655, 19642, 279, 5109, 323, 7525, 624, 6025, 4623,
+                     17879, 11, 358, 13083, 358, 1184, 311, 15516, 2692, 369, 678, 3204, 7525, 323, 27459, 13, 6771, 594, 1430, 2441, 5486, 624, 24365, 766, 8,
+                     1032, 5655, 25510, 1095, 11, 358, 13083, 429, 421, 358, 990, 279, 1372, 220, 21, 23, 311, 1492, 5545, 1039, 2169, 11, 358, 646, 1401, 369,
+                     264, 6169, 1616, 311, 990, 220, 20, 21, 11, 220, 23, 20, 11, 323, 220, 16, 23, 311, 4347, 323, 5545, 220, 20, 22, 13, 690, 26865, 397, 32,
+                     3204, 6514, 1410, 387, 1667, 5256, 476, 46444, 92296, 311, 3331, 279, 1590, 2629, 382, 4416, 11, 1077, 752, 1273],
+                    [5338, 398, 11, 358, 5293, 429, 220, 20, 22, 374, 3265, 311, 279, 2629, 315, 220, 21, 23, 323, 220, 16, 23, 11, 892, 6696, 220, 23, 21, 13,
+                     2938, 594, 3403, 220, 20, 22, 13, 93210, 287, 220, 17, 24, 504, 220, 23, 21, 1035, 633, 601, 3265, 311, 220, 20, 22, 11, 323, 220, 17, 24,
+                     8573, 311, 387, 279, 2629, 315, 220, 20, 21, 481, 220, 17, 23, 284, 220, 20, 21, 481, 220, 23, 20, 488, 220, 16, 23, 13, 15277, 11, 358,
+                     646, 990, 1493, 5109, 311, 1352, 458, 23606, 13, 1205, 646, 1191, 448, 220, 21, 23, 481, 320, 20, 21, 481, 220, 23, 20, 488, 220, 16, 23,
+                     8, 323, 32256, 220, 17, 24, 3918, 26865, 397, 27, 9217, 29, 220, 21, 23, 481, 320, 20, 21, 481, 220, 23, 20, 488, 220, 16, 23, 8, 481, 220,
+                     17, 24, 690, 9217, 29, 151645],
+                    [5338, 11, 358, 686, 1490, 421, 358, 646, 990, 279, 5109, 5961, 311, 633, 3265, 311, 220, 20, 22, 13, 506, 723, 91355, 448, 1493, 37906, 11,
+                     1741, 264, 4285, 8282, 4278, 13, 358, 3278, 1430, 311, 5545, 264, 1372, 3265, 311, 220, 20, 22, 553, 34171, 1378, 315, 279, 5109, 13, 576,
+                     5109, 220, 20, 21, 323, 220, 16, 23, 912, 705, 311, 220, 22, 19, 11, 892, 374, 2238, 1550, 13, 220, 21, 23, 323, 220, 23, 20, 2629, 311,
+                     220, 16, 20, 18, 11, 892, 374, 1083, 2238, 1550, 13, 690, 26865, 1339, 5847, 11, 358, 5293, 429, 220, 21, 23, 481, 220, 16, 23, 284, 220,
+                     20, 15, 11, 892, 374, 3265, 311, 220, 20, 22, 13, 5005, 11, 358, 3278, 990, 12804, 323, 75240, 311, 1281, 264, 6915, 27075, 13, 715, 27,
+                     9217, 2235, 21, 23, 481, 220, 16, 23, 8, 608, 220, 20, 21, 488, 220, 23, 20, 481, 220, 21, 23, 284, 220, 20, 22, 522, 9217, 29, 4710,
+                     11209, 11, 389, 21937, 11, 419, 3059, 304, 510, 27, 9217, 29, 20, 15, 608, 220, 20, 21, 488, 220, 23, 20, 481, 220, 21, 23, 284, 220, 19,
+                     13, 17, 23, 20, 22, 488, 220, 23, 20, 481, 220, 21, 23, 21103, 230, 220, 17, 16, 13, 17, 23, 20, 22, 366, 9217, 1339, 1986, 3171, 944,
+                     1102, 304, 220, 20, 22, 11, 773, 358, 1184, 311, 75655, 847, 5486, 13, 6771, 594, 1430, 220, 23, 20, 481, 220, 21, 23, 284, 220, 16, 22,
+                     13, 5005, 11, 358, 646, 912, 220, 16, 23, 323, 32256, 220, 20, 21, 311, 633, 3265, 311, 220, 20, 22, 624, 27, 9217, 2235, 23, 20, 481, 220,
+                     21, 23, 8, 488, 220, 16, 23, 481, 220, 20, 21, 284, 220, 20, 22, 522, 9217, 1339, 7039, 11, 1077, 594, 10146, 419, 23606, 624, 522, 26865,
+                     397, 27, 9217, 2235, 23, 20, 481, 220, 21, 23, 8, 488, 220, 16, 23, 481, 220, 20, 21, 284, 220, 20, 22, 522, 9217, 29, 151645],
+                    [5338, 398, 11, 279, 2169, 1372, 374, 220, 20, 22, 13, 21131, 518, 279, 1140, 11, 279, 1372, 220, 20, 21, 13352, 700, 438, 220, 20, 22, 481,
+                     220, 16, 504, 1039, 1140, 13, 6771, 594, 1779, 421, 220, 20, 21, 323, 220, 16, 646, 387, 14257, 504, 279, 3800, 1667, 279, 2500, 7525,
+                     17973, 11, 85922, 11777, 608, 66233, 26865, 397, 1654, 646, 3158, 220, 20, 22, 481, 220, 20, 21, 438, 220, 16, 11, 714, 279, 8645, 374,
+                     311, 6923, 220, 16, 1667, 279, 9664, 5109, 323, 19624, 624, 82796, 279, 1372, 220, 16, 23, 11, 49702, 432, 553, 220, 21, 23, 1410, 2968,
+                     601, 264, 11924, 897, 11, 323, 32256, 287, 264, 13348, 315, 429, 504, 220, 21, 23, 476, 220, 23, 20, 1410, 1492, 304, 31045, 220, 20, 22,
+                     624, 38606, 279, 12804, 315, 220, 16, 23, 553, 220, 21, 23, 11, 582, 633, 220, 16, 23, 14, 21, 23, 284, 220, 15, 13, 17, 21, 19, 22, 979,
+                     9848, 7145, 11, 892, 4436, 944, 23560, 369, 1039, 2169, 315, 220, 16, 13, 4354, 11, 582, 4363, 646, 5452, 419, 311, 633, 1039, 12685, 897,
+                     553, 62514, 279, 7525, 323, 279, 5109, 3897, 3055, 624, 522, 26865, 397, 7039, 279, 4522, 374, 2797, 510, 27, 9217, 29, 320, 23, 20, 481,
+                     220, 21, 23, 8, 608, 220, 16, 23, 353, 220, 16, 488, 220, 20, 21, 690, 9217, 29, 892, 15491, 9606, 311, 366, 9217, 29, 220, 16, 22, 14, 16,
+                     23, 353, 220, 16, 488, 220, 20, 21, 690, 9217, 397, 1249, 5545, 220, 20, 22, 510, 27, 9217, 29, 284, 320, 16, 22, 14, 16, 23, 8, 353, 220,
+                     16, 23, 488, 220, 20, 21, 284, 220, 16, 22, 488, 220, 20, 21, 284, 220, 20, 22, 690, 9217, 1339, 44500, 11, 279, 7493, 12440, 5711, 279,
+                     5109, 508, 20, 21, 11, 220, 21, 23, 11, 220, 23, 20, 11, 220, 16, 23, 60, 323, 279, 7525, 311, 6144, 220, 20, 22, 13, 151645],
+                    [358, 1184, 311, 990, 279, 5109, 220, 20, 21, 11, 220, 21, 23, 11, 220, 23, 20, 11, 323, 220, 16, 23, 6896, 3055, 311, 633, 264, 1102, 315,
+                     220, 20, 22, 13, 358, 1265, 5185, 429, 12804, 646, 975, 448, 25780, 311, 7540, 4361, 5109, 11, 714, 358, 3278, 1083, 2908, 1008, 7525,
+                     3918, 26865, 397, 82796, 7546, 12804, 323, 6770, 7525, 1075, 5256, 11, 75240, 11, 46444, 11, 323, 12804, 448, 4361, 5109, 13, 6771, 752,
+                     1779, 2155, 27459, 510, 27, 9217, 29, 320, 23, 20, 488, 220, 16, 23, 481, 220, 21, 23, 8, 608, 220, 20, 21, 690, 9217, 397, 40, 3278,
+                     10146, 419, 510, 16, 13, 5145, 448, 279, 7493, 25, 320, 23, 20, 488, 220, 16, 23, 481, 220, 21, 23, 8, 608, 220, 20, 21, 198, 17, 13,
+                     20517, 279, 2629, 25, 220, 23, 20, 488, 220, 16, 23, 284, 220, 16, 15, 18, 198, 18, 13, 93210, 220, 21, 23, 504, 220, 16, 15, 18, 25, 220,
+                     16, 15, 18, 481, 220, 21, 23, 284, 220, 18, 20, 198, 19, 13, 17375, 11, 21749, 553, 220, 20, 21, 25, 220, 18, 20, 608, 220, 20, 21, 284,
+                     220, 15, 13, 21, 17, 20, 198, 1986, 3171, 944, 5008, 975, 13, 6771, 594, 1430, 2441, 10601, 1447, 27, 9217, 29, 320, 23, 20, 481, 220, 20,
+                     21, 8, 488, 320, 16, 23, 608, 220, 21, 23, 8, 690, 9217, 397, 40, 3278, 10146, 510, 16, 13, 5145, 448, 279, 7493, 25, 320, 23, 20, 481,
+                     220, 20, 21, 8, 488, 320, 16, 23, 608, 220, 21, 23, 340, 17, 13, 55080, 1948, 220, 23, 20, 323, 220, 20, 21, 25, 220, 23, 20, 481, 220, 20,
+                     21, 284, 220, 17, 24, 198, 18, 13, 14489, 220, 16, 23, 608, 220, 21, 23, 374, 13187, 220, 15, 13, 17, 21, 19, 22, 320, 970, 264, 29952,
+                     340, 19, 13, 8116, 315, 220, 17, 24, 323, 220, 15, 13, 17, 21, 19, 22, 374, 13187, 220, 17, 24, 13, 17, 21, 19, 22, 198, 1986, 4436, 944,
+                     220, 20, 22, 2987, 11, 714, 432, 594, 3265, 3322, 304, 10740, 3793, 13, 8704, 358, 1184, 458, 4734, 6291, 11, 1077, 594, 1430, 2441, 10601,
+                     1447, 27, 9217, 29, 320, 23, 20, 481, 220, 21, 23, 8, 488, 220, 20, 21, 608, 220, 16, 23, 690, 9217, 397, 40, 3278, 10146, 510, 16, 13,
+                     5145, 448, 279, 7493, 25, 320, 23, 20, 481, 220, 21, 23, 8, 488, 220, 20, 21, 608, 220, 16, 23, 198, 17, 13, 55080, 220, 23, 20, 481, 220,
+                     21, 23, 284, 220, 16, 22, 198, 18, 13, 14489, 220, 20, 21, 608, 220, 16, 23, 374, 13187, 220, 18, 13, 16, 16, 16, 16, 198, 19, 13, 30370,
+                     220, 16, 22, 323, 220, 18, 13, 16, 16, 16, 16, 284, 220, 17, 15, 13, 16, 16, 16, 16, 198, 23322, 537, 6144, 311, 220, 20, 22, 13, 6771,
+                     594, 1430, 825, 803, 10601, 1447, 27, 9217, 29, 320, 20, 21, 353, 220, 23, 20, 481, 220, 21, 23, 481, 220, 16, 23, 8]],
+ 'reasoning_steps': [['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'], ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'],
+                     ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'], ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'],
+                     ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'], ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'],
+                     ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'], ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'],
+                     ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'], ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'],
+                     ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'], ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'],
+                     ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'], ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'],
+                     ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57'], ['68', '68 + 18 = 86', '86 + 56 = 142', '142 - 85 = 57', '57']]
 }
-
-
+# %%
+reward_inputs.keys()
 # %%
 from hydra import compose, initialize
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -769,6 +751,8 @@ model_config = ModelConfig(
     lora_dropout=lora_config.dropout,
     lora_target_modules=list(lora_config.target_modules),
 )
+# %%
+pp(model_config)
 # %%
 
 model_path = model_config.model_name_or_path
@@ -820,3 +804,6 @@ reward_tensor = compute_CoT_rewards(
     verbose=True,
 )
 # %%
+inds = [3, 6]
+from pprint import pp
+pp({k: [v[i] for i in inds] for k, v in reward_inputs.items()}, compact=True, width=160)

@@ -932,6 +932,19 @@ class CountdownTrainer(BaseTrainer):
 
         # Check if task IDs are provided in kwargs
         task_ids = kwargs.get('task_ids', None)
+        print(kwargs.keys())
+        from pprint import pp
+        pp(
+            dict(
+                prompts=kwargs['prompts'],
+                completions=completions,
+                expression=kwargs['expression'],
+                completion_ids=kwargs['completion_ids'],
+                reasoning_steps=kwargs['reasoning_steps'],
+            ),
+            compact=True,
+            width=160
+        )
 
         for completion, target_i, numbers_i in zip(completions, target, numbers):
             try:

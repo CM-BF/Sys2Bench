@@ -22,7 +22,7 @@
                 "task.train_size=1000",
                 "algorithm=grpo",
                 "algorithm.training.max_steps=1600",
-                // "algorithm.training.use_vllm=False"
+                "algorithm.training.use_vllm=False"
             ],
             "env": {
                 "WANDB_PROJECT": "Sys2Bench-debug", 
