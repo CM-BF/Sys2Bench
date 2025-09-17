@@ -215,6 +215,11 @@ def tokenize_inputs(
         THOUGHT_IDS: thought_ids,
         ANSWER_IDS: answer_ids,
     }
+from transformers.cache_utils import Cache
+from typing import Optional
+
+LOG_PROBS = 'log_probs'
+PAST_KEY_VALUES = 'past_key_values'
 
 @torch.no_grad()
 def get_per_token_logps(
@@ -222,7 +227,8 @@ def get_per_token_logps(
         input_ids: torch.Tensor, 
         attention_mask: torch.Tensor, 
         logits_to_keep: int,
-        batch_size: int=None,
+        past_key_values: Optional[Cache],
+        batch_size: Optional[int]=None,
         temperature: float=1.0,
     ) -> torch.Tensor:
     batch_size = batch_size or input_ids.size(0)  # Chunk inputs into smaller batches to reduce memory peak
@@ -232,17 +238,24 @@ def get_per_token_logps(
         attention_mask_batch = attention_mask[i : i + batch_size]
 
         # We add 1 to `logits_to_keep` because the last logits of the sequence is later excluded
-        logits = model(
-            input_ids=input_ids_batch, attention_mask=attention_mask_batch, logits_to_keep=logits_to_keep + 1
-        ).logits
-        logits = logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
+        out = model(
+            input_ids=input_ids_batch, 
+            attention_mask=attention_mask_batch, 
+            logits_to_keep=logits_to_keep + 1,
+            past_key_values=past_key_values,
+        )
+        past_key_values = out.past_key_values
+        logits = out.logits[:, :-1, :]  # (B, L-1, V), exclude the last logit: it corresponds to the next token pred
         input_ids_batch = input_ids_batch[:, -logits_to_keep:]
         # Divide logits by sampling temperature.
         # See https://huggingface.co/blog/the_n_implementation_details_of_rlhf_with_ppo#policy-training-implementation-details
         logits = logits / temperature  # TODO
         logps = selective_log_softmax(logits, input_ids_batch)  # compute logprobs for the input tokens
         all_logps.append(logps)
-    return torch.cat(all_logps, dim=0)
+    return {
+        LOG_PROBS: torch.cat(all_logps, dim=0),
+        PAST_KEY_VALUES: past_key_values
+    }   
 
 def pad_and_mask(
     sequences: list[torch.Tensor],
@@ -265,6 +278,7 @@ def compute_CoT_rewards(
     tokenizer: PreTrainedTokenizerFast,
     device: torch.device, 
     verbose: bool=False,
+    use_kv_cache: bool=True,
 ):
 
     # Tokenize prompts and answers; partition completions into thoughts and tokenize
@@ -295,6 +309,7 @@ def compute_CoT_rewards(
     batch_size = len(answer_ids)
     num_thoughts = [len(t) for t in thought_ids_list]
     max_num_thoughts = max(num_thoughts)
+    past_key_values = None
     for thought_idx in tqdm(range(max_num_thoughts + 1), disable=not verbose):
  
         # The first iteration (thought_idx == 0) corresponds to no CoT
@@ -319,12 +334,16 @@ def compute_CoT_rewards(
         # Compute probability of answer given the first `thought_idx` thoughts
         input_ids = torch.cat([prompt_ids, thought_ids, answer_ids], dim=1).to(device)
         attention_mask = torch.cat([prompt_mask, thought_mask, answer_mask], dim=1).to(device)
-        per_token_answer_logps = get_per_token_logps(
+        output = get_per_token_logps(
             model=model, 
             input_ids=input_ids, 
             attention_mask=attention_mask, 
             logits_to_keep=logits_to_keep,
+            past_key_values=past_key_values
         )
+        per_token_answer_logps = output[LOG_PROBS]
+        if use_kv_cache:
+            past_key_values = output[PAST_KEY_VALUES]
 
         # Average the probability of each token in the answer
         per_token_answer_ps = per_token_answer_logps.exp().cpu()
@@ -446,7 +465,7 @@ if __name__ == "__main__":
 
 
 
-    model_config = ModelConfig(model_name_or_path='Qwen/Qwen2.5-0.5B-Instruct',
+    model_config = ModelConfig(model_name_or_path='Qwen/Qwen2.5-3B-Instruct',
             model_revision='main',
             torch_dtype='bfloat16',
             trust_remote_code=False,
@@ -501,4 +520,19 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         device=device,
         verbose=True,
+        use_kv_cache=True,
     )
+
+    reward_tensor_no_cache = compute_CoT_rewards(
+        prompts=reward_inputs['prompts'],
+        completions=reward_inputs['completions'],
+        answers=reward_inputs['expression'],
+        completion_ids=reward_inputs['completion_ids'],
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        verbose=True,
+        use_kv_cache=False,
+    )
+
+    assert torch.allclose(reward_tensor, reward_tensor_no_cache, atol=1e-5)
