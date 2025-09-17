@@ -724,7 +724,7 @@ sys.path.insert(0, '../methods/RL/utils')
 from CoT_rewards import split_thoughts, compute_CoT_rewards
 
 # %%
-model_config = ModelConfig(model_name_or_path='Qwen/Qwen2.5-0.5B-Instruct',
+model_config = ModelConfig(model_name_or_path='Qwen/Qwen2.5-3B-Instruct',
         model_revision='main',
         torch_dtype='bfloat16',
         trust_remote_code=False,
