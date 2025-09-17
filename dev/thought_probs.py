@@ -715,46 +715,33 @@ reward_inputs = {
 # %%
 reward_inputs.keys()
 # %%
-from hydra import compose, initialize
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import ModelConfig
+from pprint import pp
 import torch
 import sys
 sys.path.insert(0, '../methods/RL/utils')
 from CoT_rewards import split_thoughts, compute_CoT_rewards
 
 # %%
-CONFIG_PATH = '../methods/RL/conf'
-overrides = [
-    "mode=train", 
-    "model=qwen5",
-    "task=countdown2345", 
-    "task.train_size=1000",
-    "algorithm=grpo",
-    "algorithm.training.max_steps=1600",
-]
-with initialize(version_base=None, config_path=CONFIG_PATH):
-    cfg = compose(config_name="config", overrides=overrides,return_hydra_config=True)
-# %%
-
-
-
-lora_config = cfg.lora
-
-model_config = ModelConfig(
-    model_name_or_path=cfg.model.name,
-    torch_dtype=cfg.model.torch_dtype,
-    attn_implementation=cfg.model.attn_implementation,
-    lora_task_type=lora_config.task_type,
-    lora_r=lora_config.r,
-    lora_alpha=lora_config.alpha,
-    lora_dropout=lora_config.dropout,
-    lora_target_modules=list(lora_config.target_modules),
-)
-# %%
-pp(model_config)
-# %%
-
+model_config = ModelConfig(model_name_or_path='Qwen/Qwen2.5-0.5B-Instruct',
+        model_revision='main',
+        torch_dtype='bfloat16',
+        trust_remote_code=False,
+        attn_implementation='flash_attention_2',
+        use_peft=False,
+        lora_r=32,
+        lora_alpha=64,
+        lora_dropout=0.1,
+        lora_target_modules=['q_proj', 'v_proj'],
+        lora_modules_to_save=None,
+        lora_task_type='CAUSAL_LM',
+        use_rslora=False,
+        use_dora=False,
+        load_in_8bit=False,
+        load_in_4bit=False,
+        bnb_4bit_quant_type='nf4',
+        use_bnb_nested_quant=False)
 model_path = model_config.model_name_or_path
 
 tokenizer = AutoTokenizer.from_pretrained(
@@ -762,12 +749,6 @@ tokenizer = AutoTokenizer.from_pretrained(
     trust_remote_code=model_config.trust_remote_code
 )
 
-# Ensure we have a pad_token
-if tokenizer.pad_token is None:
-    raise ValueError
-    # Option A: alias EOS → PAD
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
 
 model = AutoModelForCausalLM.from_pretrained(
     model_path,
@@ -775,8 +756,9 @@ model = AutoModelForCausalLM.from_pretrained(
     trust_remote_code=model_config.trust_remote_code,
     attn_implementation=model_config.attn_implementation
 )
-# %%
-f'{sum(p.numel() for p in model.parameters()):,}'
+print(f'# params: {sum(p.numel() for p in model.parameters()):,}')
+
+
 
 # %%
 
