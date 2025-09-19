@@ -597,7 +597,7 @@ class BlocksWorldTrainer(BaseTrainer):
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_path,
+            model_config.model_name_or_path,
             torch_dtype=model_config.torch_dtype,
             trust_remote_code=model_config.trust_remote_code,
             attn_implementation=model_config.attn_implementation
