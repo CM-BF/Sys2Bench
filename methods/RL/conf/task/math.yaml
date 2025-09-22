@@ -16,7 +16,5 @@ inference:
     - datasets/math/level3
     - datasets/math/level4
     - datasets/math/level5
-  max_prompt_length: 1600
-  max_completion_length: 1600
   temperature: 0.0
   n: 1

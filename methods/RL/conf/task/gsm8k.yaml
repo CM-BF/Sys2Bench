@@ -15,7 +15,5 @@ inference:
     - datasets/gsm8k/easy
     - datasets/gsm8k/medium
     - datasets/gsm8k/hard
-  max_prompt_length: 1600
-  max_completion_length: 512
   temperature: 0
   n: 1
