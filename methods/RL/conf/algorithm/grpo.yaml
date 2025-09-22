@@ -37,4 +37,4 @@ training:
     min_prob: true    # true: use default p_min. (float): use min_prob value. false: use 0.0
     # SEC (Self-Evolving Curriculum) parameters - defaults from paper
     td_alpha: 0.5      # TD learning rate (mostly 0.5 across tasks in paper)
-    sec_temperature: 0.3  # Boltzmann temperature (mostly 1.0 for 3B model)
+    sec_temperature: 1.0  # Boltzmann temperature (mostly 1.0 for 3B model)
