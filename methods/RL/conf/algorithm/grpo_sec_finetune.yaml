@@ -1,0 +1,37 @@
+# @package algorithm
+defaults:
+  - grpo  # Inherit from base GRPO config
+
+name: grpo
+
+# Override training parameters for SEC fine-tuning
+training:
+  # Load from checkpoint - use the full model name
+#  resume_from_checkpoint: "Qwen2.5-1.5B-Instruct_countdown2345_grpo_vrex_0.5_0.5_SEC1.0DRO0.0G0.0_minpTrue_4800"
+  resume_from_checkpoint: "Qwen2.5-1.5B-Instruct_countdown2345_grpo_vrex_0.5_0.5_SEC1.0DRO0.0G0.0_minpTrue_10000"
+
+  # Shorter training for fine-tuning
+  max_steps: 800  # Additional 800 steps from 4800
+  
+  # Use VREx scheduler with pure SEC
+  curriculum_schedule: vrex
+  
+  # Pure SEC configuration
+  scheduler_params:
+    vrex_adds:
+      groupdro: 0.0  # Disable GroupDRO
+      gaussian: 0.0  # Disable Gaussian
+      sec: 1.0       # Pure SEC
+    beta: 1.0        # Full adaptive sampling (no uniform blending)
+    min_prob: true    # Minimum probability per task
+    
+    # SEC parameters optimized from your experiments
+    td_alpha: 0.5          # TD learning rate
+    sec_temperature: 0.3   # Lower temperature for better exploitation
+    
+    # Standard VREx parameters (won't affect pure SEC but needed for compatibility)
+    temperature: 1.0
+    groupdro_alpha: 1.0
+    window_size: 100
+    warmup_steps: 100
+    performance_threshold: 0.6  # Threshold for task mastery

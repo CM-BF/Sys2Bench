@@ -1,0 +1,37 @@
+# @package algorithm
+defaults:
+  - grpo  # Inherit from base GRPO config
+
+name: grpo
+
+# Override training parameters for DRO fine-tuning
+training:
+  # Load from checkpoint - use the full model name
+#  resume_from_checkpoint: "Qwen2.5-1.5B-Instruct_countdown2345_grpo_vrex_0.5_0.5_SEC1.0DRO0.0G0.0_minpTrue_4800"
+  resume_from_checkpoint: "Qwen2.5-1.5B-Instruct_countdown2345_grpo_vrex_0.5_0.5_SEC1.0DRO0.0G0.0_minpTrue_10000"
+
+  # Shorter training for fine-tuning
+  max_steps: 800  # Additional 800 steps from 4800
+  
+  # Use VREx scheduler with pure DRO
+  curriculum_schedule: vrex
+  
+  # Pure DRO configuration
+  scheduler_params:
+    vrex_adds:
+      groupdro: 1.0  # Pure GroupDRO
+      gaussian: 0.0  # Disable Gaussian
+      sec: 0.0       # Disable SEC
+    beta: 1.0        # Mix with some uniform sampling for stability
+    min_prob: True    # Minimum probability per task
+    
+    # DRO-specific parameters
+    temperature: 1.0
+    groupdro_alpha: 1.0     # Default GroupDRO learning rate
+    window_size: 100
+    warmup_steps: 100       # Default warmup steps
+    performance_threshold: 0.6  # Threshold for task mastery
+    
+    # SEC parameters (disabled but needed for compatibility)
+    td_alpha: 0.5
+    sec_temperature: 1.0
