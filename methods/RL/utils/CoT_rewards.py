@@ -367,15 +367,22 @@ def compute_CoT_rewards(
             print(f"Prompt: {curr_prompt_text}")
             print()
             print(f"Answer: {curr_answer_text}")
+            answer_prob = avg_answer_ps[batch_idx, 0]
+            print(f"Prob: {answer_prob:.4f}")
+            answer_tokens = [tokenizer.decode(id_) for id_ in curr_answer_ids]
+            answer_token_probs = per_token_answer_ps_list[0][batch_idx]
+            print(wrap_text(", ".join([f"'{t}': {p:.4f}" for p, t in zip(answer_token_probs, answer_tokens)])))
+            print()      
         for i, end_idx in enumerate(end_indices):
             reward_tensor[batch_idx, end_idx] = delta_prob[i]
+            answer_prob = avg_answer_ps[batch_idx, i + 1]
             if verbose:
                 start_idx = 0 if i == 0 else end_indices[i - 1] + 1
                 curr_thought_tokens = curr_thought_ids[start_idx:end_idx + 1]
                 curr_thought_text = tokenizer.decode(curr_thought_tokens, skip_special_tokens=True).strip()
                 print()
                 print(f'Thought: "{wrap_text(curr_thought_text)}"')
-                print(f'Reward: {reward_tensor[batch_idx, end_idx]:.4f}')
+                print(f'Reward: {reward_tensor[batch_idx, end_idx]:.4f}, Prob: {answer_prob:.4f}')
     return reward_tensor
 
 
@@ -391,17 +398,7 @@ if __name__ == "__main__":
              '/ 3 </answer>.<|im_end|>\n'
              '<|im_start|>assistant\n'
              'Let me solve this step by step.\n'
-             '<think>',
-             '<|im_start|>system\n'
-             'You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.\n'
-             '<|im_end|>\n'
-             '<|im_start|>user\n'
-             'Using the numbers [70, 72, 80, 23], create an equation that equals 59. You can use basic arithmetic operations (+, -, *, /) and each number can '
-             'only be used once. Show your work in <think> </think> tags. And return the final answer in <answer> </answer> tags, for example <answer> (1 + 2) '
-             '/ 3 </answer>.<|im_end|>\n'
-             '<|im_start|>assistant\n'
-             'Let me solve this step by step.\n'
-             '<think>'],
+             '<think>'] * 3,
         'completions': [' I need to manipulate the numbers 70, 72, 80, and 23 using basic arithmetic operations so that the result is 59. \n'
                         'The key numbers are 80 and 23, as they are quite far from 59. A subtraction from 80 could help. If I subtract 23 from 80, I get 57. From '
                         "there, I'll need to adjust it to 59, which means an addition of 2. \n"
@@ -409,7 +406,7 @@ if __name__ == "__main__":
                         'That means I can use these operations on 72, 23, and the final subtraction from 80 to get to 59.\n'
                         '</think>\n'
                         '<answer> (72 - 23) + (80 - 70) </answer>',
-                        " Since we are looking for an equation that results in 59, and we're limited to using each number [70, 72, 80, 23] only once, the goal is to "
+                        * [" Since we are looking for an equation that results in 59, and we're limited to using each number [70, 72, 80, 23] only once, the goal is to "
                         'manipulate these numbers through basic arithmetic operations. One possible way to approach this is to start with some straightforward '
                         "calculations and see if we can arrive at 59. Let's consider the known numbers and try combining them in different ways. Maybe the difference "
                         "between some numbers will yield something close to 59. Let's try 80 - 23 to get 57, then see if manipulating 70 and 72 will reach 59. "
@@ -417,8 +414,8 @@ if __name__ == "__main__":
                         'We have 80 - 23 = 57. We need to end up with 59. Now, we need to adjust 57 to get to 59. One way to do this is by using 72 - 70 = 2. Then '
                         'adding this 2 to 57 will give 59. \n'
                         "Let's formulate this:\n"
-                        '<answer> (80 - 23) + (72 - 70) </answer>'],
-        'expression': ['(((72 - 23) + 80) - 70)', '(((72 - 23) + 80) - 70)'],
+                        '<answer> (80 - 23) + (72 - 70) </answer>'] * 2],
+        'expression': ['(72 - 23) + (80 - 70)', '(72 - 23) + (80 - 70)', '(80 - 23) + (72 - 70)'],
         'completion_ids': [[358, 1184, 311, 36635, 279, 5109, 220, 22, 15, 11, 220, 22, 17, 11, 220, 23, 15, 11, 323, 220, 17, 18, 1667, 6770, 34784, 7525, 773, 429,
                             279, 1102, 374, 220, 20, 24, 13, 715, 785, 1376, 5109, 525, 220, 23, 15, 323, 220, 17, 18, 11, 438, 807, 525, 5008, 3041, 504, 220, 20, 24,
                             13, 362, 75240, 504, 220, 23, 15, 1410, 1492, 13, 1416, 358, 32256, 220, 17, 18, 504, 220, 23, 15, 11, 358, 633, 220, 20, 22, 13, 5542,
@@ -428,7 +425,7 @@ if __name__ == "__main__":
                             633, 220, 20, 24, 13, 715, 4792, 3363, 358, 646, 990, 1493, 7525, 389, 220, 22, 17, 11, 220, 17, 18, 11, 323, 279, 1590, 75240, 504, 220,
                             23, 15, 311, 633, 311, 220, 20, 24, 624, 522, 26865, 397, 27, 9217, 29, 320, 22, 17, 481, 220, 17, 18, 8, 488, 320, 23, 15, 481, 220, 22,
                             15, 8, 690, 9217, 29, 151645],
-                            [8704, 582, 525, 3330, 369, 458, 23606, 429, 3059, 304, 220, 20, 24, 11, 323, 582, 2299, 7199, 311, 1667, 1817, 1372, 508, 22, 15, 11, 220,
+                            * [[8704, 582, 525, 3330, 369, 458, 23606, 429, 3059, 304, 220, 20, 24, 11, 323, 582, 2299, 7199, 311, 1667, 1817, 1372, 508, 22, 15, 11, 220,
                             22, 17, 11, 220, 23, 15, 11, 220, 17, 18, 60, 1172, 3055, 11, 279, 5795, 374, 311, 36635, 1493, 5109, 1526, 6770, 34784, 7525, 13, 3776,
                             3204, 1616, 311, 5486, 419, 374, 311, 1191, 448, 1045, 30339, 28117, 323, 1490, 421, 582, 646, 17331, 518, 220, 20, 24, 13, 6771, 594,
                             2908, 279, 3881, 5109, 323, 1430, 34171, 1105, 304, 2155, 5510, 13, 10696, 279, 6672, 1948, 1045, 5109, 686, 7540, 2494, 3265, 311, 220,
@@ -436,7 +433,7 @@ if __name__ == "__main__":
                             17, 686, 5545, 220, 20, 24, 13, 690, 26865, 397, 1654, 614, 220, 23, 15, 481, 220, 17, 18, 284, 220, 20, 22, 13, 1205, 1184, 311, 835, 705,
                             448, 220, 20, 24, 13, 4695, 11, 582, 1184, 311, 7500, 220, 20, 22, 311, 633, 311, 220, 20, 24, 13, 3776, 1616, 311, 653, 419, 374, 553,
                             1667, 220, 22, 17, 481, 220, 22, 15, 284, 220, 17, 13, 5005, 7842, 419, 220, 17, 311, 220, 20, 22, 686, 2968, 220, 20, 24, 13, 715, 10061,
-                            594, 88859, 419, 510, 27, 9217, 29, 320, 23, 15, 481, 220, 17, 18, 8, 488, 320, 22, 17, 481, 220, 22, 15, 8, 690, 9217, 29, 151645]],
+                            594, 88859, 419, 510, 27, 9217, 29, 320, 23, 15, 481, 220, 17, 18, 8, 488, 320, 22, 17, 481, 220, 22, 15, 8, 690, 9217, 29, 151645]] * 2],
         'reasoning_steps': [['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59'], ['72', '72 - 23 = 49', '49 + 80 = 129', '129 - 70 = 59', '59']]
         }
 
