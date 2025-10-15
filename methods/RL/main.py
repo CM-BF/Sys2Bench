@@ -1546,41 +1546,45 @@ class ArithmeticTrainer(BaseTrainer):
         """Run inference using the trained model"""
         log_on_main('\n\n*****\ntest\n*****\n\n')
 
-        model_checkpoint = self.cfg.task.inference.checkpoint
-        sc_num = self.cfg.task.inference.sc_num
-
-        # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
-
+        # Load and Preprocess Dataset  
+        model_dir = self.cfg.model.name
         tokenizer = AutoTokenizer.from_pretrained(
             model_dir,
             trust_remote_code=self.cfg.model.trust_remote_code,
         )
+        dataset = self._prepare_dataset(split='test')
+        # dataset = dataset.select(range(10))  # TODO
+        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
+        dataset = dataset.remove_columns('sft')
+        log_on_main(dataset)
+
+
+        # model_checkpoint = self.cfg.task.inference.checkpoint
+        # sc_num = self.cfg.task.inference.sc_num
+
+        # Generate checkpoint path
+        # model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+
         model = LLM(
             model=model_dir,
             trust_remote_code=self.cfg.model.trust_remote_code,
-            tensor_parallel_size=torch.cuda.device_count(),
+            tensor_parallel_size=1, # torch.cuda.device_count(),
             dtype=self.cfg.model.torch_dtype,
             gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
-            max_model_len=self.cfg.task.inference.max_model_len,
+            max_model_len=2048, # self.cfg.task.inference.max_model_len,
             seed=self.cfg.experiment.dataset_seed,
             task='generate'
         )
         sampling_params = SamplingParams(
             n=self.cfg.task.inference.n,
             temperature=self.cfg.task.inference.temperature,
-            max_tokens=self.cfg.task.inference.max_tokens,
+            max_tokens=self.cfg.task.inference.max_completion_length,
             min_tokens=1,
             seed=self.cfg.experiment.dataset_seed,
-            stop=["</answer>"],
-            include_stop_str_in_output=True
+            # stop=["</answer>"],
+            # include_stop_str_in_output=True
         )
         
-        # Load and Preprocess Dataset  
-        dataset = self._prepare_dataset(split='test')
-        dataset = dataset.map(lambda example: self._generate_prompt(tokenizer, example), remove_columns=dataset.column_names)
-        dataset = dataset.remove_columns('sft')
-        log_on_main(dataset)
 
         # Generate Completions
         # outputs = []
@@ -1597,49 +1601,64 @@ class ArithmeticTrainer(BaseTrainer):
         #     print(prcessed_outputs)
         #     outputs.extend(prcessed_outputs)
         outputs = model.generate(dataset['prompt'], sampling_params)
-        outputs = [
-            completion_output.text
-            for request_output in outputs
-            for completion_output in request_output.outputs
-        ]
-        # print(outputs)
-        # quit()
-        dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
-        dataset = dataset.add_column('output', outputs)
-
-        # Calcuate Rewards
-        reward_fn = self.reward_functions[self.cfg.task.name]
-
-        rewards = np.array(
-            reward_fn(
-                prompts=None,
-                completions=dataset['output'],
-                answer=dataset['answer']
+        # outputs = [
+        #     completion_output.text
+        #     for request_output in outputs
+        #     for completion_output in request_output.outputs
+        # ]
+        outputLs = []
+        for promptOutput in outputs:
+            outputLs.append(
+                dict(
+                    prompt=promptOutput.prompt,
+                    completions=[out.text for out in promptOutput.outputs]
+                )
             )
-        )
-        dataset = dataset.add_column('reward', rewards.tolist())
-        dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
-
-        # Process Metrics
-        results = dict()
-        results['overall'] = {
-            'avg_reward': rewards.mean().item(),
-            'accuracy': (rewards > 0.5).mean().item(),
-            'support': len(dataset)
-        }
+        savePath = os.path.join(str(self.output_dir), 'generations.json')
+        with open(savePath, "w") as f:
+            json.dump(outputLs, f, indent=4)
+        print(f'Saved generations to {savePath}')
         
-        for task_idx, data_dir in enumerate(self.cfg.task.data_files):
-            task_outputs = dataset.filter(lambda example: example['task']==task_idx)
-            task_rewards = np.array(task_outputs['reward'])
-            results[os.path.basename(os.path.normpath(data_dir))] = {
-                'avg_reward': task_rewards.mean().item(),
-                'accuracy': (task_rewards > 0.5).mean().item(),
-                'support': len(task_rewards)
-            }
 
-        log_on_main(json.dumps(results, indent=4))
-        with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
-            json.dump(results, f, indent=4)
+
+        # print(outputs)
+        # # quit()
+        # dataset = dataset.select([idx for idx in range(len(dataset['prompt'])) for _ in range(self.cfg.task.inference.n)])
+        # dataset = dataset.add_column('output', outputs)
+
+        # # Calcuate Rewards
+        # reward_fn = self.reward_functions[self.cfg.task.name]
+
+        # rewards = np.array(
+        #     reward_fn(
+        #         prompts=None,
+        #         completions=dataset['output'],
+        #         answer=dataset['answer']
+        #     )
+        # )
+        # dataset = dataset.add_column('reward', rewards.tolist())
+        # dataset.to_json(os.path.join(str(self.output_dir), 'test_outputs.jsonl'))
+
+        # # Process Metrics
+        # results = dict()
+        # results['overall'] = {
+        #     'avg_reward': rewards.mean().item(),
+        #     'accuracy': (rewards > 0.5).mean().item(),
+        #     'support': len(dataset)
+        # }
+        
+        # for task_idx, data_dir in enumerate(self.cfg.task.data_files):
+        #     task_outputs = dataset.filter(lambda example: example['task']==task_idx)
+        #     task_rewards = np.array(task_outputs['reward'])
+        #     results[os.path.basename(os.path.normpath(data_dir))] = {
+        #         'avg_reward': task_rewards.mean().item(),
+        #         'accuracy': (task_rewards > 0.5).mean().item(),
+        #         'support': len(task_rewards)
+        #     }
+
+        # log_on_main(json.dumps(results, indent=4))
+        # with open(os.path.join(str(self.output_dir), 'test_results.json'), "w") as f:
+        #     json.dump(results, f, indent=4)
 
         if torch.distributed.is_initialized():
             torch.distributed.destroy_process_group()
