@@ -1,3 +1,22 @@
+<!-- ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.train_size=1000 algorithm=grpo algorithm.training.max_steps=1600  -->
+
+
+<!-- ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.inference.pass_at_k=32 task.inference.batch_size=32 task.inference.max_new_tokens=1024 task.inference.temperature=1.0 -->
+
+<!-- ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.inference.pass_at_k=16 task.inference.batch_size=32 task.inference.max_new_tokens=512 task.inference.temperature=1.0 -->
+
+ <!-- ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.inference.pass_at_k=16 task.inference.batch_size=32 task.inference.max_new_tokens=512 task.inference.temperature=1.0 task.test_file citrinegui/countdown_n5t100_1-100 -->
+
+<!-- ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.inference.pass_at_k=64 task.inference.batch_size=25 task.inference.max_new_tokens
+=1024 task.inference.temperature=1.0 task.test_file=citrinegui/countdown_n5t100_1-100 -->
+
+for i in $(seq 2 5 ); do 
+  cmd="ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=0,1 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=train model=qwen model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600 mode=inference task=countdown2345 task.inference.pass_at_k=64 task.inference.batch_size=25 task.inference.max_new_tokens=1024 task.inference.temperature=1.0 task.test_file=citrinegui/countdown_n${i}t100_1-100"
+  echo $cmd
+  eval $cmd 
+done
+
+
 <!-- Improved compatibility of back to top link: See: https://github.com/divelab/Sys2Bench/pull/73 -->
 <a id="readme-top"></a>
 <!--

@@ -17,18 +17,31 @@
                 "--config_file", "methods/RL/deep_speed.yaml", 
                 "methods/RL/main.py", 
                 "mode=train", 
-                "model=qwen7",
+                "model=qwen",
+                "model.name=citrinegui/Qwen2.5-3B-Instruct_countdown2345_grpo_vrex_0.25_0.75_SEC0.0DRO0.0G1.0_minpTrue_1600",
+                "mode=inference",
                 "task=countdown2345", 
                 "task.train_size=1000",
                 "algorithm=grpo",
                 "algorithm.training.max_steps=1600",
+                "task.inference.batch_size=3",
+                "task.inference.pass_at_k=2",
+                "task.inference.temperature=1.0",
                 // "algorithm.training.use_vllm=False"
             ],
             "env": {
                 "WANDB_PROJECT": "Sys2Bench-debug", 
                 "ROOT_PATH": "/nvme-data/jacob/Sys2Bench", 
-                "CUDA_VISIBLE_DEVICES": "6,7" 
+                "CUDA_VISIBLE_DEVICES": "0,1" 
             },
+            "justMyCode": false
+        },
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
             "justMyCode": false
         }
     ]

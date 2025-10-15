@@ -1069,7 +1069,7 @@ class CountdownTrainer(BaseTrainer):
         batch_size = self.cfg.task.inference.batch_size
 
         # Generate checkpoint path
-        model_dir = self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
+        model_dir = self.cfg.model.name # self._get_checkpoint_path(model_checkpoint, self.cfg.model.trim)
 
         # Load test dataset
         _, test_dataset = self._prepare_dataset([self.cfg.task.test_file])
@@ -1087,16 +1087,18 @@ class CountdownTrainer(BaseTrainer):
         #     max_new_tokens=self.cfg.task.inference.max_new_tokens,
         #     max_batch_size=batch_size
         # )
+        MAX_LOGPROBS = 128
         model = LLM(
             model=model_dir,
             # tokenizer=tokenizer,
             trust_remote_code=self.cfg.model.trust_remote_code,
-            tensor_parallel_size=torch.cuda.device_count(),
+            tensor_parallel_size=1 , # torch.cuda.device_count(),
             dtype=self.cfg.model.torch_dtype,
             gpu_memory_utilization=self.cfg.algorithm.training.vllm_gpu_memory_utilization,
             max_model_len=2048,
             seed=self.cfg.experiment.dataset_seed,
-            task='generate'
+            task='generate',
+            max_logprobs=MAX_LOGPROBS
         )
 
         tokenizer = model.get_tokenizer()
@@ -1113,7 +1115,8 @@ class CountdownTrainer(BaseTrainer):
             seed=self.cfg.experiment.dataset_seed,
             skip_special_tokens=False,
             top_p=0.9,
-            top_k=50
+            top_k=50,
+            logprobs=MAX_LOGPROBS
         )
 
         # Run inference on test dataset
@@ -1125,7 +1128,7 @@ class CountdownTrainer(BaseTrainer):
         if pass_at_k > 1:
             split_train_eval_dataset = test_dataset.train_test_split(train_size=100, seed=123, shuffle=False)
             test_dataset = split_train_eval_dataset["train"]
-
+        print(f"Running inference on {len(test_dataset)} samples from {self.cfg.task.test_file}")
         for i in tqdm(range(0, len(test_dataset), batch_size), desc="Testing batches"):
             prompt_data = [self._generate_prompt(tokenizer, test_dataset[k]) for k in range(i, min(i + batch_size, len(test_dataset)))]
             # Generate prompt
@@ -1136,9 +1139,14 @@ class CountdownTrainer(BaseTrainer):
             # Generate responses
             outputs = []
             output = model.generate(prompt_list, sampling_params)
-            for i in range(len(prompt_list)):
-                outputs.append([out.text for out in output[i].outputs])
-            print(outputs)
+            logprobs = []
+            output_ids = []
+            for j in range(len(prompt_list)):
+                o = output[j]
+                outputs.append([out.text for out in o.outputs])
+                logprobs.append([[[lp.logprob for lp in logprob.values()] for logprob in generation.logprobs] for generation in o.outputs])
+                output_ids.append([out.token_ids for out in o.outputs])
+
             # print(outputs) # Qwen2.5-1.5B-Instruct_countdown2345_grpo_gaussian_0.25_0.75_True_1200
             # for _ in range(num_generations):
             #     outputs.append(model.generate(prompt_list, do_sample=True, temperature=self.cfg.task.inference.temperature, verbose=False, skip_special_tokens=False).text)
@@ -1147,7 +1155,7 @@ class CountdownTrainer(BaseTrainer):
             #     pass
             # else:
             #     outputs = outputs[0]
-
+            thisResult = []
             if pass_at_k > 1:
                 for k_outputs, numbers, target, prompt in zip(outputs, numbers_list, target_list, prompt_list):
 
@@ -1180,6 +1188,7 @@ class CountdownTrainer(BaseTrainer):
                             result_per_sample.append(0)
                         reward_per_sample += score
                     results.append(result_per_sample)
+                    thisResult.append(result_per_sample)
                     rewards += reward_per_sample / len(k_outputs)
                     correct += int(pass_once)
                     total += 1
@@ -1212,6 +1221,21 @@ class CountdownTrainer(BaseTrainer):
                     if score > 0.5:  # Assuming score > 0.5 means correct answer
                         correct += 1
                     total += 1
+
+            saveRes = {
+                "results": thisResult,
+                "logProbs": logprobs,
+                # "outputIds": output_ids,
+                # "outputs": outputs,
+                # "prompts": prompt_list,
+                # "targets": target_list,
+                # "numbers": numbers_list,
+            }
+            savePath = os.path.join(self.output_dir, model_dir, f"countdown_results_{i}_logits{MAX_LOGPROBS}_{self.cfg.task.test_file.split('/')[-1]}.pt")
+            if not os.path.exists(os.path.dirname(savePath)):
+                os.makedirs(os.path.dirname(savePath))
+            print(f"Saving results to {savePath}")
+            torch.save(saveRes, savePath)
 
         if pass_at_k > 1:
             pd.DataFrame(results).to_csv(os.path.join(self.output_dir, f"pass_at_k_results_{self.cfg.task.test_file.split('/')[-1]}.csv"), index=False)
