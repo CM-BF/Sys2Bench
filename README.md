@@ -1,6 +1,6 @@
 
 ```bash
-ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=7,6 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=inference model=qwen5 task=gsm8k task.inference.n=64 task.inference.max_completion_length=1024 task.inference.temperature=1.0 
+ROOT_PATH=/nvme-data/jacob/Sys2Bench WANDB_PROJECT=Sys2Bench-debug CUDA_VISIBLE_DEVICES=7,6 python -m accelerate.commands.launch --num_processes 1 --main_process_port 29738 --config_file methods/RL/deep_speed.yaml methods/RL/main.py mode=inference model=qwen7 task=gsm8k task.inference.n=64 task.inference.max_completion_length=1024 task.inference.temperature=1.0 algorithm.training.vllm_gpu_memory_utilization=0.5
 ```
 
 <!-- Improved compatibility of back to top link: See: https://github.com/divelab/Sys2Bench/pull/73 -->
